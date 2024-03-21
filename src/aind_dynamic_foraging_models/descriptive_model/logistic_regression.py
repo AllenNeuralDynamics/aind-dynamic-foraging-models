@@ -4,9 +4,10 @@ Descriptive analysis for the foraging task
 Logistic regression on choice and reward history
 
 Two models are supported:
-    1. 
+    1. Su and Cohen, 2022, bioRxiv
+        logit (p_R) ~ Rewarded choice + Unrewarded choice + Bias
     2. Hattori 2019 https://www.sciencedirect.com/science/article/pii/S0092867419304465?via%3Dihub
-            logit (p_R) ~ Rewarded choice + Unrewarded choice + Choice + Bias
+        logit (p_R) ~ Rewarded choice + Unrewarded choice + Choice + Bias
   
 Han Hou, Feb 2023
 """

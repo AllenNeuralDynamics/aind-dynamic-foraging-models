@@ -17,12 +17,12 @@
  - The `.github/workflows/test_and_lint.yml` file will run automated tests and style checks every time a Pull Request is opened. If the checks are undesired, the `test_and_lint.yml` can be deleted. The strictness of the code coverage level, etc., can be modified by altering the configurations in the `pyproject.toml` file and the `.flake8` file.
 
 ## Installation
-To use the software, in the root directory, run
+To install the software, run
 ```bash
-pip install -e .
+pip install aind-dynamic-foraging-models
 ```
 
-To develop the code, run
+To develop the code, clone the repo to your local machine, and run
 ```bash
 pip install -e .[dev]
 ```

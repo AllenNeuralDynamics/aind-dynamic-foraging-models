@@ -12,40 +12,37 @@ Two models are supported:
 Han Hou, Feb 2023
 """
 
+from typing import Union, Literal, List, Tuple
+
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 
 
+def prepare_logistic_design_matrix(
+    choice: Union[List, np.ndarray],
+    reward: Union[List, np.ndarray],
+    dependent_variable: List[Literal['reward_choice', 'unreward_choice', 'choice']] = [
+        'reward_choice', 'unreward_choice'],
+    trials_back: int = 15,
+    selected_trial_idx: Union[List, np.ndarray] = None,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Prepare logistic regression design matrix from choice and reward history.
 
-def prepare_logistic(choice, reward, trials_back=15, selected_trial_idx=None, **kwargs):
-    """_summary_
+    Args:
+        choice (Union[List, np.ndarray]): choice history (0 = left choice, 1 = right choice).
+        reward (Union[List, np.ndarray]): reward history (0 = unrewarded, 1 = rewarded).
+        dependent_variable (List[Literal['rewarded_choice', 'unrewarded_choice', 'choice']], optional):
+            The dependent variables. Defaults to ['rewarded_choice', 'unrewarded_choice'] (Sue and Cohen 2022).
+        trials_back (int, optional): Number of trials back into history. Defaults to 15.
+        selected_trial_idx (Union[List, np.ndarray], optional):
+            If None, use all trials; else, only look at selected trials for fitting, but using the full history.
 
-    :param choice: _description_
-    :type choice: _type_
-    :param reward: _description_
-    :type reward: _type_
-    :param trials_back: _description_, defaults to 15
-    :type trials_back: int, optional
-    :param selected_trial_idx: _description_, defaults to None
-    :type selected_trial_idx: _type_, optional
-    :return: _description_
-    :rtype: _type_
+    Returns:
+        Tuple[np.ndarray, np.ndarray]: The design matrix (X) and the dependent variable (Y).
     """
-    '''    
-    Assuming format:
-    choice = np.array([0, 1, 1, 0, ...])  # 0 = L, 1 = R
-    reward = np.array([0, 0, 0, 1, ...])  # 0 = Unrew, 1 = Reward
-    trials_back: number of trials back into history
-    selected_trial_idx = np.array([selected zero-based trial idx]): 
-        if None, use all trials; 
-        else, only look at selected trials, but using the full history!
-        e.g., p (stay at the selected trials | win at the previous trials of the selected trials) 
-        therefore, the minimum idx of selected_trials is 1 (the second trial)
-    ---
-    return: data, Y
-    '''
+
     n_trials = len(choice)
     trials_back = 20
     data = []
@@ -362,7 +359,7 @@ def plot_logistic_compare(logistic_to_compare,
 
 # --- Wrappers ---
 def do_logistic_regression(choice, reward, **kwargs):
-    data, Y = prepare_logistic(choice, reward, **kwargs)
+    data, Y = prepare_logistic_RewC_UnRC(choice, reward, **kwargs)
     logistic_reg = logistic_regression_bootstrap(data, Y, **kwargs)
     return plot_logistic_regression(logistic_reg)
 

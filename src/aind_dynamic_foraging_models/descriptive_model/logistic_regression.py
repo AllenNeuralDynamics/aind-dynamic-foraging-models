@@ -21,56 +21,100 @@ from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 
 
 def prepare_logistic_design_matrix(
-    choice: Union[List, np.ndarray],
-    reward: Union[List, np.ndarray],
-    dependent_variable: List[Literal['reward_choice', 'unreward_choice', 'choice']] = [
-        'reward_choice', 'unreward_choice'],
+    choice_history: Union[List, np.ndarray],
+    reward_history: Union[List, np.ndarray],
+    logistic_model: Literal['Su2022', 'Bari2019', 'Hattori2019', 'Miller2021'] = 'Su2022',
     trials_back: int = 15,
     selected_trial_idx: Union[List, np.ndarray] = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Prepare logistic regression design matrix from choice and reward history.
+    
+    See discussion here:
+        https://github.com/AllenNeuralDynamics/aind-dynamic-foraging-models/discussions/10
+    
+    Parameters
+    ----------
+    choice_history : Union[List, np.ndarray]
+        Choice history (0 = left choice, 1 = right choice).
+    reward_history : Union[List, np.ndarray]
+        Reward history (0 = unrewarded, 1 = rewarded).
+    logistic_model : Literal['Su2022', 'Bari2019', 'Hattori2019', 'Miller2021'], optional
+        The logistic regression model to use. Defaults to 'Su2022'.
+        Supported models: 'Su2022', 'Bari2019', 'Hattori2019', 'Miller2021'.
+    trials_back : int, optional
+        Number of trials back into history. Defaults to 15.
+    selected_trial_idx : Union[List, np.ndarray], optional
+        If None, use all trials; 
+        else, only look at selected trials for fitting, but using the full history.
 
-    Args:
-        choice (Union[List, np.ndarray]): choice history (0 = left choice, 1 = right choice).
-        reward (Union[List, np.ndarray]): reward history (0 = unrewarded, 1 = rewarded).
-        dependent_variable (List[Literal['rewarded_choice', 'unrewarded_choice', 'choice']], optional):
-            The dependent variables. Defaults to ['rewarded_choice', 'unrewarded_choice'] (Sue and Cohen 2022).
-        trials_back (int, optional): Number of trials back into history. Defaults to 15.
-        selected_trial_idx (Union[List, np.ndarray], optional):
-            If None, use all trials; else, only look at selected trials for fitting, but using the full history.
-
-    Returns:
-        Tuple[np.ndarray, np.ndarray]: The design matrix (X) and the dependent variable (Y).
+    Returns
+    -------
+    Tuple[np.ndarray, np.ndarray]
+        The design matrix (X) and the dependent variable (choice) (Y).
     """
-
-    n_trials = len(choice)
-    trials_back = 20
-    data = []
-
+    
+    # Remove ignore trials in choice and reward
+    choice_history = np.array(choice_history)
+    reward_history = np.array(reward_history)
+    
+    ignored = np.isnan(choice_history)
+    choice_history = choice_history[~ignored]
+    reward_history = reward_history[~ignored]
+    
+    # Sanity checks
+    assert len(choice_history) == len(reward_history), "Choice and reward must have the same length."
+    assert logistic_model in ['Su2022', 'Bari2019', 'Hattori2019', 'Miller2021'], \
+        "Invalid logistic model. Models supported: 'Su2022', 'Bari2019', 'Hattori2019', 'Miller2021'."
+    assert all(x in [0, 1] for x in choice_history), "Choice must be 0, 1"
+    assert all(x in [0, 1] for x in reward_history), "Reward must be 0 or 1"
+    
+    n_trials = len(choice_history)
+    assert n_trials >= trials_back + 2, "Number of trials must be greater than trials_back + 2."
+    
     # Encoding data
-    RewC, UnrC, C = np.zeros(n_trials), np.zeros(n_trials), np.zeros(n_trials)
-    RewC[(choice == 0) & (reward == 1)] = -1   # L rew = -1, R rew = 1, others = 0
-    RewC[(choice == 1) & (reward == 1)] = 1
-    UnrC[(choice == 0) & (reward == 0)] = -1    # L unrew = -1, R unrew = 1, others = 0
-    UnrC[(choice == 1) & (reward == 0)] = 1
-    C[choice == 0] = -1
-    C[choice == 1] = 1
+    Choice = 2 * choice_history - 1
+    Reward = 2 * reward_history - 1
+    RewC = Choice * (Reward == 1)
+    UnrC = Choice * (Reward == -1)
+    Choice_x_Reward = Choice * Reward
+    
+    assert np.array_equal(Choice, RewC + UnrC)
+    assert np.array_equal(Choice_x_Reward, RewC - UnrC)
+    
+    # Package design matrix X
+    X = []
 
-    # Select trials
     if selected_trial_idx is None:
         trials = range(trials_back, n_trials)
     else:
-        trials = np.intersect1d(selected_trial_idx, range(trials_back, n_trials))
+        trials = np.intersect1d(selected_trial_idx, 
+                                range(trials_back, n_trials)
+                                )
         
     for trial in trials:
-        data.append(np.hstack([RewC[trial - trials_back : trial],
-                            UnrC[trial - trials_back : trial], 
-                            C[trial - trials_back : trial]]))
-    data = np.array(data)
+        selected_indices = slice(trial - trials_back, trial)
+        if logistic_model == 'Su2022':
+            X.append(np.hstack([RewC[selected_indices],
+                                UnrC[selected_indices],
+                                ]))
+        elif logistic_model == 'Bari2019':
+            X.append(np.hstack([RewC[selected_indices],
+                                Choice[selected_indices],
+                                ]))
+        elif logistic_model == 'Hattori2019':
+            X.append(np.hstack([RewC[selected_indices],
+                                UnrC[selected_indices],
+                                Choice[selected_indices],
+                                ]))
+        elif logistic_model == 'Miller2021':
+            X.append(np.hstack([Choice[selected_indices],
+                                Reward[selected_indices],
+                                Choice_x_Reward[selected_indices],
+                                ]))
+    X = np.array(X)
+    Y = Choice[trials]
     
-    Y = C[trials]  # Use -1/1 or 0/1?
-    
-    return data, Y
+    return X, Y
 
 
 def prepare_logistic_no_C(choice, reward, trials_back=20, selected_trial_idx=None, **kwargs):

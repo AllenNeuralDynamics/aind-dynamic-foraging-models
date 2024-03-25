@@ -24,13 +24,14 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    'aind-dynamic-foraging-models',
     'black',
     'coverage',
     'flake8',
     'interrogate',
     'isort',
     'Sphinx',
-    'furo'
+    'furo',
 ]
 
 [tool.setuptools.packages.find]

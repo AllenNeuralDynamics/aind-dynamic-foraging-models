@@ -5,7 +5,7 @@ Logistic regression on choice and reward history
 adapted from Han Hou, Feb 2023
 """
 #%%
-from typing import Union, Literal, List, Tuple
+from typing import Union, Literal, List, Tuple, Dict
 
 import numpy as np
 import pandas as pd
@@ -119,15 +119,15 @@ def fit_logistic_regression(choice_history: Union[List, np.ndarray],
                             logistic_model: Literal['Su2022', 'Bari2019', 'Hattori2019', 'Miller2021'] = 'Su2022',
                             n_trial_back: int = 15,
                             selected_trial_idx: Union[List, np.ndarray] = None,
-                            solver='liblinear', 
-                            penalty='l2',
-                            Cs=10,
-                            cv=10,
-                            n_jobs=-1,
-                            n_bootstrap=1000, 
-                            n_samplesize=None,
+                            solver: Literal['lbfgs', 'liblinear', 'newton-cg', 'newton-cholesky', 'sag', 'saga'] = 'liblinear', 
+                            penalty: Literal['l1', 'l2', 'elasticnet', None] = 'l2',
+                            Cs: int = 10,
+                            cv: int = 10,
+                            n_jobs_cross_validation: int = -1,
+                            n_bootstrap_iters: int = 1000, 
+                            n_bootstrap_samplesize: Union[int, None] = None,
                             **kwargs
-                            ):
+                            ) -> Dict:
     """Fit logistic regression model to choice and reward history.
         1. use cross-validataion to determine the best L2 penality parameter, C
         2. use bootstrap to determine the CI and std
@@ -135,34 +135,39 @@ def fit_logistic_regression(choice_history: Union[List, np.ndarray],
     Parameters
     ----------
     choice_history : Union[List, np.ndarray]
-        _description_
+        Choice history (0 = left choice, 1 = right choice).
     reward_history : Union[List, np.ndarray]
-        _description_
-    logistic_model : Literal[&#39;Su2022&#39;, &#39;Bari2019&#39;, &#39;Hattori2019&#39;, &#39;Miller2021&#39;], optional
-        _description_, by default 'Su2022'
+        Reward history (0 = unrewarded, 1 = rewarded).
+    logistic_model : Literal['Su2022', 'Bari2019', 'Hattori2019', 'Miller2021'], optional
+        The logistic regression model to use. Defaults to 'Su2022'.
+        Supported models: 'Su2022', 'Bari2019', 'Hattori2019', 'Miller2021'.
     n_trial_back : int, optional
-        _description_, by default 15
+        Number of trials back into history. Defaults to 15.
     selected_trial_idx : Union[List, np.ndarray], optional
-        _description_, by default None
+        If None, use all trials; 
+        else, only look at selected trials for fitting, but using the full history.
     solver : str, optional
-        _description_, by default 'liblinear'
+        Algorithm to fit logistic regression, by default 'liblinear'
+        Note that there are some restrictions on the choice of penalty and solver.
     penalty : str, optional
-        _description_, by default 'l2'
+        Penalty term for regularization, by default 'l2'
+        Note that there are some restrictions on the choice of penalty and solver.
     Cs : int, optional
-        _description_, by default 10
+        Number of hyperparameter C to do grid search on, by default 10
     cv : int, optional
-        _description_, by default 10
-    n_jobs : int, optional
-        _description_, by default -1
-    n_bootstrap : int, optional
-        _description_, by default 1000
-    n_samplesize : _type_, optional
-        _description_, by default None
+        Number of folds in cross validation, by default 10
+    n_jobs_cross_validation : int, optional
+        Number of CPU cores used during the cross-validation loop, by default -1 (all CPU cores)
+    n_bootstrap_iters : int, optional
+        Number of bootstrap iterations, by default 1000
+    n_bootstrap_samplesize : Union[int, None], optional
+        Number of samples in each bootstrap iteration, 
+        by default None (use the same number of samples as the original dataset)
 
     Returns
     -------
-    _type_
-        _description_
+    Dict
+        A dictionary containing logistic regression results.
     """
     
     # -- Prepare design matrix --
@@ -178,7 +183,7 @@ def fit_logistic_regression(choice_history: Union[List, np.ndarray],
                                            penalty=penalty, 
                                            Cs=Cs, 
                                            cv=cv, 
-                                           n_jobs=n_jobs,
+                                           n_jobs=n_jobs_cross_validation,
                                            **kwargs)
     logistic_reg_cv.fit(X, Y)
     best_C = logistic_reg_cv.C_[0]
@@ -187,10 +192,10 @@ def fit_logistic_regression(choice_history: Union[List, np.ndarray],
     df_beta = pd.DataFrame([beta_from_CV], columns=[beta_names], index=['cross_validation'])
     
     # -- Do bootstrap with the best C to get confidence interval --
-    if n_bootstrap > 0:
+    if n_bootstrap_iters > 0:
         beta_bootstrap = _bootstrap(_fit_logistic_one_sample, X, Y, 
                                     solver=solver, penalty=penalty, C=best_C, 
-                                    n_bootstrap=n_bootstrap, n_samplesize=n_samplesize,
+                                    n_iters=n_bootstrap_iters, n_samplesize=n_bootstrap_samplesize,
                                     **kwargs
                                     )
         # Get bootstrap mean, std, and CI
@@ -233,15 +238,16 @@ def fit_logistic_regression(choice_history: Union[List, np.ndarray],
         'df_beta': df_beta,  # Main output
         'df_beta_exp_fit': df_beta_exp_fit,
         'logistic_reg_cv': logistic_reg_cv, # raw output of the fitting with CV
-        'beta_bootstrap': beta_bootstrap if n_bootstrap > 0 else None, # raw beta from all bootstrap samples
+        'beta_bootstrap': beta_bootstrap if n_bootstrap_iters > 0 else None, # raw beta from all bootstrap samples
         }
 
 
 # --- Helper functions ---
-def _bootstrap(func, X, Y, n_bootstrap=1000, n_samplesize=None, **kwargs):
-    # Generate bootstrap samples
+def _bootstrap(func, X, Y, n_iters=1000, n_samplesize=None, **kwargs):
+    """ Bootstrap wrapper that apply func on X and Y with bootstrapped samples """
+    # Generate bootstrap samples with replacement
     indices = np.random.choice(range(Y.shape[0]), 
-                               size=(n_bootstrap, Y.shape[0] if n_samplesize is None else n_samplesize), 
+                               size=(n_iters, Y.shape[0] if n_samplesize is None else n_samplesize), 
                                replace=True)   # Could do subsampling
     bootstrap_Y = [Y[index] for index in indices]
     bootstrap_X = [X[index, :] for index in indices]

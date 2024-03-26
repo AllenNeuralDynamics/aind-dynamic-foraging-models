@@ -20,6 +20,7 @@ dependencies = [
     'numpy',
     'matplotlib',
     'scikit-learn',
+    'scipy'
 ]
 
 [project.optional-dependencies]

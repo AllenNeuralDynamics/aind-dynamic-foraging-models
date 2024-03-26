@@ -11,7 +11,7 @@ Two models are supported:
   
 Han Hou, Feb 2023
 """
-
+#%%
 from typing import Union, Literal, List, Tuple
 
 import numpy as np
@@ -28,12 +28,12 @@ MODEL_MAPPER = {
 }
 
 def prepare_logistic_design_matrix(
-    choice_history: Union[List, np.ndarray],
-    reward_history: Union[List, np.ndarray],
-    logistic_model: Literal['Su2022', 'Bari2019', 'Hattori2019', 'Miller2021'] = 'Su2022',
-    trials_back: int = 15,
-    selected_trial_idx: Union[List, np.ndarray] = None,
-) -> pd.DataFrame:
+        choice_history: Union[List, np.ndarray],
+        reward_history: Union[List, np.ndarray],
+        logistic_model: Literal['Su2022', 'Bari2019', 'Hattori2019', 'Miller2021'] = 'Su2022',
+        trials_back: int = 15,
+        selected_trial_idx: Union[List, np.ndarray] = None,
+    ) -> pd.DataFrame:
     """Prepare logistic regression design matrix from choice and reward history.
     
     See discussion here:
@@ -57,7 +57,9 @@ def prepare_logistic_design_matrix(
     Returns
     -------
     df_design: pd.DataFrame
-        A dataframe with index of (trial) and hierachical columns (Y.RewC, UnrC, Choice, Bias)
+        A dataframe with index of (trial) and hierachical columns where
+            df_design.Y: Choice
+            df_design.X: each column represents an independent variable
     """
     
     # Remove ignore trials in choice and reward
@@ -117,148 +119,86 @@ def prepare_logistic_design_matrix(
     )
     df_design['Y', 'Choice'] = Y
     return df_design
+    
 
-def fit_logistic(X, Y, solver='liblinear', penalty='l2', C=1, test_size=0.10, **kwargs):
-    '''
-    Run one logistic regression fit
-    (Reward trials + Unreward trials + Choice + bias)
-    Han 20230208
-    '''
-    trials_back = int(X.shape[1] / 3)
-    
-    # Do training
-    # x_train, x_test, y_train, y_test = train_test_split(data, Y, test_size=test_size)
-    logistic_reg = LogisticRegression(solver=solver, fit_intercept=True, penalty=penalty, C=C)
-
-    # if sum(Y == 1) == 1 or sum(Y == -1) == 1:
-    #     logistic_reg_cv.coef_ = np.zeros((1, data.shape[1]))
-    #     logistic_reg_cv.intercept_ = 10 * np.sign(np.median(Y))   # If all left, set bias = 10 and other parameters 0
-    #     logistic_reg_cv.C_ = np.nan
-    # else:
-    logistic_reg.fit(X, Y)
-
-    output = np.concatenate([logistic_reg.coef_[0], logistic_reg.intercept_])
-    
-    (logistic_reg.b_RewC, 
-    logistic_reg.b_UnrC, 
-    logistic_reg.b_C, 
-    logistic_reg.bias) = decode_betas(output, trials_back)
-    
-    return output, logistic_reg
-
-
-def fit_logistic_CV(data, Y, Cs=10, cv=10, solver='liblinear', penalty='l2', n_jobs=-1):
-    '''
-    logistic regression with cross validation
-    1. Use cv-fold cross validation to determine best penalty C
-    2. Using the best C, refit the model with cv-fold again
-    3. Report the mean and CI (1.96 * std) of fitted parameters in logistic_reg_refit
-    
-    Cs: number of Cs to grid search
-    cv: number of folds
-    
-    -----
-    return: logistic_reg_cv, logistic_reg_refit
-    
-    Han 20230208
-    '''
-
-    # Do cross validation, try different Cs
-    logistic_reg_cv = LogisticRegressionCV(solver=solver, fit_intercept=True, penalty=penalty, Cs=Cs, cv=cv, n_jobs=n_jobs)
-    
-    # if sum(Y == 1) == 1 or sum(Y == -1) == 1:
-    #     logistic_reg_cv.coef_ = np.zeros((1, data.shape[1]))
-    #     logistic_reg_cv.intercept_ = 10 * np.sign(np.median(Y))   # If all left, set bias = 10 and other parameters 0
-    #     logistic_reg_cv.C_ = np.nan
-    # else:
-    logistic_reg_cv.fit(data, Y)
-
-    return logistic_reg_cv
-
-
-def _bootstrap(func, data, Y, n_bootstrap=1000, n_samplesize=None, **kwargs):
-    # Generate bootstrap samples
-    indices = np.random.choice(range(Y.shape[0]), size=(n_bootstrap, Y.shape[0] if n_samplesize is None else n_samplesize), replace=True)   # Could do subsampling
-    bootstrap_Y = [Y[index] for index in indices]
-    bootstrap_data = [data[index, :] for index in indices]
-    
-    # Fit the logistic regression model to each bootstrap sample
-    outputs = np.array([func(data, Y, **kwargs)[0] for data, Y in zip(bootstrap_data, bootstrap_Y)])
-    
-    # Get bootstrap mean, std, and CI
-    bs = {'raw': outputs,
-          'mean': np.mean(outputs, axis=0),
-          'std': np.std(outputs, axis=0),
-          'CI_lower': np.percentile(outputs, 2.5, axis=0),
-          'CI_upper': np.percentile(outputs, 97.5, axis=0)}
-    
-    return bs
-    
-    
-def decode_betas(coef, trials_back=20):
-    
-    # Decode fitted betas
-    coef = np.atleast_2d(coef)
-    # trials_back = int((coef.shape[1] - 1) / 3)  # Hard-coded
-    
-    b_RewC = coef[:, trials_back - 1::-1]
-    b_UnrC = coef[:, 2 * trials_back - 1: trials_back - 1:-1]
-    
-    if coef.shape[1] >= 3 * trials_back:
-        b_C = coef[:, 3 * trials_back - 1:2 * trials_back - 1:-1]
-    else:
-        b_C = np.full_like(b_UnrC, np.nan)
-    
-    bias = coef[:, -1:]
-    
-    return b_RewC, b_UnrC, b_C, bias
-
-
-def logistic_regression_bootstrap(data, Y, n_bootstrap=1000, n_samplesize=None, **kwargs):
+def fit_logistic_regression(choice_history: Union[List, np.ndarray],
+                            reward_history: Union[List, np.ndarray],
+                            logistic_model: Literal['Su2022', 'Bari2019', 'Hattori2019', 'Miller2021'] = 'Su2022',
+                            trials_back: int = 15,
+                            selected_trial_idx: Union[List, np.ndarray] = None,
+                            solver='liblinear', 
+                            penalty='l2',
+                            Cs=10,
+                            cv=10,
+                            n_jobs=-1,
+                            n_bootstrap=1000, 
+                            n_samplesize=None
+                            ):
     '''
     1. use cross-validataion to determine the best L2 penality parameter, C
     2. use bootstrap to determine the CI and std
     '''
     
-    # Cross validation
-    logistic_reg = fit_logistic_CV(data, Y, **kwargs)
-    best_C = logistic_reg.C_
-    para_mean = np.hstack([logistic_reg.coef_[0], logistic_reg.intercept_])
+    # -- Prepare design matrix --
+    df_design = prepare_logistic_design_matrix(choice_history, 
+                                                reward_history, 
+                                                logistic_model=logistic_model, 
+                                                trials_back=trials_back)
+    Y = df_design.Y.to_numpy().ravel()
+    X = df_design.X.to_numpy()
     
-    (logistic_reg.b_RewC, 
-     logistic_reg.b_UnrC, 
-     logistic_reg.b_C, 
-     logistic_reg.bias) = decode_betas(para_mean)
+    # -- Do cross validation with all data and find the best C --
+    logistic_reg_cv = LogisticRegressionCV(solver=solver, 
+                                           penalty=penalty, 
+                                           Cs=Cs, 
+                                           cv=cv, 
+                                           n_jobs=n_jobs)
+    logistic_reg_cv.fit(X, Y)
+    best_C = logistic_reg_cv.C_[0]
+    beta_from_CV = np.hstack([logistic_reg_cv.coef_[0], logistic_reg_cv.intercept_])
+    beta_names = df_design.X.columns.tolist() + ['bias']
+    df_betas = pd.DataFrame([beta_from_CV], columns=[beta_names], index=['cross_validation'])
     
-    # Bootstrap
+    # -- Do bootstrap with the best C to get confidence interval --
     if n_bootstrap > 0:
-        bs = _bootstrap(fit_logistic, data, Y, n_bootstrap=n_bootstrap, n_samplesize=n_samplesize, C=best_C[0], **kwargs)
+        # Prepare a simple function for bootstrap (fit without CV and return all coefs as an array)
+        def _fit_logistic_one_sample(X, Y):
+            logistic_reg = LogisticRegression(solver=solver, penalty=penalty, C=best_C)
+            logistic_reg.fit(X, Y)
+            return np.concatenate([logistic_reg.coef_[0], logistic_reg.intercept_])
+
+        beta_bootstrap = _bootstrap(_fit_logistic_one_sample, X, Y, 
+                                    n_bootstrap=n_bootstrap, n_samplesize=n_samplesize,
+                                    )
+        # Get bootstrap mean, std, and CI
+        df_betas.loc['bootstrap_mean'] = beta_bootstrap.mean(axis=0)
+        df_betas.loc['bootstrap_std'] = beta_bootstrap.std(axis=0)
+        df_betas.loc['bootstrap_CI_lower'] = np.percentile(beta_bootstrap, 2.5, axis=0)
+        df_betas.loc['bootstrap_CI_upper'] = np.percentile(beta_bootstrap, 97.5, axis=0)
         
-        logistic_reg.coefs_bootstrap = bs
-        (logistic_reg.b_RewC_CI, 
-        logistic_reg.b_UnrC_CI, 
-        logistic_reg.b_C_CI, 
-        logistic_reg.bias_CI) = decode_betas(np.vstack([bs['CI_lower'], bs['CI_upper']]))
-
-        # # Override with bootstrap mean
-        # (logistic_reg.b_RewC, 
-        # logistic_reg.b_UnrC, 
-        # logistic_reg.b_C, 
-        # logistic_reg.bias) = decode_betas(np.vstack([bs['mean'], bs['mean']]))
+    # -- Fit exponential model --
+    # TODO: Implement exponential model fitting
     
-    return logistic_reg
+    return {
+        'model': logistic_model,
+        'model_terms': MODEL_MAPPER[logistic_model] + ['bias'],
+        'trials_back': trials_back,
+        'df_design': df_design, 
+        'df_betas': df_betas,  # Main output
+        'logistic_reg_cv': logistic_reg_cv, # raw output of the fitting with CV
+        'beta_bootstrap': beta_bootstrap if n_bootstrap > 0 else None, # raw beta from all bootstrap samples
+        }
 
 
-
-
-
-# --- Wrappers ---
-def do_logistic_regression(choice, reward, **kwargs):
-    data, Y = prepare_logistic_RewC_UnRC(choice, reward, **kwargs)
-    logistic_reg = logistic_regression_bootstrap(data, Y, **kwargs)
-    return plot_logistic_regression(logistic_reg)
-
-def do_logistic_regression_no_C(choice, reward, **kwargs):
-    data, Y = prepare_logistic_no_C(choice, reward, **kwargs)
-    logistic_reg = logistic_regression_bootstrap(data, Y, **kwargs)
-    return plot_logistic_regression(logistic_reg)
+# --- Helper functions ---
+def _bootstrap(func, X, Y, n_bootstrap=1000, n_samplesize=None, **kwargs):
+    # Generate bootstrap samples
+    indices = np.random.choice(range(Y.shape[0]), 
+                               size=(n_bootstrap, Y.shape[0] if n_samplesize is None else n_samplesize), 
+                               replace=True)   # Could do subsampling
+    bootstrap_Y = [Y[index] for index in indices]
+    bootstrap_X = [X[index, :] for index in indices]
+    
+    # Apply func to each bootstrap sample    
+    return np.array([func(X, Y, **kwargs) 
+                     for X, Y in zip(bootstrap_X, bootstrap_Y)])

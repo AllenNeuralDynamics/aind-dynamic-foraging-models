@@ -132,7 +132,8 @@ def fit_logistic_regression(choice_history: Union[List, np.ndarray],
                             cv=10,
                             n_jobs=-1,
                             n_bootstrap=1000, 
-                            n_samplesize=None
+                            n_samplesize=None,
+                            **kwargs
                             ):
     '''
     1. use cross-validataion to determine the best L2 penality parameter, C
@@ -152,7 +153,8 @@ def fit_logistic_regression(choice_history: Union[List, np.ndarray],
                                            penalty=penalty, 
                                            Cs=Cs, 
                                            cv=cv, 
-                                           n_jobs=n_jobs)
+                                           n_jobs=n_jobs,
+                                           **kwargs)
     logistic_reg_cv.fit(X, Y)
     best_C = logistic_reg_cv.C_[0]
     beta_from_CV = np.hstack([logistic_reg_cv.coef_[0], logistic_reg_cv.intercept_])
@@ -162,13 +164,14 @@ def fit_logistic_regression(choice_history: Union[List, np.ndarray],
     # -- Do bootstrap with the best C to get confidence interval --
     if n_bootstrap > 0:
         # Prepare a simple function for bootstrap (fit without CV and return all coefs as an array)
-        def _fit_logistic_one_sample(X, Y):
-            logistic_reg = LogisticRegression(solver=solver, penalty=penalty, C=best_C)
+        def _fit_logistic_one_sample(X, Y, **kwargs):
+            logistic_reg = LogisticRegression(solver=solver, penalty=penalty, C=best_C, **kwargs)
             logistic_reg.fit(X, Y)
             return np.concatenate([logistic_reg.coef_[0], logistic_reg.intercept_])
 
         beta_bootstrap = _bootstrap(_fit_logistic_one_sample, X, Y, 
                                     n_bootstrap=n_bootstrap, n_samplesize=n_samplesize,
+                                    **kwargs
                                     )
         # Get bootstrap mean, std, and CI
         df_betas.loc['bootstrap_mean'] = beta_bootstrap.mean(axis=0)

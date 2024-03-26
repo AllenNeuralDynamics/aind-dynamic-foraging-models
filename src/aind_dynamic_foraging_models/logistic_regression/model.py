@@ -1,8 +1,7 @@
 """
-Descriptive analysis for the foraging task
-Logistic regression on choice and reward history
+Logistic regression on choice and reward history for the foraging task
 
-adapted from Han Hou, Feb 2023
+adapted from https://github.com/hanhou/map-ephys/blob/master/pipeline/model/descriptive_analysis.py
 """
 #%%
 from typing import Union, Literal, List, Tuple, Dict
@@ -100,17 +99,17 @@ def prepare_logistic_design_matrix(
             ))
 
     # Prepare df_design
-    var_names = [f"{var}_{n}" 
-                 for var in MODEL_MAPPER[logistic_model] 
-                 for n in reversed(range(1, n_trial_back + 1))]
     X = np.array(X)
     Y = encoding['Choice'][trials_to_include]
     df_design = pd.DataFrame(
         X, 
-        columns=pd.MultiIndex.from_product([['X'], var_names]), 
-        index=pd.Index(trials_to_include, name='trial')
+        columns=pd.MultiIndex.from_product([['X'], 
+                                            MODEL_MAPPER[logistic_model], 
+                                            reversed(range(1, n_trial_back + 1))],
+                                           names=["", "var", "trial_back"]), 
+        index=pd.Index(trials_to_include, name="trial")
     )
-    df_design['Y', 'Choice'] = Y
+    df_design['Y', 'Choice', '0'] = Y
     return df_design
     
 
@@ -188,8 +187,9 @@ def fit_logistic_regression(choice_history: Union[List, np.ndarray],
     logistic_reg_cv.fit(X, Y)
     best_C = logistic_reg_cv.C_[0]
     beta_from_CV = np.hstack([logistic_reg_cv.coef_[0], logistic_reg_cv.intercept_])
-    beta_names = df_design.X.columns.tolist() + ['bias']
-    df_beta = pd.DataFrame([beta_from_CV], columns=[beta_names], index=['cross_validation'])
+    beta_names = df_design.X.columns.tolist() + [('bias', np.nan)]
+    df_beta = pd.DataFrame(beta_from_CV, columns=['cross_validation'], 
+                           index=pd.MultiIndex.from_tuples(beta_names, name=('var', 'trial_back')))
     
     # -- Do bootstrap with the best C to get confidence interval --
     if n_bootstrap_iters > 0:
@@ -199,22 +199,24 @@ def fit_logistic_regression(choice_history: Union[List, np.ndarray],
                                     **kwargs
                                     )
         # Get bootstrap mean, std, and CI
-        df_beta.loc['bootstrap_mean'] = beta_bootstrap.mean(axis=0)
-        df_beta.loc['bootstrap_std'] = beta_bootstrap.std(axis=0)
-        df_beta.loc['bootstrap_CI_lower'] = np.percentile(beta_bootstrap, 2.5, axis=0)
-        df_beta.loc['bootstrap_CI_upper'] = np.percentile(beta_bootstrap, 97.5, axis=0)
+        df_beta['bootstrap_mean'] = beta_bootstrap.mean(axis=0)
+        df_beta['bootstrap_std'] = beta_bootstrap.std(axis=0)
+        df_beta['bootstrap_CI_lower'] = np.percentile(beta_bootstrap, 2.5, axis=0)
+        df_beta['bootstrap_CI_upper'] = np.percentile(beta_bootstrap, 97.5, axis=0)
         
     # -- Fit exponential curve on betas --
     exp_func = lambda trials_back, amp, tau: amp * np.exp(-trials_back / tau)
     trials_back = np.arange(1, n_trial_back + 1)
     
-    df_beta_exp_fit = pd.DataFrame(index=['amp', 'tau', 'amp_se', 'tau_se'])
+    df_beta_exp_fit = pd.DataFrame(columns=pd.MultiIndex.from_product(
+        [['amp', 'tau'], ['fitted', 'standard_error']],
+        names=['var', 'stat']))
     for var in MODEL_MAPPER[logistic_model]:
-        this_betas = df_beta.loc['cross_validation', 
-                                  [f'{var}_{t}' for t in trials_back]
-                                  ].values
+        this_betas = df_beta.loc[var, 'cross_validation']
         try:
-            params, covariance = curve_fit(exp_func, trials_back, this_betas,
+            params, covariance = curve_fit(exp_func, 
+                                           this_betas.index, 
+                                           this_betas.values,
                                        p0=[1, 3], # Initial guess: amp=1, tau=3
                                        bounds=([-np.inf, 0], [np.inf, np.inf]),
                                        )
@@ -225,10 +227,9 @@ def fit_logistic_regression(choice_history: Union[List, np.ndarray],
             amp, tau, amp_se, tau_se = [np.nan] * 4
             
         # Extract fitted parameters
-        df_beta_exp_fit[var] = [amp, tau, amp_se, tau_se]
-        
+        df_beta_exp_fit.loc[var] = [amp, amp_se, tau, tau_se]
     
-    return {
+    dict_logistic_result = {
         'model': logistic_model,
         'model_terms': MODEL_MAPPER[logistic_model] + ['bias'],
         'n_trial_back': n_trial_back,
@@ -240,6 +241,8 @@ def fit_logistic_regression(choice_history: Union[List, np.ndarray],
         'logistic_reg_cv': logistic_reg_cv, # raw output of the fitting with CV
         'beta_bootstrap': beta_bootstrap if n_bootstrap_iters > 0 else None, # raw beta from all bootstrap samples
         }
+    
+    return dict_logistic_result
 
 
 # --- Helper functions ---

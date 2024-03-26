@@ -1,4 +1,4 @@
-## Logistic regression models
+## Choosing logistic regression models
 
 ### Su 2022
 
@@ -62,3 +62,14 @@ Some observations:
 | Severity of multicollinearity | Not at all | Medium | Severe | Slight |
 | Interpretation | Like a RL model with different learning rates on reward and unrewarded trials. | Like a RL model that only updates on rewarded trials, plus a choice kernel (tendency to repeat previous choices). | Like a RL model that has different learning rates on reward and unrewarded trials, plus a choice kernel (the full RL model from the same paper). | Like a RL model that has symmetric learning rates for rewarded and unrewarded trials, plus a choice kernel. However, the $Reward $ term seems to be a strawman assumption, as it means “if I get reward on any side, I’ll choose the right side more”, which doesn’t make much sense. |
 | Conclusion | Probably the best | Okay | Not good due to the severe multicollinearity | Good |
+
+
+## Regularization and optimization
+The choice of optimizer depends on the penality term, as listed [here](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html#sklearn.linear_model.LogisticRegression).
+
+- `lbfgs` - [`l2`, None]
+- `liblinear` - [`l1`, `l2`]
+- `newton-cg` - [`l2`, None]
+- `newton-cholesky` - [`l2`, None]
+- `sag` - [`l2`, None]
+- `saga` - [`elasticnet`, `l1`, `l2`, None]

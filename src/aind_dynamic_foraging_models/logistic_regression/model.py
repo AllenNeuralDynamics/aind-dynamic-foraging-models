@@ -184,7 +184,7 @@ def fit_logistic_regression(choice_history: Union[List, np.ndarray],
     best_C = logistic_reg_cv.C_[0]
     beta_from_CV = np.hstack([logistic_reg_cv.coef_[0], logistic_reg_cv.intercept_])
     beta_names = df_design.X.columns.tolist() + ['bias']
-    df_betas = pd.DataFrame([beta_from_CV], columns=[beta_names], index=['cross_validation'])
+    df_beta = pd.DataFrame([beta_from_CV], columns=[beta_names], index=['cross_validation'])
     
     # -- Do bootstrap with the best C to get confidence interval --
     if n_bootstrap > 0:
@@ -194,25 +194,24 @@ def fit_logistic_regression(choice_history: Union[List, np.ndarray],
                                     **kwargs
                                     )
         # Get bootstrap mean, std, and CI
-        df_betas.loc['bootstrap_mean'] = beta_bootstrap.mean(axis=0)
-        df_betas.loc['bootstrap_std'] = beta_bootstrap.std(axis=0)
-        df_betas.loc['bootstrap_CI_lower'] = np.percentile(beta_bootstrap, 2.5, axis=0)
-        df_betas.loc['bootstrap_CI_upper'] = np.percentile(beta_bootstrap, 97.5, axis=0)
+        df_beta.loc['bootstrap_mean'] = beta_bootstrap.mean(axis=0)
+        df_beta.loc['bootstrap_std'] = beta_bootstrap.std(axis=0)
+        df_beta.loc['bootstrap_CI_lower'] = np.percentile(beta_bootstrap, 2.5, axis=0)
+        df_beta.loc['bootstrap_CI_upper'] = np.percentile(beta_bootstrap, 97.5, axis=0)
         
     # -- Fit exponential curve on betas --
-    # TODO: Implement exponential model fitting
     exp_func = lambda trials_back, amp, tau: amp * np.exp(-trials_back / tau)
     trials_back = np.arange(1, n_trial_back + 1)
     
-    df_beta_exponential_fit = pd.DataFrame(index=['amp', 'tau', 'amp_se', 'tau_se'])
+    df_beta_exp_fit = pd.DataFrame(index=['amp', 'tau', 'amp_se', 'tau_se'])
     for var in MODEL_MAPPER[logistic_model]:
-        this_betas = df_betas.loc['cross_validation', 
+        this_betas = df_beta.loc['cross_validation', 
                                   [f'{var}_{t}' for t in trials_back]
                                   ].values
         try:
             params, covariance = curve_fit(exp_func, trials_back, this_betas,
                                        p0=[1, 3], # Initial guess: amp=1, tau=3
-                                       bounds=([-np.inf, 0], [np.inf, n_trial_back])
+                                       bounds=([-np.inf, 0], [np.inf, np.inf]),
                                        )
             amp, tau = params
             amp_se, tau_se = np.sqrt(np.diag(covariance))
@@ -221,7 +220,7 @@ def fit_logistic_regression(choice_history: Union[List, np.ndarray],
             amp, tau, amp_se, tau_se = [np.nan] * 4
             
         # Extract fitted parameters
-        df_beta_exponential_fit[var] = [amp, tau, amp_se, tau_se]
+        df_beta_exp_fit[var] = [amp, tau, amp_se, tau_se]
         
     
     return {
@@ -231,8 +230,8 @@ def fit_logistic_regression(choice_history: Union[List, np.ndarray],
         'df_design': df_design,
         'X': X,
         'Y': Y,
-        'df_betas': df_betas,  # Main output
-        'df_beta_exponential_fit': df_beta_exponential_fit,
+        'df_beta': df_beta,  # Main output
+        'df_beta_exp_fit': df_beta_exp_fit,
         'logistic_reg_cv': logistic_reg_cv, # raw output of the fitting with CV
         'beta_bootstrap': beta_bootstrap if n_bootstrap > 0 else None, # raw beta from all bootstrap samples
         }

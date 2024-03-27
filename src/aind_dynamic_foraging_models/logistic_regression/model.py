@@ -205,7 +205,6 @@ def fit_logistic_regression(choice_history: Union[List, np.ndarray],
         df_beta['bootstrap_CI_upper'] = np.percentile(beta_bootstrap, 97.5, axis=0)
         
     # -- Fit exponential curve on betas --
-    exp_func = lambda trials_back, amp, tau: amp * np.exp(-trials_back / tau)
     trials_back = np.arange(1, n_trial_back + 1)
     
     df_beta_exp_fit = pd.DataFrame(columns=pd.MultiIndex.from_product(
@@ -264,3 +263,7 @@ def _fit_logistic_one_sample(X, Y, **kwargs):
     logistic_reg = LogisticRegression(**kwargs)
     logistic_reg.fit(X, Y)
     return np.concatenate([logistic_reg.coef_[0], logistic_reg.intercept_])
+
+def exp_func(trial_back, amp, tau):
+    """ Exponential function for fitting """
+    return amp * np.exp(-trial_back / tau)

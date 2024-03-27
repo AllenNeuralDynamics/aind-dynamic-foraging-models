@@ -12,6 +12,8 @@ import pandas as pd
 from scipy.optimize import curve_fit
 from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 
+__all__ = ["MODEL_MAPPER", "prepare_logistic_design_matrix", "fit_logistic_regression", "exp_func"]
+
 # See https://github.com/AllenNeuralDynamics/aind-dynamic-foraging-models/discussions/10
 MODEL_MAPPER = {
     "Su2022": ["RewC", "UnrC"],

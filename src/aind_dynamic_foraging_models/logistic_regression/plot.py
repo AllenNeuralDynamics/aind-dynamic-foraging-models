@@ -7,6 +7,8 @@ import numpy as np
 
 from .model import exp_func
 
+__all__ = ["plot_logistic_regression"]
+
 COLOR_MAPPER = {
     "RewC": "g",
     "UnrC": "r",
@@ -92,7 +94,7 @@ def plot_logistic_regression(dict_logistic_result, ax=None, ls="-o", alpha=0.3):
     if hasattr(logistic_reg, "cv"):
         ax.set(
             title=Rf"{logistic_reg.cv}-fold CV, "
-                  Rf"score $\pm$ std = {score_mean:.3g} $\pm$ {score_std:.2g}\n"
+            Rf"score $\pm$ std = {score_mean:.3g} $\pm$ {score_std:.2g}\n"
             f"best C = {logistic_reg.C_[0]:.3g}"
         )
     else:

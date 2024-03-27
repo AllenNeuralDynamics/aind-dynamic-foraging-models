@@ -19,6 +19,24 @@ def plot_logistic_regression(dict_logistic_result,
                              ax=None, 
                              ls='-o',
                              alpha=0.3):
+    """Plot logistic regression results with the output dictionary from model.fit_logistic_regression
+
+    Parameters
+    ----------
+    dict_logistic_result : Dict
+        The dictionary output from model.fit_logistic_regression
+    ax : , optional
+        If None, create a new figure and axis, by default None
+    ls : str, optional
+        Line style for the plot, by default '-o'
+    alpha : float, optional
+        Transparency of the confidence interval band, by default 0.3
+
+    Returns
+    -------
+    ax : matplotlib.axes.Axes
+        a matplotlib axis
+    """
     if ax is None:
         fig, ax = plt.subplots(1, 1)
     

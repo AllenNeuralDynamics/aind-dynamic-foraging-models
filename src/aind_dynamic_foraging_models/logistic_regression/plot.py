@@ -7,7 +7,7 @@ import numpy as np
 
 from .model import exp_func
 
-__all__ = ["plot_logistic_regression"]
+__all__ = ["COLOR_MAPPER", "plot_logistic_regression"]
 
 COLOR_MAPPER = {
     "RewC": "g",

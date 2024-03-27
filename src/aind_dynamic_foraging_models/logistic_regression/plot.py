@@ -10,6 +10,7 @@ COLOR_MAPPER = {
     'RewC': 'g', 
     'UnrC': 'r', 
     'Choice': 'b',
+    'Reward': 'c',
     'Choice_x_Reward': 'm', 
     'bias': 'k'
 }
@@ -30,8 +31,6 @@ def plot_logistic_regression(dict_logistic_result,
         col = COLOR_MAPPER[var]
         
         var_mean = df_beta.loc[var, 'cross_validation']
-        var_CI_upper = df_beta.loc[var, 'bootstrap_CI_upper']
-        var_CI_lower = df_beta.loc[var, 'bootstrap_CI_lower']
         trials_back = var_mean.index
         
         if np.all(np.isnan(var_mean)):
@@ -40,11 +39,16 @@ def plot_logistic_regression(dict_logistic_result,
                 np.atleast_2d(var_mean)[0, :], 
                 ls + col, label=var + ' $\pm$ CI')
 
-        ax.fill_between(x=trials_back if var != 'bias' else [1], 
-                        y1=var_CI_upper, 
-                        y2=var_CI_lower, 
-                        color=col,
-                        alpha=alpha)
+        # Add confidence intervals, if available
+        if 'bootstrap_CI_upper' in df_beta.columns:
+            var_CI_upper = df_beta.loc[var, 'bootstrap_CI_upper']
+            var_CI_lower = df_beta.loc[var, 'bootstrap_CI_lower']
+
+            ax.fill_between(x=trials_back if var != 'bias' else [1], 
+                            y1=var_CI_upper, 
+                            y2=var_CI_lower, 
+                            color=col,
+                            alpha=alpha)
     
         # -- Add exponential fit --
         if var != 'bias':

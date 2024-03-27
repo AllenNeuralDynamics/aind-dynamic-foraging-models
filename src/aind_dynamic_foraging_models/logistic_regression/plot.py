@@ -18,7 +18,8 @@ COLOR_MAPPER = {
 
 
 def plot_logistic_regression(dict_logistic_result, ax=None, ls="-o", alpha=0.3):
-    """Plot logistic regression results with the output dictionary from model.fit_logistic_regression
+    """Plot logistic regression results with the output dictionary
+    from model.fit_logistic_regression
 
     Parameters
     ----------
@@ -90,7 +91,8 @@ def plot_logistic_regression(dict_logistic_result, ax=None, ls="-o", alpha=0.3):
     score_std = np.std(logistic_reg.scores_[1.0])
     if hasattr(logistic_reg, "cv"):
         ax.set(
-            title=Rf"{logistic_reg.cv}-fold CV, score $\pm$ std = {score_mean:.3g} $\pm$ {score_std:.2g}\n"
+            title=Rf"{logistic_reg.cv}-fold CV, "
+                  Rf"score $\pm$ std = {score_mean:.3g} $\pm$ {score_std:.2g}\n"
             f"best C = {logistic_reg.C_[0]:.3g}"
         )
     else:

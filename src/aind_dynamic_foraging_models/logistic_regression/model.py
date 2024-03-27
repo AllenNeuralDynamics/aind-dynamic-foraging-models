@@ -5,12 +5,12 @@ adapted from https://github.com/hanhou/map-ephys/blob/master/pipeline/model/desc
 """
 
 # %%
-from typing import Union, Literal, List, Tuple, Dict
+from typing import Dict, List, Literal, Union
 
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 from scipy.optimize import curve_fit
+from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 
 # See https://github.com/AllenNeuralDynamics/aind-dynamic-foraging-models/discussions/10
 MODEL_MAPPER = {
@@ -24,9 +24,7 @@ MODEL_MAPPER = {
 def prepare_logistic_design_matrix(
     choice_history: Union[List, np.ndarray],
     reward_history: Union[List, np.ndarray],
-    logistic_model: Literal[
-        "Su2022", "Bari2019", "Hattori2019", "Miller2021"
-    ] = "Su2022",
+    logistic_model: Literal["Su2022", "Bari2019", "Hattori2019", "Miller2021"] = "Su2022",
     n_trial_back: int = 15,
     selected_trial_idx: Union[List, np.ndarray] = None,
 ) -> pd.DataFrame:
@@ -73,15 +71,11 @@ def prepare_logistic_design_matrix(
     assert (
         logistic_model in MODEL_MAPPER.keys()
     ), f"Invalid logistic model. Models supported: {list(MODEL_MAPPER.keys())}."
-    assert all(
-        x in [0, 1] for x in choice_history
-    ), "Choice must be 0, 1, or np.nan"
+    assert all(x in [0, 1] for x in choice_history), "Choice must be 0, 1, or np.nan"
     assert all(x in [0, 1] for x in reward_history), "Reward must be 0 or 1"
 
     n_trials = len(choice_history)
-    assert (
-        n_trials >= n_trial_back + 2
-    ), "Number of trials must be greater than n_trial_back + 2."
+    assert n_trials >= n_trial_back + 2, "Number of trials must be greater than n_trial_back + 2."
 
     # Encoding data
     encoding = {}
@@ -91,30 +85,19 @@ def prepare_logistic_design_matrix(
     encoding["UnrC"] = encoding["Choice"] * (encoding["Reward"] == -1)
     encoding["Choice_x_Reward"] = encoding["Choice"] * encoding["Reward"]
 
-    assert np.array_equal(
-        encoding["Choice"], encoding["RewC"] + encoding["UnrC"]
-    )
-    assert np.array_equal(
-        encoding["Choice_x_Reward"], encoding["RewC"] - encoding["UnrC"]
-    )
+    assert np.array_equal(encoding["Choice"], encoding["RewC"] + encoding["UnrC"])
+    assert np.array_equal(encoding["Choice_x_Reward"], encoding["RewC"] - encoding["UnrC"])
 
     # Package independent variables
     X = []
     if selected_trial_idx is None:
         trials_to_include = range(n_trial_back, n_trials)
     else:
-        trials_to_include = np.intersect1d(
-            selected_trial_idx, range(n_trial_back, n_trials)
-        )
+        trials_to_include = np.intersect1d(selected_trial_idx, range(n_trial_back, n_trials))
     for trial in trials_to_include:
         selected_indices = slice(trial - n_trial_back, trial)
         X.append(
-            np.hstack(
-                [
-                    encoding[var][selected_indices]
-                    for var in MODEL_MAPPER[logistic_model]
-                ]
-            )
+            np.hstack([encoding[var][selected_indices] for var in MODEL_MAPPER[logistic_model]])
         )
 
     # Prepare df_design
@@ -139,9 +122,7 @@ def prepare_logistic_design_matrix(
 def fit_logistic_regression(
     choice_history: Union[List, np.ndarray],
     reward_history: Union[List, np.ndarray],
-    logistic_model: Literal[
-        "Su2022", "Bari2019", "Hattori2019", "Miller2021"
-    ] = "Su2022",
+    logistic_model: Literal["Su2022", "Bari2019", "Hattori2019", "Miller2021"] = "Su2022",
     n_trial_back: int = 15,
     selected_trial_idx: Union[List, np.ndarray] = None,
     solver: Literal[
@@ -218,16 +199,12 @@ def fit_logistic_regression(
     )
     logistic_reg_cv.fit(X, Y)
     best_C = logistic_reg_cv.C_[0]
-    beta_from_CV = np.hstack(
-        [logistic_reg_cv.coef_[0], logistic_reg_cv.intercept_]
-    )
+    beta_from_CV = np.hstack([logistic_reg_cv.coef_[0], logistic_reg_cv.intercept_])
     beta_names = df_design.X.columns.tolist() + [("bias", np.nan)]
     df_beta = pd.DataFrame(
         beta_from_CV,
         columns=["cross_validation"],
-        index=pd.MultiIndex.from_tuples(
-            beta_names, name=("var", "trial_back")
-        ),
+        index=pd.MultiIndex.from_tuples(beta_names, name=("var", "trial_back")),
     )
 
     # -- Do bootstrap with the best C to get confidence interval --
@@ -246,16 +223,10 @@ def fit_logistic_regression(
         # Get bootstrap mean, std, and CI
         df_beta["bootstrap_mean"] = beta_bootstrap.mean(axis=0)
         df_beta["bootstrap_std"] = beta_bootstrap.std(axis=0)
-        df_beta["bootstrap_CI_lower"] = np.percentile(
-            beta_bootstrap, 2.5, axis=0
-        )
-        df_beta["bootstrap_CI_upper"] = np.percentile(
-            beta_bootstrap, 97.5, axis=0
-        )
+        df_beta["bootstrap_CI_lower"] = np.percentile(beta_bootstrap, 2.5, axis=0)
+        df_beta["bootstrap_CI_upper"] = np.percentile(beta_bootstrap, 97.5, axis=0)
 
     # -- Fit exponential curve on betas --
-    trials_back = np.arange(1, n_trial_back + 1)
-
     df_beta_exp_fit = pd.DataFrame(
         columns=pd.MultiIndex.from_product(
             [["amp", "tau"], ["fitted", "standard_error"]],
@@ -312,9 +283,7 @@ def _bootstrap(func, X, Y, n_iters=1000, n_samplesize=None, **kwargs):
     bootstrap_X = [X[index, :] for index in indices]
 
     # Apply func to each bootstrap sample
-    return np.array(
-        [func(X, Y, **kwargs) for X, Y in zip(bootstrap_X, bootstrap_Y)]
-    )
+    return np.array([func(X, Y, **kwargs) for X, Y in zip(bootstrap_X, bootstrap_Y)])
 
 
 def _fit_logistic_one_sample(X, Y, **kwargs):

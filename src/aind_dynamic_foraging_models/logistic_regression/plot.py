@@ -2,8 +2,8 @@
 Plot functions for logistic regression
 """
 
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
 from .model import exp_func
 
@@ -17,9 +17,7 @@ COLOR_MAPPER = {
 }
 
 
-def plot_logistic_regression(
-    dict_logistic_result, ax=None, ls="-o", alpha=0.3
-):
+def plot_logistic_regression(dict_logistic_result, ax=None, ls="-o", alpha=0.3):
     """Plot logistic regression results with the output dictionary from model.fit_logistic_regression
 
     Parameters
@@ -58,7 +56,7 @@ def plot_logistic_regression(
             trials_back if var != "bias" else 1,
             np.atleast_2d(var_mean)[0, :],
             ls + col,
-            label=var + " $\pm$ CI",
+            label=var + R" $\pm$ CI",
         )
 
         # Add confidence intervals, if available
@@ -77,9 +75,7 @@ def plot_logistic_regression(
         # -- Add exponential fit --
         if var != "bias":
             xx = np.linspace(1, trials_back.max(), 100)
-            yy = exp_func(
-                xx, *df_beta_exp_fit.loc[var, (slice(None), "fitted")]
-            )
+            yy = exp_func(xx, *df_beta_exp_fit.loc[var, (slice(None), "fitted")])
             ax.plot(
                 xx,
                 yy,
@@ -94,7 +90,7 @@ def plot_logistic_regression(
     score_std = np.std(logistic_reg.scores_[1.0])
     if hasattr(logistic_reg, "cv"):
         ax.set(
-            title=f"{logistic_reg.cv}-fold CV, score $\pm$ std = {score_mean:.3g} $\pm$ {score_std:.2g}\n"
+            title=Rf"{logistic_reg.cv}-fold CV, score $\pm$ std = {score_mean:.3g} $\pm$ {score_std:.2g}\n"
             f"best C = {logistic_reg.C_[0]:.3g}"
         )
     else:
@@ -104,8 +100,7 @@ def plot_logistic_regression(
     ax.set(
         xlabel="Past trials",
         ylabel="Logistic regression coeffs",
-        xticks=[1]
-        + list(range(5, dict_logistic_result["n_trial_back"] + 1, 5)),
+        xticks=[1] + list(range(5, dict_logistic_result["n_trial_back"] + 1, 5)),
     )
     ax.axhline(y=0, color="k", linestyle=":", linewidth=0.5)
 

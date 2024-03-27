@@ -17,17 +17,22 @@ readme = "README.md"
 dynamic = ["version"]
 
 dependencies = [
+    'numpy',
+    'matplotlib',
+    'scikit-learn',
+    'scipy'
 ]
 
 [project.optional-dependencies]
 dev = [
+    'aind-dynamic-foraging-models',
     'black',
     'coverage',
     'flake8',
     'interrogate',
     'isort',
     'Sphinx',
-    'furo'
+    'furo',
 ]
 
 [tool.setuptools.packages.find]
@@ -37,7 +42,7 @@ where = ["src"]
 version = {attr = "aind_dynamic_foraging_models.__version__"}
 
 [tool.black]
-line-length = 79
+line-length = 100
 target_version = ['py36']
 exclude = '''
 
@@ -49,6 +54,7 @@ exclude = '''
     | \.mypy_cache
     | \.tox
     | \.venv
+    | \.vscode
     | _build
     | build
     | dist
@@ -71,7 +77,7 @@ exclude_lines = [
 fail_under = 100
 
 [tool.isort]
-line_length = 79
+line_length = 100
 profile = "black"
 
 [tool.interrogate]

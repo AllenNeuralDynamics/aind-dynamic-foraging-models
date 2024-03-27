@@ -9,6 +9,7 @@
 
 ## Overview
 Descriptive and generative behavioral models for the dynamic foraging task.
+- Logistic regression: [code](https://github.com/AllenNeuralDynamics/aind-dynamic-foraging-models/tree/main/src/aind_dynamic_foraging_models/logistic_regression), [notebook](https://github.com/AllenNeuralDynamics/aind-dynamic-foraging-models/blob/main/notebook/demo_logistic_regression.ipynb)
 
 ## See also
 - Foraging model simulation, model recovery, etc.: https://github.com/hanhou/Dynamic-Foraging

@@ -55,11 +55,18 @@ def plot_logistic_regression(dict_logistic_result, ax=None, ls="-o", alpha=0.3):
 
         if np.all(np.isnan(var_mean)):
             continue
+        
+        if var == "bias":
+            label = f"bias = {df_beta.loc['bias', 'cross_validation'].values[0]:.3f}"\
+                fR" $\pm$ {df_beta.loc['bias', 'bootstrap_std'].values[0]:.2g}"
+        else:
+            label = var + R" $\pm$ 95% CI"
+        
         ax.plot(
             trials_back if var != "bias" else 1,
             np.atleast_2d(var_mean)[0, :],
             ls + col,
-            label=var + R" $\pm$ CI",
+            label=label,
         )
 
         # Add confidence intervals, if available
@@ -85,20 +92,22 @@ def plot_logistic_regression(dict_logistic_result, ax=None, ls="-o", alpha=0.3):
                 color=col,
                 ls="--",
                 lw=4,
-                label=Rf"$\tau$ = {df_beta_exp_fit.loc[var, ('tau', 'fitted')]:.2f}",
+                label= RF"$\beta_0$ = {df_beta_exp_fit.loc[var, ('amp', 'fitted')]:.2f}, "
+                       Rf"$\tau$ = {df_beta_exp_fit.loc[var, ('tau', 'fitted')]:.2f}",
             )
 
     # -- Add title and labels --
     score_mean = np.mean(logistic_reg.scores_[1.0])
     score_std = np.std(logistic_reg.scores_[1.0])
-    if hasattr(logistic_reg, "cv"):
-        ax.set(
-            title=Rf"{logistic_reg.cv}-fold CV, "
-            Rf"score $\pm$ std = {score_mean:.3g} $\pm$ {score_std:.2g}\n"
-            f"best C = {logistic_reg.C_[0]:.3g}"
-        )
-    else:
-        pass
+    penalty = dict_logistic_result['logistic_reg_cv'].penalty.upper()
+    
+    str_bs = "" if dict_logistic_result['beta_bootstrap'] is None else \
+                f"; CI from {dict_logistic_result['beta_bootstrap'].shape[0]} bootstraps"
+    ax.set(
+        title= f"{dict_logistic_result['model']}, {penalty} penalty, "
+                f"best C = {logistic_reg.C_[0]:.3g} from {logistic_reg.cv}-fold CV\n"
+                Rf"score $\pm$ std = {score_mean:.3g} $\pm$ {score_std:.2g}" + str_bs
+    )
 
     ax.legend()
     ax.set(

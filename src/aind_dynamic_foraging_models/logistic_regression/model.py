@@ -243,7 +243,7 @@ def fit_logistic_regression(
                 this_betas.index,
                 this_betas.values,
                 p0=[1, 3],  # Initial guess: amp=1, tau=3
-                bounds=([-np.inf, 0], [np.inf, np.inf]),
+                bounds=([-10, 0], [10, n_trial_back]),
             )
             amp, tau = params
             amp_se, tau_se = np.sqrt(np.diag(covariance))

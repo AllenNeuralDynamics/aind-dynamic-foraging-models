@@ -1,11 +1,10 @@
 import numpy as np
 import scipy.optimize as optimize
-import seaborn as sns
 import matplotlib.pyplot as plt
 import math
-from foragingmodels.util import moving_average, softmax, choose_ps
 import multiprocessing as mp
-from collections import defaultdict
+
+from aind_dynamic_foraging_models.rl_model.util import moving_average, softmax, choose_ps
 
 def sigmoid(x):
     return 1 / (1 + math.exp(-x))
@@ -359,7 +358,6 @@ class ForagerModel:
             self.step(choice, reward)
 
     def plot_session_lightweight(self, task=None, fit_choice_history=None, smooth_factor=5):
-        sns.set(style="ticks", context="paper", font_scale=1.4)
         # smooth_factor, fit_choice_history, task = 5, None, None
         # choice_history, reward_history, choice_prob = agent.fit_choice_history, agent.fit_reward_history, agent.choice_prob
         choice_history = self.choice_history
@@ -420,7 +418,6 @@ class ForagerModel:
         ax.set_yticks([0, 1])
         ax.set_yticklabels(['Left', 'Right'])
 
-        sns.despine(trim=True)
         return ax
 
 class forager_Hattori2019(ForagerModel):

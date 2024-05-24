@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import math
 import multiprocessing as mp
 
-from aind_dynamic_foraging_models.rl_model.util import moving_average, softmax, choose_ps
+from .util import moving_average, softmax, choose_ps
 
 def sigmoid(x):
     return 1 / (1 + math.exp(-x))

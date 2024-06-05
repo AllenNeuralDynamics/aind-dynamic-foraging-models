@@ -357,68 +357,6 @@ class ForagerModel:
                     self.reward_history[choice, self.time] += self.opto_reward
             self.step(choice, reward)
 
-    def plot_session_lightweight(self, task=None, fit_choice_history=None, smooth_factor=5):
-        # smooth_factor, fit_choice_history, task = 5, None, None
-        # choice_history, reward_history, choice_prob = agent.fit_choice_history, agent.fit_reward_history, agent.choice_prob
-        choice_history = self.choice_history
-        reward_history = self.reward_history
-        choice_prob = self.choice_prob
-        n_trials = choice_history.shape[1]        
-
-        rewarded_trials = np.any(reward_history, axis=0)
-        unrewarded_trials = np.logical_not(rewarded_trials)       
-        ignored_trials = choice_history[0,:] > 1
-        unignored_trials = np.logical_not(ignored_trials)       
-
-        # == Choice trace ==
-        fig = plt.figure(figsize=(25, 4), dpi=150)
-        ax = fig.add_subplot(111)
-        fig.subplots_adjust(left=0.1, right=0.8)
-
-        # Rewarded trials
-        ax.plot(np.nonzero(rewarded_trials)[0], 0.5 + (choice_history[0, rewarded_trials] - 0.5) * 1.4, '|', color='black', markersize=20, markeredgewidth=2)
-
-        # Unrewarded trials
-        ax.plot(np.nonzero(unignored_trials*unrewarded_trials)[0], 0.5 + (choice_history[0, unignored_trials * unrewarded_trials] - 0.5) * 1.4, '|', color='gray', markersize=10, markeredgewidth=1)
-
-        # Ignored trials 
-        ax.plot(np.nonzero(ignored_trials*unrewarded_trials)[0], -0.5 + (choice_history[0, ignored_trials * unrewarded_trials] - 0.5) * 1.4, '|', color='gray', markersize=10, markeredgewidth=1)
-
-        # Plot ignore trials if present
-        if choice_history.max() > 1:
-            choice_history[0,ignored_trials] = 0.5
-            choice_prob = choice_prob[:-1] / choice_prob[:-1].sum(axis=0)
-
-        # Choice probability
-        p_smooth_factor = 1
-        y = moving_average(choice_prob[1,:], smooth_factor)
-        x = np.arange(0, len(y)) + int(smooth_factor / 2)
-        ax.plot(x, y, linewidth=1., color='blue', label='model choice probability (smooth = %g)' % p_smooth_factor)
-
-        # Smoothed choice history
-        y = moving_average(choice_history, smooth_factor)
-        x = np.arange(0, len(y)) + int(smooth_factor / 2)
-        ax.plot(x, y, linewidth=1., color='black', label='choice (smooth = %g)' % smooth_factor)
-
-        # Base probability
-        if task is not None:
-            p_reward = task.p_reward[:,:n_trials]
-            p_reward_fraction = p_reward[1, :] / (np.sum(p_reward, axis=0))
-            ax.plot(np.arange(0, len(p_reward_fraction)), p_reward_fraction, color='y', label='base rew. prob.', lw=1.5)
-
-        # For each session, if any
-        if fit_choice_history is not None:
-            y = moving_average(fit_choice_history, smooth_factor)
-            x = np.arange(0, len(y)) + int(smooth_factor / 2)
-            ax.plot(x, y, linewidth=1., color='blue', label='choice history (smooth = %g)' % smooth_factor)
-            # ax.plot(np.arange(0, n_trials), fitted_data[1, :], linewidth=1., label='model')                
-
-        ax.legend(fontsize=10, loc=1, bbox_to_anchor=(0.985, 0.89), bbox_transform=plt.gcf().transFigure)
-
-        ax.set_yticks([0, 1])
-        ax.set_yticklabels(['Left', 'Right'])
-
-        return ax
 
 class forager_Hattori2019(ForagerModel):
     def __init__(self,

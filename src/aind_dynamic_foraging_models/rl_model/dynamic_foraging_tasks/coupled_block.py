@@ -17,7 +17,7 @@ class CoupledBlocks:
         self.right = 1
         self.K_max = K_arm # This allows to model ignore choices, or choices outside of the task
 
-    def generate_p_reward(self, block_size_base = 80, block_size_fit_historysd = 20, p_reward_pairs=[[.4, .05], [.3857, .0643], [.3375, .1125], [.225, .225]]):
+    def generate_p_reward(self, block_size_base = 80, block_size_sd = 20, p_reward_pairs=[[.4, .05], [.3857, .0643], [.3375, .1125], [.225, .225]]):
         # If para_optim, fix the random seed to ensure that p_reward schedule is fixed for all candidate parameters
         # However, we should make it random during a session (see the last line of this function)
         if self.seed != '':

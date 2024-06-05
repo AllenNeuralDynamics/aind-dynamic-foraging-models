@@ -5,7 +5,7 @@ from .util import moving_average, softmax, choose_ps
 LEFT = 0
 RIGHT = 1
 
-class BanditTask:
+class CoupledBlocks:
     def __init__(self, K_arm=2, n_trials=1000, if_baited=True, seed='',  p_reward_sum=0.45, p_reward_pairs=None):
         self.K = K_arm
         self.if_baited = if_baited

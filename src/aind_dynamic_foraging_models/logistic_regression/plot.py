@@ -99,7 +99,7 @@ def plot_logistic_regression(dict_logistic_result, ax=None, ls="-o", alpha=0.3):
             )
 
     # -- Add title and labels --
-    ind_C = np.where(logistic_reg.Cs_ == logistic_reg.C_)[0][0]  # Get the ind of best C 
+    ind_C = np.where(logistic_reg.Cs_ == logistic_reg.C_)[0][0]  # Get the ind of best C
     score_mean = np.mean(logistic_reg.scores_[1.0][:, ind_C], axis=0)
     score_std = np.std(logistic_reg.scores_[1.0][:, ind_C], axis=0)
     penalty = dict_logistic_result["logistic_reg_cv"].penalty.upper()

@@ -5,11 +5,12 @@ First coded by Han for the project in Neuromatch Academy: Deep Learning
 https://github.com/hanhou/meta_rl/blob/bd9b5b1d6eb93d217563ff37608aaa2f572c08e6/han/environment/dynamic_bandit_env.py
 """
 
-
 import numpy as np
+from .base import DynamicBanditTask
+
 rng = np.random.default_rng()
 
-class CoupledBlockTask():
+class CoupledBlockTask(DynamicBanditTask):
     """
     Generate block-like reward probabilities for 2-arm non-stationary bandit environment.
     Instead of pre-generatingµ all reward probabilities, I'm generating them on the fly.
@@ -42,8 +43,8 @@ class CoupledBlockTask():
         self.block_starts = [0]  # Start of each block. The first block always starts at trial 0
         self.block_lens = []  # Lengths of each block
         self.block_p_reward = []  # Rwd prob of each block
+        
         self.trial = -1  # Index of trial number, starting from 0
-
         self.next_trial()
 
     def next_trial(self):

@@ -11,6 +11,8 @@ import gymnasium as gym
 from gymnasium import spaces
 from gymnasium.utils import seeding
 
+from ..dynamic_foraging_tasks.base import DynamicBanditTask
+
 class DynamicBanditEnv(gym.Env):
     """
     A general gymnasium environment for dynamic bandit task
@@ -50,8 +52,8 @@ class DynamicBanditEnv(gym.Env):
     """
     def __init__(
         self,
-        task,  # Receive an instance of the task object
-        num_trials=1000,  # Number of trials in the session
+        task: DynamicBanditTask,  # Receive an instance of the task object
+        num_trials: int=1000,  # Number of trials in the session
     ):
         self.task = task
         self.num_trials = num_trials

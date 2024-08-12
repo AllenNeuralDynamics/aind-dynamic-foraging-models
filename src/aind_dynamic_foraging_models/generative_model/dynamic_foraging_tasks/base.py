@@ -9,7 +9,7 @@ https://github.com/hanhou/meta_rl/blob/bd9b5b1d6eb93d217563ff37608aaa2f572c08e6/
 """
 
 class DynamicBanditTask():
-    """A general task object for dynamic bandit environment
+    """A general task object for dynamic bandit environment 
     """
     def __init__(self):
         pass
@@ -20,8 +20,9 @@ class DynamicBanditTask():
         Following lines are mandatory
         
         self.trial = -1  # Index of trial number, starting from 0
-        self.trial_p_reward = []  # Rwd prob per trial
-        self.next_trial()
+        self.trial_p_reward = []  # Rwd prob per trial; list of lists that contains the 
+                                    reward probabilities for each action
+        self.next_trial()  # Generate next p_reward
         """
         raise NotImplementedError("reset() should be overridden by subclasses")
 

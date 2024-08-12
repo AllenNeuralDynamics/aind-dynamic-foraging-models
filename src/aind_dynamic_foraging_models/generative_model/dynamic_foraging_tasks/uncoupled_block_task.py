@@ -179,7 +179,7 @@ class UncoupledBlockTask(DynamicBanditTask):
                 self.persev_add_at_trials.append(self.trial)
         return msg
 
-    def add_choice(self, this_choice):
+    def add_action(self, this_choice):
         self.choice_history.append(this_choice)
     
     def plot_reward_schedule(self):
@@ -210,6 +210,8 @@ class UncoupledBlockTask(DynamicBanditTask):
         
 
 if __name__ == '__main__':
+    
+    #TODO: move to unittest
     np.random.seed(56)
     total_trial = 1000
 

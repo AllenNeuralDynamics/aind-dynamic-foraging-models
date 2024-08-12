@@ -127,6 +127,7 @@ class DynamicBanditEnv(gym.Env):
 
         # State transition if not terminated (trial += 1 here)
         if not terminated:
+            self.task.add_action(action)  # Task state transition may depend on the action (like in Uncoupled task)
             self.task.next_trial()
             self.trial = self.task.trial
 

@@ -26,6 +26,13 @@ class DynamicBanditTask():
         """
         raise NotImplementedError("reset() should be overridden by subclasses")
 
+    def add_action(self, action):
+        """Pass the agent's action to the task (optional)
+        This is important when the state transition depends on the action 
+        like in the Uncoupled task.
+        """
+        pass
+
     def next_trial(self):
         """Generate a new trial and increment the trial number
         I'm doing this trial-by-trial because the block switch may depend on the action.

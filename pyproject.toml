@@ -20,12 +20,12 @@ dependencies = [
     'numpy',
     'matplotlib',
     'scikit-learn',
-    'scipy'
+    'scipy',
+    'gymnasium',
 ]
 
 [project.optional-dependencies]
 dev = [
-    'aind-dynamic-foraging-models',
     'black',
     'coverage',
     'flake8',

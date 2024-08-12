@@ -25,8 +25,9 @@ class DynamicBanditEnv(gym.Env):
         agent = # define your agent here
         
         observation, info = env.reset()
+        done = False
         
-        while not Done:  # Trial loop
+        while not done:  # Trial loop
             # Choose an action
             action = agent.act(observation)
             

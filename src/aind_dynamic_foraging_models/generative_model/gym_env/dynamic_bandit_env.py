@@ -122,6 +122,7 @@ class DynamicBanditEnv(gym.Env):
         assert self.action_space.contains(action)
 
         # Compute reward
+        # TODO: add baiting here
         reward = 0
         ignored = self.allow_ignore and action == self.action_space.n - 1
             

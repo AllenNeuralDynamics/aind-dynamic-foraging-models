@@ -169,7 +169,7 @@ class UncoupledBlockTask(DynamicBanditTask):
         for s in [L, R]:
             if self.choice_history[-1] == s:
                 self.persev_consec_on_min_prob[1 - s] = 0  # Reset other side as soon as there is an opposite choice
-                if self.trial_p_reward[-1][s] == min(self.rwd_prob_array):   # If last choice is on side with min_prob (0.1), add counter
+                if self.trial_p_reward[-2][s] == min(self.rwd_prob_array):   # If last choice is on side with min_prob (0.1), add counter
                     self.persev_consec_on_min_prob[s] += 1  
 
         for s in [L, R]:

@@ -1,15 +1,19 @@
+"""Uncoupled task for dynamic bandit environment
+
+see /test/test_uncoupled_block_task.py for usage
+
+"""
+
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
 import logging
 
-from aind_dynamic_foraging_models.generative_model.dynamic_foraging_tasks.base import DynamicBanditTask
+from .base import DynamicBanditTask
+from ..gym_env.dynamic_bandit_env import L, R, IGNORE
 
 logger = logging.getLogger(__name__)
 
-L = 0
-R = 1
-IGNORE = 2
 
 class UncoupledBlockTask(DynamicBanditTask):
     '''
@@ -211,7 +215,3 @@ class UncoupledBlockTask(DynamicBanditTask):
 
         return fig
         
-
-if __name__ == '__main__':
-    # see /test/test_uncoupled_block_task.py for usage
-    pass

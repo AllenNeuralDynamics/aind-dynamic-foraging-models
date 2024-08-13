@@ -15,11 +15,11 @@ class TestUncoupledBlockTask(unittest.TestCase):
 
     def test_reward_schedule(self):
         
-        rng = np.random.default_rng(seed=42) # Another independent random number generator
+        rng_agent = np.random.default_rng(seed=42) # Another independent random number generator
         
         while self.reward_schedule.trial < self.total_trial:
             # Replace this with the actual choice
-            choice = [L, R, IGNORE][rng.choice([0]*100 + [1]*20 + [2]*1)]
+            choice = [L, R, IGNORE][rng_agent.choice([0]*100 + [1]*20 + [2]*1)]
             
             # Add choice
             self.reward_schedule.add_action(choice)

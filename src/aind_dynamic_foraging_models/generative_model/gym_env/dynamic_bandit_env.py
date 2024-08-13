@@ -11,6 +11,10 @@ from gymnasium import spaces
 
 from ..dynamic_foraging_tasks.base import DynamicBanditTask
 
+L = 0
+R = 1
+IGNORE = 2
+
 class DynamicBanditEnv(gym.Env):
     """
     A general gymnasium environment for dynamic bandit task

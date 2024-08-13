@@ -21,7 +21,7 @@ dependencies = [
     'matplotlib',
     'scikit-learn',
     'scipy',
-    'gymnasium',
+    'aind-behavior-gym @ git+https://github.com/AllenNeuralDynamics/aind-behavior-gym.git@develop',
 ]
 
 [project.optional-dependencies]

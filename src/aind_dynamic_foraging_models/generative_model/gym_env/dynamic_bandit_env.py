@@ -53,10 +53,13 @@ class DynamicBanditEnv(gym.Env):
     def __init__(
         self,
         task: DynamicBanditTask,  # Receive an instance of the task object
+        num_arms: int=2,  # Number of arms in the bandit
+        allow_ignore: bool=False,  # Allow the agent to ignore the task
         num_trials: int=1000,  # Number of trials in the session
     ):
         self.task = task
         self.num_trials = num_trials
+        self.allow_ignore = allow_ignore
 
         # State space
         # - Time (trial number) is the only observable state to the agent
@@ -65,7 +68,8 @@ class DynamicBanditEnv(gym.Env):
         })
 
         # Action space
-        self.action_space = spaces.Discrete(2)  # Lets hardcode it as 2-arm bandit
+        num_actions = num_arms + int(allow_ignore)  # Add the last action as ignore if allowed
+        self.action_space = spaces.Discrete(num_actions)
 
     def _seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -119,7 +123,9 @@ class DynamicBanditEnv(gym.Env):
 
         # Compute reward
         reward = 0
-        if rng.uniform(0, 1) < self.task.trial_p_reward[-1][action]:
+        ignored = self.allow_ignore and action == self.action_space.n - 1
+            
+        if not ignored and rng.uniform(0, 1) < self.task.trial_p_reward[-1][action]:
             reward = 1
 
         # Decide termination before trial += 1

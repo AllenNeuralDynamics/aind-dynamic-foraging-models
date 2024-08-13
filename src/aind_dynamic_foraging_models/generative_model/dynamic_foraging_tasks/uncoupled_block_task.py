@@ -3,12 +3,13 @@ import matplotlib.pyplot as plt
 import matplotlib
 import logging
 
-from .base import DynamicBanditTask
+from aind_dynamic_foraging_models.generative_model.dynamic_foraging_tasks.base import DynamicBanditTask
 
 logger = logging.getLogger(__name__)
 
 L = 0
 R = 1
+IGNORE = 2
 
 class UncoupledBlockTask(DynamicBanditTask):
     '''
@@ -191,7 +192,7 @@ class UncoupledBlockTask(DynamicBanditTask):
                 [ax.plot(x, 1.2, marker='>', color=col) for x in self.force_by_tally[s]]
                 [ax.plot(x, 1.1, marker='v', color=col) for x in self.force_by_both_lowest[s]]
      
-            for s, col, pos, m in zip([L, R, np.nan], ['r', 'b', 'k'], [0, 1, 0.95], ['|', '|', 'x']):
+            for s, col, pos, m in zip([L, R, IGNORE], ['r', 'b', 'k'], [0, 1, 0.95], ['|', '|', 'x']):
                 this_choice = np.where(np.array(self.choice_history) == s)
                 ax.plot(this_choice, [pos] * len(this_choice), m, color=col)
             
@@ -215,15 +216,15 @@ if __name__ == '__main__':
     np.random.seed(56)
     total_trial = 1000
 
-    reward_schedule = UncoupledBlocks(perseverative_limit=4) 
+    reward_schedule = UncoupledBlockTask(perseverative_limit=4) 
     reward_schedule.reset()  # Already includes a next_trial()
 
-    while reward_schedule.trial <= total_trial:    
+    while reward_schedule.trial < total_trial:    
         # Replace this with the actual choice
-        choice = [L, R, np.nan][np.random.choice([0]*100 + [1]*20 + [2]*1)]
+        choice = [L, R, IGNORE][np.random.choice([0]*100 + [1]*20 + [2]*1)]
         
         # Add choice
-        reward_schedule.add_choice(choice)
+        reward_schedule.add_action(choice)
 
         # Arbitrary hold (optional)
         reward_schedule.hold_this_block = 500 < reward_schedule.trial < 700
@@ -234,7 +235,7 @@ if __name__ == '__main__':
 
     assert reward_schedule.block_ends[L] == [12, 34, 35, 55, 94, 126, 146, 173, 252, 286, 313, \
         379, 406, 431, 461, 482, 701, 721, 755, 775, 807, \
-            831, 863, 883, 910, 975, 1001, 1021]
+            831, 863, 883, 910, 975, 1001]
     
     assert reward_schedule.block_ends[R] == [35, 46, 94, 114, 147, 171, 253, 285, 307, 380, 404, \
         406, 444, 476, 701, 721, 772, 793, 822, 831, 872, 894, 910, 983, 1011]

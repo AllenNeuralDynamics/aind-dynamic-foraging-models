@@ -29,7 +29,9 @@ class UncoupledBlockTask(DynamicBanditTask):
         self.__dict__.update(locals())
         self.block_stagger = int((round(block_max - block_min - 0.5) / 2 + block_min) / 2)
                 
-    def reset(self):
+    def reset(self, seed=None):
+        super().reset(seed=seed)  # Reset self.rng
+        
         self.rwd_tally = [0, 0]  # List for 'L' and 'R'
 
         self.block_ends = [[], []] # List for 'L' and 'R', Trial number on which each block ends
@@ -96,7 +98,7 @@ class UncoupledBlockTask(DynamicBanditTask):
             
         # Avoid both blocks have the lowest reward prob
         while np.all([x[0] == np.min(self.rwd_prob_array) for x in self.block_rwd_prob]):
-            self.block_rwd_prob[np.random.choice([L, R])][0] = np.random.choice(self.rwd_prob_array)  # Random change one side to another prob
+            self.block_rwd_prob[self.rng.choice([L, R])][0] = self.rng.choice(self.rwd_prob_array)  # Random change one side to another prob
         
         # Start with block stagger: the lower side makes the first block switch earlier
         smaller_side = np.argmin([self.block_rwd_prob[L][0], self.block_rwd_prob[R][0]])
@@ -107,11 +109,11 @@ class UncoupledBlockTask(DynamicBanditTask):
     def generate_next_block(self, side, check_higher_in_a_row=True, check_both_lowest=True):
         msg = ''
         other_side = R if side == L else L
-        random_block_len = np.random.randint(low=self.block_min, high=self.block_max + 1)
+        random_block_len = self.rng.integers(low=self.block_min, high=self.block_max + 1)
         
         if self.block_ind[side] == 0:  # The first block
             self.block_ends[side].append(random_block_len)
-            self.block_rwd_prob[side].append(np.random.choice(self.rwd_prob_array))
+            self.block_rwd_prob[side].append(self.rng.choice(self.rwd_prob_array))
             
         else:  # Not the first block
             self.block_ends[side].append(random_block_len + self.block_ends[side][self.block_ind[side] - 1])       
@@ -138,14 +140,14 @@ class UncoupledBlockTask(DynamicBanditTask):
                     self.rwd_tally[side] = self.rwd_tally[other_side] = 0            
                     self.force_by_tally[side].append(self.trial)
                 else:  # Otherwise, randomly choose one
-                    self.block_rwd_prob[side].append(np.random.choice(self.rwd_prob_array))
+                    self.block_rwd_prob[side].append(self.rng.choice(self.rwd_prob_array))
             else:               
-                self.block_rwd_prob[side].append(np.random.choice(self.rwd_prob_array))
+                self.block_rwd_prob[side].append(self.rng.choice(self.rwd_prob_array))
             
             # Don't repeat the previous rwd prob 
             # (this will not mess up with the "forced" case since the previous block cannot be the lowest prob in the first place)
             while self.block_rwd_prob[side][-2] == self.block_rwd_prob[side][-1]:
-                self.block_rwd_prob[side][-1] = np.random.choice(self.rwd_prob_array)
+                self.block_rwd_prob[side][-1] = self.rng.choice(self.rwd_prob_array)
                 
             # If the other side is already at the lowest prob AND this side just generates the same
             # (either through "forced" case or not), push the previous lowest side to a higher prob

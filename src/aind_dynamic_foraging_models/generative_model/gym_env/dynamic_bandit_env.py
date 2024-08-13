@@ -5,11 +5,9 @@ https://github.com/hanhou/meta_rl/blob/bd9b5b1d6eb93d217563ff37608aaa2f572c08e6/
 """
 
 import numpy as np
-rng = np.random.default_rng()
 
 import gymnasium as gym
 from gymnasium import spaces
-from gymnasium.utils import seeding
 
 from ..dynamic_foraging_tasks.base import DynamicBanditTask
 
@@ -71,10 +69,6 @@ class DynamicBanditEnv(gym.Env):
         num_actions = num_arms + int(allow_ignore)  # Add the last action as ignore if allowed
         self.action_space = spaces.Discrete(num_actions)
 
-    def _seed(self, seed=None):
-        self.np_random, seed = seeding.np_random(seed)
-        return [seed]
-
     def _get_obs(self):
         return {"trial": self.task.trial}
 
@@ -98,13 +92,11 @@ class DynamicBanditEnv(gym.Env):
         This should *NOT* automatically reset the task! Resetting the task is
         handled in the wrapper.
         """
-        # seed self.np_random
-        # pass an integer for RHG right after the environment has been initialized
-        # and then never again
-        super().reset(seed=seed)
+        # Seed the random number generator and pass it to the task as well
+        self.rng = np.random.default_rng(seed)
 
         # Reset the task
-        self.task.reset()
+        self.task.reset(seed=seed)  # Using the same seed if provided
         self.trial = self.task.trial
 
         observation = self._get_obs()
@@ -126,7 +118,7 @@ class DynamicBanditEnv(gym.Env):
         reward = 0
         ignored = self.allow_ignore and action == self.action_space.n - 1
             
-        if not ignored and rng.uniform(0, 1) < self.task.trial_p_reward[-1][action]:
+        if not ignored and self.rng.uniform(0, 1) < self.task.trial_p_reward[-1][action]:
             reward = 1
 
         # Decide termination before trial += 1

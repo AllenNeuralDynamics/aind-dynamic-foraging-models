@@ -8,13 +8,15 @@ First coded by Han for the project in Neuromatch Academy: Deep Learning
 https://github.com/hanhou/meta_rl/blob/bd9b5b1d6eb93d217563ff37608aaa2f572c08e6/han/environment/dynamic_bandit_env.py
 """
 
+import numpy as np
+
 class DynamicBanditTask():
     """A general task object for dynamic bandit environment 
     """
     def __init__(self):
         pass
 
-    def reset(self):
+    def reset(self, seed=None):
         """Initialization
         
         Following lines are mandatory
@@ -24,7 +26,9 @@ class DynamicBanditTask():
                                     reward probabilities for each action
         self.next_trial()  # Generate next p_reward
         """
-        raise NotImplementedError("reset() should be overridden by subclasses")
+        # Seed the random number generator and pass it to the task as well
+        self.rng = np.random.default_rng(seed=seed)
+
 
     def add_action(self, action):
         """Pass the agent's action to the task (optional)

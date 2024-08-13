@@ -8,8 +8,6 @@ https://github.com/hanhou/meta_rl/blob/bd9b5b1d6eb93d217563ff37608aaa2f572c08e6/
 import numpy as np
 from .base import DynamicBanditTask
 
-rng = np.random.default_rng()
-
 class CoupledBlockTask(DynamicBanditTask):
     """
     Generate block-like reward probabilities for 2-arm non-stationary bandit environment.
@@ -37,7 +35,9 @@ class CoupledBlockTask(DynamicBanditTask):
         self.block_beta = block_beta
         self.p_reward_pairs = [sorted(ps) for ps in p_reward_pairs] # Always sort the input ps
 
-    def reset(self):
+    def reset(self, seed=None):
+        super().reset(seed=seed) # Set self.rng
+        
         # Initialization
         self.trial_p_reward = []  # Rwd prob per trial
         self.block_starts = [0]  # Start of each block. The first block always starts at trial 0
@@ -88,7 +88,7 @@ class CoupledBlockTask(DynamicBanditTask):
         """
         # If it is the first block, randomly choose a pair and the side
         if len(self.block_p_reward) == 0:
-            p_reward = rng.choice(self.p_reward_pairs)
+            p_reward = self.rng.choice(self.p_reward_pairs)
             p_reward = self._flip_side(p_reward, None)
             return p_reward
 
@@ -101,7 +101,7 @@ class CoupledBlockTask(DynamicBanditTask):
             # Cannot be p_L == p_R again
             valid_pairs = [p for p in self.p_reward_pairs if p[0] != p[1]]
             # Randomly choose from the valid pairs
-            p_reward = rng.choice(valid_pairs)
+            p_reward = self.rng.choice(valid_pairs)
             # If there is a block before the equal-probability block, flip relative to it
             # otherwise, randomly choose
             p_reward = self._flip_side(p_reward,
@@ -111,7 +111,7 @@ class CoupledBlockTask(DynamicBanditTask):
             )
         else:
             # Randomly choose from any pairs
-            p_reward = rng.choice(self.p_reward_pairs)
+            p_reward = self.rng.choice(self.p_reward_pairs)
             # Make sure the side is flipped
             p_reward = self._flip_side(p_reward, self.block_p_reward[-1])
 
@@ -123,7 +123,7 @@ class CoupledBlockTask(DynamicBanditTask):
         Make sure the new block is flipped compare to the one before the equal-probability block.
         If old is None, flip it with a 0.5 probability.
         """
-        should_flip = p_reward_old is None and rng.random() < 0.5
+        should_flip = p_reward_old is None and self.rng.random() < 0.5
         if p_reward_old is not None:
             should_flip = (p_reward_new[0] < p_reward_new[1]) == (p_reward_old[0] < p_reward_old[1])
 
@@ -134,6 +134,6 @@ def generate_trunc_exp(lower, upper, beta, n=1):
     """
     Generate n samples from a truncated exponential distribution
     """
-    x = lower + rng.exponential(beta, n)
+    x = lower + self.rng.exponential(beta, n)
     x[x > upper] = upper
     return x

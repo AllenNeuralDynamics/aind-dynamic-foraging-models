@@ -72,7 +72,8 @@ class CoupledBlockTask(DynamicBanditTask):
         self.block_lens.append(
             int(
                 generate_trunc_exp(
-                    self.block_min, self.block_max, self.block_beta
+                    self.block_min, self.block_max, self.block_beta,
+                    rng=self.rng,
                     )[0]
                )
             )
@@ -117,8 +118,7 @@ class CoupledBlockTask(DynamicBanditTask):
 
         return p_reward
 
-    @staticmethod
-    def _flip_side(p_reward_new, p_reward_old=None):
+    def _flip_side(self, p_reward_new, p_reward_old=None):
         """
         Make sure the new block is flipped compare to the one before the equal-probability block.
         If old is None, flip it with a 0.5 probability.
@@ -130,10 +130,13 @@ class CoupledBlockTask(DynamicBanditTask):
         return p_reward_new[::-1] if should_flip else p_reward_new
 
 
-def generate_trunc_exp(lower, upper, beta, n=1):
+def generate_trunc_exp(lower, upper, beta, n=1, rng=None):
     """
     Generate n samples from a truncated exponential distribution
     """
-    x = lower + self.rng.exponential(beta, n)
+    if rng is None:
+        rng = np.random.default_rng()
+        
+    x = lower + rng.exponential(beta, n)
     x[x > upper] = upper
     return x

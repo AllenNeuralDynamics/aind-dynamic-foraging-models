@@ -9,11 +9,17 @@ from aind_dynamic_foraging_basic_analysis import plot_foraging_session
 
 
 # Start a new test case
-class TestHattoriGenerative(unittest.TestCase):
+class TestHattori(unittest.TestCase):
     
     def test_Hattori(self):
         # -- Create task and forager --
-        forager = forager_Hattori2019(seed=42)
+        forager = forager_Hattori2019(
+            dict(
+                softmax_inverse_temperature=5,
+                biasL=0.5,
+                ),
+            seed=42,
+            )
         task = CoupledBlockTask(reward_baiting=True, seed=42)
         
         # -- 1. Generative run --

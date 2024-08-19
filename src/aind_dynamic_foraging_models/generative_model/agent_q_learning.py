@@ -40,7 +40,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         learn_rate_rew: float = Field(default=0.5, ge=0.0, le=1.0, description="Learning rate for rewarded choice")
         learn_rate_unrew : float = Field(default=0.1, ge=0.0, le=1.0, description="Learning rate for unrewarded choice")
         forget_rate: float = Field(default=0.2, ge=0.0, le=1.0, description="Forgetting rate for unchosen options")
-        softmax_temperature: float = Field(default=0.3, ge=0.0, description="Softmax temperature")
+        softmax_inverse_temperature: float = Field(default=10, ge=0.0, description="Softmax temperature")
         biasL: float = Field(default=0.0, description="Bias term for softmax")
         pass
 
@@ -49,10 +49,14 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         After overriden in subclasses, calling ClassName.ParamFitBounds() returns default bounds.
         """
         # For example:
-        #
-        param1: Bounds = Field(default=Bounds(lower=0.0, upper=1.0), description="Bounds for param1")
-        param2: Bounds = Field(default=Bounds(lower=0.0, upper=1.0), description="Bounds for param2")
+        # param1: Bounds = Field(default=Bounds(lower=0.0, upper=1.0), description="Bounds for param1")
+        # param2: Bounds = Field(default=Bounds(lower=0.0, upper=1.0), description="Bounds for param2")
         # raise NotImplementedError("ParamFitBounds class must be defined in subclasses")
+        learn_rate_rew: Bounds = Field(default=Bounds(lower=0.0, upper=1.0))
+        learn_rate_unrew: Bounds = Field(default=Bounds(lower=0.0, upper=1.0))
+        forget_rate: Bounds = Field(default=Bounds(lower=0.0, upper=1.0))
+        softmax_inverse_temperature: Bounds = Field(default=Bounds(lower=0.0, upper=100.0))
+        biasL: Bounds = Field(default=Bounds(lower=-5.0, upper=5.0))
         pass
 
     def __init__(
@@ -139,9 +143,9 @@ class forager_Hattori2019(DynamicForagingAgentBase):
     def act(self, observation):
         choice, choice_prob = act_softmax(
             q_estimation_t=self.q_estimation[:, self.trial],
-            softmax_temperature=self.params.softmax_temperature,
+            softmax_inverse_temperature=self.params.softmax_inverse_temperature,
             bias_terms=np.array([self.params.biasL, 0]),
-            choice_softmax_temperature=None,
+            choice_softmax_inverse_temperature=None,
             choice_kernel=None,
             rng=self.rng,
         )
@@ -182,7 +186,6 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         """
         if self.task is None:
             return None
-        
         # Make sure agent's history is consistent with the task's history and return
         np.testing.assert_array_equal(np.sum(self.reward_history, axis=0), 
                                       self.task.get_reward_history())
@@ -195,8 +198,6 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         if self.task is None:
             return None   
         return self.task.get_p_reward()
-        
-        
 
     def fit(
         self,

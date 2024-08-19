@@ -5,10 +5,13 @@ import numpy as np
 import scipy.optimize as optimize
 import multiprocessing as mp
 from pydantic import BaseModel, Field, model_validator
-from .util import moving_average, softmax, choose_ps
 
 from aind_behavior_gym.dynamic_foraging.agent import DynamicForagingAgentBase
 from aind_behavior_gym.dynamic_foraging.task import DynamicForagingTaskBase, L, R, IGNORE
+
+from .act_functions import act_softmax
+from .learn_functions import learn_RWlike
+
 from aind_dynamic_foraging_basic_analysis import plot_foraging_session
 
 class Bounds(BaseModel):
@@ -319,45 +322,4 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         
         return fig
 
-def sigmoid(x):
-    return 1 / (1 + math.exp(-x))
 
-
-def act_softmax(
-    q_estimation_t=0,
-    softmax_temperature=0,
-    bias_terms=0,
-    choice_softmax_temperature=None,
-    choice_kernel=None,
-    rng=None,
-):
-    if choice_kernel is not None:
-        q_estimation_t = np.vstack(
-            [q_estimation_t, choice_kernel]
-        ).transpose()  # the first dimension is the choice and the second is usual valu in position 0 and kernel in position 1
-        softmax_temperature = np.array([softmax_temperature, choice_softmax_temperature])[
-            np.newaxis, :
-        ]
-    choice_prob = softmax(q_estimation_t, temperature=softmax_temperature, bias=bias_terms, rng=rng)
-    choice = choose_ps(choice_prob, rng=rng)
-    return choice, choice_prob
-
-
-def learn_RWlike(choice, reward, q_estimation_tminus1, forget_rates, learn_rates):
-    # Reward-dependent step size ('Hattori2019')
-    learn_rate_rew, learn_rate_unrew = learn_rates[0], learn_rates[1]
-    if reward:
-        learn_rate = learn_rate_rew
-    else:
-        learn_rate = learn_rate_unrew
-    # Choice-dependent forgetting rate ('Hattori2019')
-    # Chosen:   Q(n+1) = (1- forget_rate_chosen) * Q(n) + step_size * (Reward - Q(n))
-    q_estimation_t = np.zeros_like(q_estimation_tminus1)
-    K = q_estimation_tminus1.shape[0]
-    q_estimation_t[choice] = (1 - forget_rates[1]) * q_estimation_tminus1[choice] + learn_rate * (
-        reward - q_estimation_tminus1[choice]
-    )
-    # Unchosen: Q(n+1) = (1-forget_rate_unchosen) * Q(n)
-    unchosen_idx = [cc for cc in range(K) if cc != choice]
-    q_estimation_t[unchosen_idx] = (1 - forget_rates[0]) * q_estimation_tminus1[unchosen_idx]
-    return q_estimation_t

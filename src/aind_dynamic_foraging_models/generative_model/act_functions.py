@@ -1,17 +1,24 @@
 import numpy as np
-import pandas as pd
 
-pd.set_option('display.expand_frame_repr', False)
-np.set_printoptions(linewidth=1000)
-pd.set_option("display.max_columns", None)
 
-# matplotlib.get_backend()
-# matplotlib.use('module://backend_interagg')
-
-def moving_average(a, n=3):
-    ret = np.nancumsum(a, dtype=float)
-    ret[n:] = ret[n:] - ret[:-n]
-    return ret[n - 1:] / n
+def act_softmax(
+    q_estimation_t=0,
+    softmax_temperature=0,
+    bias_terms=0,
+    choice_softmax_temperature=None,
+    choice_kernel=None,
+    rng=None,
+):
+    if choice_kernel is not None:
+        q_estimation_t = np.vstack(
+            [q_estimation_t, choice_kernel]
+        ).transpose()  # the first dimension is the choice and the second is usual valu in position 0 and kernel in position 1
+        softmax_temperature = np.array([softmax_temperature, choice_softmax_temperature])[
+            np.newaxis, :
+        ]
+    choice_prob = softmax(q_estimation_t, temperature=softmax_temperature, bias=bias_terms, rng=rng)
+    choice = choose_ps(choice_prob, rng=rng)
+    return choice, choice_prob
 
 def softmax(x, temperature=1, bias=0, rng=None):
     # Put the bias outside /sigma to make it comparable across different softmax_temperatures.

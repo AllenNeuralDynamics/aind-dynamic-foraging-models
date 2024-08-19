@@ -72,6 +72,9 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         
         # Some switches
         self.fit_choice_kernel = False
+        
+        # Some initializations
+        self.task = None
 
     def reset(self):
         self.trial = 0
@@ -160,7 +163,40 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             }
         )
         if self.fit_choice_kernel and (self.trial < self.n_trials):
-            self.step_choice_kernel(choice)        
+            self.step_choice_kernel(choice)
+            
+    def get_choice_history(self):
+        """Return the history of actions in format that is compatible with other library such as
+        aind_dynamic_foraging_basic_analysis
+        """
+        if self.task is None:
+            return None
+        
+        # Make sure agent's history is consistent with the task's history and return
+        np.testing.assert_array_equal(self.choice_history[0], self.task.get_choice_history())
+        return self.task.get_choice_history()
+    
+    def get_reward_history(self):
+        """Return the history of reward in format that is compatible with other library such as
+        aind_dynamic_foraging_basic_analysis
+        """
+        if self.task is None:
+            return None
+        
+        # Make sure agent's history is consistent with the task's history and return
+        np.testing.assert_array_equal(np.sum(self.reward_history, axis=0), 
+                                      self.task.get_reward_history())
+        return self.task.get_reward_history()
+    
+    def get_p_reward(self):
+        """Return the reward probabilities for each arm in each trial which is compatible with
+        other library such as aind_dynamic_foraging_basic_analysis
+        """
+        if self.task is None:
+            return None   
+        return self.task.get_p_reward()
+        
+        
 
     def fit(
         self,

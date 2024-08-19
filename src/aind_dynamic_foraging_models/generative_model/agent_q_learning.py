@@ -20,7 +20,7 @@ class Bounds(BaseModel):
         if values.lower >= values.upper:
             raise ValueError("Upper bound must be greater than lower bound")
 
-class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
+class forager_Hattori2019(DynamicForagingAgentBase):
     """
     Base class for maximum likelihood estimation.
     """
@@ -55,9 +55,10 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
     def __init__(
         self,
         params: dict = {},
+        **kwargs,
         ):
 
-        super().__init__()
+        super().__init__(**kwargs)
 
         # Set and validate the model parameters. Use default parameters if some are not provided
         self.params = self.Param(**params)
@@ -71,18 +72,22 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
 
     def reset(self):
         self.trial = 0
-        # All latent variables have n_trials + 1 length to capture the update after the last trial (HH20210726)
+        
+        # Latent variables have n_trials + 1 length to capture the update after the last trial (HH20210726)
         self.q_estimation = np.full([self.n_actions, self.n_trials + 1], np.nan)
-        self.q_estimation[:, 0] = 0
+        self.q_estimation[:, 0] = 0  # Initial Q values as 0
+        
         self.choice_prob = np.full([self.n_actions, self.n_trials + 1], np.nan)
-        self.choice_prob[:, 0] = 1 / self.n_actions  # To be strict (actually no use)        
-        # Generative mode is now default mode of agent
-        self.choice_history = np.zeros([1, self.n_trials + 1], dtype=int)  # Choice history        
-        # Reward history, separated for each port (Corrado Newsome 2005)
-        self.reward_history = np.zeros([self.n_actions, self.n_trials + 1])
-
+        self.choice_prob[:, 0] = 1 / self.n_actions  # To be strict (actually no use)   
+             
         if self.fit_choice_kernel:
             self.choice_kernel = np.zeros([self.n_actions, self.n_trials + 1])
+        
+        # Choice and reward history have n_trials length
+        self.choice_history = np.full([1, self.n_trials], fill_value=-1, dtype=int)  # Choice history        
+        # Reward history, separated for each port (Corrado Newsome 2005)
+        self.reward_history = np.zeros([self.n_actions, self.n_trials])
+
 
     def set_params(self, params):
         """Update the model parameters and validate"""
@@ -117,8 +122,12 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             # In Sutton & Barto's convention, reward belongs to the next time step, but we put it
             # in the current time step for the sake of consistency with the choice
             self.reward_history[choice, self.trial] = reward
-
-            self.learn(observation, choice, reward, next_observation, done)  # Where self.trial increases
+            
+            # Update q values (where agent's self.trial += 1 happens)
+            # Note that this will update the q values **after the last trial**, a final update that
+            # will not be used to make the next action (because task is *done*) but may be used for
+            # correlating with physiology recordings
+            self.learn(observation, choice, reward, next_observation, done)  
             observation = next_observation
 
     def act(self, observation):
@@ -128,6 +137,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             bias_terms=np.array([self.params.biasL, 0]),
             choice_softmax_temperature=None,
             choice_kernel=None,
+            rng=self.rng,
         )
         return choice, choice_prob
 
@@ -237,7 +247,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
     def set_fitparams_random(self):
         x0 = []
         for lb, ub in zip(self.fit_bounds[0], self.fit_bounds[1]):
-            x0.append(np.random.uniform(lb, ub))
+            x0.append(self.rng.uniform(lb, ub))
         for i_name, name in enumerate(self.fit_names):
             setattr(self, name, x0[i_name])
         return x0
@@ -303,10 +313,11 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         )
         
         # Add Q value
-        axes[0].plot(self.q_estimation[L, :], label="Q_left", color='red') 
-        axes[0].plot(self.q_estimation[R, :], label="R_left", color='blue') 
+        axes[0].plot(self.q_estimation[L, :], label="Q_left", color='red', lw=0.5) 
+        axes[0].plot(self.q_estimation[R, :], label="R_left", color='blue', lw=0.5) 
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=3)
-
+        
+        return fig
 
 def sigmoid(x):
     return 1 / (1 + math.exp(-x))
@@ -318,6 +329,7 @@ def act_softmax(
     bias_terms=0,
     choice_softmax_temperature=None,
     choice_kernel=None,
+    rng=None,
 ):
     if choice_kernel is not None:
         q_estimation_t = np.vstack(
@@ -326,8 +338,8 @@ def act_softmax(
         softmax_temperature = np.array([softmax_temperature, choice_softmax_temperature])[
             np.newaxis, :
         ]
-    choice_prob = softmax(q_estimation_t, temperature=softmax_temperature, bias=bias_terms)
-    choice = choose_ps(choice_prob)
+    choice_prob = softmax(q_estimation_t, temperature=softmax_temperature, bias=bias_terms, rng=rng)
+    choice = choose_ps(choice_prob, rng=rng)
     return choice, choice_prob
 
 
@@ -349,51 +361,3 @@ def learn_RWlike(choice, reward, q_estimation_tminus1, forget_rates, learn_rates
     unchosen_idx = [cc for cc in range(K) if cc != choice]
     q_estimation_t[unchosen_idx] = (1 - forget_rates[0]) * q_estimation_tminus1[unchosen_idx]
     return q_estimation_t
-
-
-class forager_Hattori2019(DynamicForagingAgentMLEBase):
-    def __init__(
-        self,
-        softmax_temperature=None,
-        learn_rate_rew=None,
-        learn_rate_unrew=None,
-        **kwargs,
-    ):
-        super(forager_Hattori2019, self).__init__(**kwargs)
-        
-        self.softmax_temperature = softmax_temperature
-        self.learn_rate_rew = learn_rate_rew
-        self.learn_rate_unrew = learn_rate_unrew
-
-        self.fit_names.extend(
-            ["learn_rate_rew", "learn_rate_unrew", "forget_rate", "softmax_temperature", "biasL"]
-        )
-        
-        
-        
-        self.fit_std_values.extend([0.5, 0.5, 0.2, 0.1, 0.3])  # typical parameters
-        self.fit_bounds[0].extend([0, 0, 0, 1e-2, -5])
-        self.fit_bounds[1].extend([1, 1, 1, 15, 5])
-
-        self.model_name = "Hattori2019"
-        self.banditmodel = forager_Hattori2019
-        self.step_function = learn_RWlike
-        self.act_function = act_Probabilistic
-
-    def step(self, choice, reward):
-        step_kwargs = {
-            "q_estimation_tminus1": self.q_estimation[:, self.trial],
-            "learn_rates": [self.learn_rate_rew, self.learn_rate_unrew],
-            "forget_rates": self.forget_rates,
-        }
-        return super().step(choice, reward, **step_kwargs)
-
-    def act(
-        self,
-    ):  # Compatible with either fitting mode (predictive) or not (generative). It's much clear now!!
-        act_kwargs = {
-            "q_estimation_t": self.q_estimation[:, self.trial],
-            "softmax_temperature": self.softmax_temperature,
-            "bias_terms": self.bias_terms,
-        }
-        return super().act(**act_kwargs)

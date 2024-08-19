@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 from .util import moving_average, softmax, choose_ps
 
 from aind_behavior_gym.dynamic_foraging.agent import DynamicForagingAgentBase
-from aind_behavior_gym.dynamic_foraging.task import DynamicForagingTaskBase
+from aind_behavior_gym.dynamic_foraging.task import DynamicForagingTaskBase, L, R, IGNORE
 from aind_dynamic_foraging_basic_analysis import plot_foraging_session
 
 class Bounds(BaseModel):
@@ -37,7 +37,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         learn_rate_rew: float = Field(default=0.5, ge=0.0, le=1.0, description="Learning rate for rewarded choice")
         learn_rate_unrew : float = Field(default=0.1, ge=0.0, le=1.0, description="Learning rate for unrewarded choice")
         forget_rate: float = Field(default=0.2, ge=0.0, le=1.0, description="Forgetting rate for unchosen options")
-        softmax_temperature: float = Field(default=0.1, ge=0.0, description="Softmax temperature")
+        softmax_temperature: float = Field(default=0.3, ge=0.0, description="Softmax temperature")
         biasL: float = Field(default=0.0, description="Bias term for softmax")
         pass
 
@@ -141,7 +141,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             **{
                 "choice": choice,
                 "reward": reward,
-                "q_estimation_tminus1": self.q_estimation[:, self.trial],
+                "q_estimation_tminus1": self.q_estimation[:, self.trial - 1],
                 "learn_rates": [self.params.learn_rate_rew, self.params.learn_rate_unrew],
                 "forget_rates": [self.params.forget_rate, 0],   # 0: unchosen, 1: chosen
             }
@@ -296,11 +296,16 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             self.step(choice, reward)  # updates reward history, and update time
             
     def plot_session(self):
-        return plot_foraging_session(
+        fig, axes = plot_foraging_session(
             choice_history=self.task.get_choice_history(),
             reward_history=self.task.get_reward_history(),
             p_reward=self.task.get_p_reward(),
         )
+        
+        # Add Q value
+        axes[0].plot(self.q_estimation[L, :], label="Q_left", color='red') 
+        axes[0].plot(self.q_estimation[R, :], label="R_left", color='blue') 
+        axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=3)
 
 
 def sigmoid(x):

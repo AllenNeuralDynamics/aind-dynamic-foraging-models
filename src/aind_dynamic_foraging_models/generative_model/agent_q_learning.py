@@ -120,24 +120,31 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         # --- Main task loop ---
         self.reset()  # Reset agent
         observation, info = self.task.reset()  # Reset task and get the initial observation
-        done = False
-        while not done:
-            choice, choice_prob = self.act(observation)
-            next_observation, reward, done, truncated, info = task.step(choice)
+        task_done = False
+        while not task_done:
+            assert self.trial == self.task.trial  # Ensure the two timers are in sync
 
-            assert self.trial == next_observation['trial']  # Ensure the trial number is consistent
+            # -- Agent performs an action
+            choice, choice_prob = self.act(observation)
+            
+            # -- Environment steps (enviromnet's timer ticks here!!!)
+            next_observation, reward, task_done, _, _ = task.step(choice)
+
+            # -- Update agent history
             self.choice_prob[:, self.trial] = choice_prob
             self.choice_history[0, self.trial] = choice     
-
             # In Sutton & Barto's convention, reward belongs to the next time step, but we put it
-            # in the current time step for the sake of consistency with the choice
+            # in the current time step for the sake of consistency with neuroscience convention
             self.reward_history[choice, self.trial] = reward
             
-            # Update q values (where agent's self.trial += 1 happens)
+            # -- Agent's timer ticks here !!!
+            self.trial += 1
+            
+            # -- Update q values
             # Note that this will update the q values **after the last trial**, a final update that
             # will not be used to make the next action (because task is *done*) but may be used for
             # correlating with physiology recordings
-            self.learn(observation, choice, reward, next_observation, done)  
+            self.learn(observation, choice, reward, next_observation, task_done)  
             observation = next_observation
 
     def act(self, observation):
@@ -153,9 +160,6 @@ class forager_Hattori2019(DynamicForagingAgentBase):
 
     def learn(self, observation, choice, reward, next_observation, done):
         """Update Q values"""
-        # Agent's time ticks here !!!
-        self.trial += 1
-
         # Update Q values
         self.q_estimation[:, self.trial] = learn_RWlike(
             **{

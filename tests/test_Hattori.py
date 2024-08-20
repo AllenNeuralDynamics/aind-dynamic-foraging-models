@@ -25,6 +25,7 @@ class TestHattori(unittest.TestCase):
         forager.perform(task)
         ground_truth_params = forager.params.model_dump()
         ground_truth_choice_prob = forager.choice_prob
+        ground_truth_q_estimation = forager.q_estimation
 
         # --    1.1 test figure --
         fig, axes = forager.plot_session()
@@ -52,7 +53,7 @@ class TestHattori(unittest.TestCase):
             reward_history,
             fit_bounds_override={"softmax_inverse_temperature": [0, 100]},
             clamp_params={"biasL": 0},
-            DE_workers=8,
+            DE_workers=16,
         )
 
         fitting_result = forager.fitting_result
@@ -70,8 +71,12 @@ class TestHattori(unittest.TestCase):
         )
 
         # Plot fitted latent variables
-        forager.plot_fitted_latent_variables(ax=axes[0])
-        fig.savefig("tests/results/test_Hattori_fitted.png")
+        fig_fitting, axes = forager.plot_fitted_session()
+        # Add groundtruth
+        axes[0].plot(ground_truth_q_estimation[0], lw=1, color="red", ls="-", label="actual_Q(L)")
+        axes[0].plot(ground_truth_q_estimation[1], lw=1, color="blue", ls="-", label="actual_Q(R)")
+        axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=4)
+        fig_fitting.savefig("tests/results/test_Hattori_fitted.png")
 
 
 if __name__ == "__main__":

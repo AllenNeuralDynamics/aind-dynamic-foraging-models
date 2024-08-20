@@ -437,7 +437,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         fit_reward_history = self.fitting_result.fit_settings["fit_reward_history"]
         self.predictive_perform(fit_choice_history, fit_reward_history)
 
-        # -- Plot the target session
+        # -- Plot the target choice and reward history
         # Note that the p_reward could be agnostic to the model fitting.
         fig, axes = plot_foraging_session(
             choice_history=fit_choice_history,
@@ -458,6 +458,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             label="fitted_choice_prob(R/R+L)",
         )
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=4)
+        
         return fig, axes
         
 

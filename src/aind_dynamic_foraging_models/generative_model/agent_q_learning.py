@@ -263,10 +263,10 @@ class forager_Hattori2019(DynamicForagingAgentBase):
 
         Parameters
         ----------
-        fit_choice_history : _type_
-            _description_
-        fit_reward_history : _type_
-            _description_
+        fit_choice_history : a numpy array of shape (n_trials,)
+            The choice history to fit
+        fit_reward_history : a numpy array of shape (n_trials,)
+            The reward history to fit
         fit_bounds_override : dict, optional
             Override the default bounds for fitting parameters, by default {}
         clamp_params : dict, optional
@@ -275,8 +275,8 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             Other kwargs to pass to the model, by default {}
         DE_pop_size : int, optional
             population size for differential evolution, by default 16
-        pool : str, optional
-            _description_, by default ""
+        DE_workers : int, optional
+            number of parallel
 
         Returns
         -------
@@ -322,14 +322,15 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             strategy="best1bin",
             disp=False,
             workers=DE_workers,
-            updating="immediate" if pool == "" else "deferred",
+            updating="immediate" if DE_workers == 1 else "deferred",
             callback=None,
         )
 
-        fitting_result.k_model = np.sum(
-            np.diff(np.array(fit_bounds_override), axis=0) > 0
-        )  # Get the number of fitted parameters with non-zero range of bounds
-        fitting_result.n_trials = np.shape(fit_choice_history)[1]
+        fitting_result.fit_names = fit_names
+        fitting_result.fitting_bounds = fit_bounds
+        fitting_result.clamped_params = clamp_params
+        fitting_result.k_model = len(fit_names)  # Get the number of fitted parameters with non-zero range of bounds
+        fitting_result.n_trials = len(fit_choice_history)
         fitting_result.log_likelihood = -fitting_result.fun
 
         fitting_result.AIC = -2 * fitting_result.log_likelihood + 2 * fitting_result.k_model
@@ -344,7 +345,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         fitting_result.LPT_AIC = np.exp(-fitting_result.AIC / 2 / fitting_result.n_trials)
         fitting_result.LPT_BIC = np.exp(-fitting_result.BIC / 2 / fitting_result.n_trials)
 
-        self.firting_result = fitting_result
+        self.fitting_result = fitting_result
         return fitting_result
 
     @classmethod

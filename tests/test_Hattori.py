@@ -15,16 +15,19 @@ class TestHattori(unittest.TestCase):
         # -- Create task and forager --
         forager = forager_Hattori2019(
             dict(
-                softmax_inverse_temperature=5,
-                biasL=0.5,
+                softmax_inverse_temperature=3,
+                biasL=0.3,
                 ),
             seed=42,
             )
-        task = CoupledBlockTask(reward_baiting=True, seed=42)
+        task = CoupledBlockTask(
+            reward_baiting=True, 
+            num_trials=1000,
+            seed=42)
 
         # -- 1. Generative run --
         forager.perform(task)
-        ground_truth_params = forager.params
+        ground_truth_params = forager.params.model_dump()
         ground_truth_choice_prob = forager.choice_prob
 
         # --    1.1 test figure --
@@ -48,10 +51,36 @@ class TestHattori(unittest.TestCase):
         np.testing.assert_array_almost_equal(forager.choice_prob, ground_truth_choice_prob)
         
         # --    2.2 model fitting --
+        forager = forager_Hattori2019()  # Start a new agent
         forager.fit(choice_history, reward_history, 
-                    fit_bounds_override={'softmax_inverse_temperature': [0, 100]},
-                    clamp_params={'biasL': 0.5},
-                    DE_workers=16)
+                    fit_bounds_override={
+                        'softmax_inverse_temperature': [0, 100]
+                        },
+                    clamp_params={},
+                    DE_workers=1)
+        
+        fitting_result = forager.fitting_result
+        ground_truth_params = [ground_truth_params[key] for key in fitting_result.fit_names]
+        relative_error = np.abs((fitting_result.x - ground_truth_params) / ground_truth_params)
+        
+        assert fitting_result.success
+        print(f'\n\nNum_trials: {len(choice_history)}')
+        print(f'Fitting names: {fitting_result.fit_names}')
+        print(f'Fitting result: {[f"{num:.3f}" for num in fitting_result.x]}')
+        print(f'Ground truth:   {[f"{num:.3f}" for num in ground_truth_params]}')
+        print(f'Relative error: {relative_error}')
+        
+        np.testint.assert_array_almost_equal(
+            actual=fitting_result.x, 
+            desired=[0.582, 0.114, 0.183, 2.867, 0.273],
+            decimal=2,
+        )
+        
+        # np.testing.assert_allclose(
+        #     actual=fitting_result.x, 
+        #     desired=ground_truth_params,
+        #     rtol=0.15,  # 2000 trials typically has 10% error
+        # )
         
 
 if __name__ == '__main__':

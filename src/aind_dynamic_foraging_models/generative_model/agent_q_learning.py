@@ -94,9 +94,9 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             self.choice_kernel = np.zeros([self.n_actions, self.n_trials + 1])
         
         # Choice and reward history have n_trials length
-        self.choice_history = np.full([1, self.n_trials], fill_value=-1, dtype=int)  # Choice history        
+        self.choice_history = np.full(self.n_trials, fill_value=-1, dtype=int)  # Choice history        
         # Reward history, separated for each port (Corrado Newsome 2005)
-        self.reward_history = np.zeros([self.n_actions, self.n_trials])
+        self.reward_history = np.zeros(self.n_trials)
 
 
     def set_params(self, params):
@@ -112,30 +112,33 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         self,
         task: DynamicForagingTaskBase,
     ):
-        """Override the base class method to include choice_prob caching etc."""
+        """Generative simulation of a task.
+        
+        Override the base class method to include choice_prob caching etc.
+        """
         self.task = task
         self.n_actions = task.action_space.n
         self.n_trials = task.num_trials
 
         # --- Main task loop ---
         self.reset()  # Reset agent
-        observation, info = self.task.reset()  # Reset task and get the initial observation
+        _, _ = self.task.reset()  # Reset task and get the initial observation
         task_done = False
         while not task_done:
             assert self.trial == self.task.trial  # Ensure the two timers are in sync
 
             # -- Agent performs an action
-            choice, choice_prob = self.act(observation)
+            choice, choice_prob = self.act(_)
             
             # -- Environment steps (enviromnet's timer ticks here!!!)
-            next_observation, reward, task_done, _, _ = task.step(choice)
+            _, reward, task_done, _, _ = task.step(choice)
 
             # -- Update agent history
             self.choice_prob[:, self.trial] = choice_prob
-            self.choice_history[0, self.trial] = choice     
+            self.choice_history[self.trial] = choice     
             # In Sutton & Barto's convention, reward belongs to the next time step, but we put it
             # in the current time step for the sake of consistency with neuroscience convention
-            self.reward_history[choice, self.trial] = reward
+            self.reward_history[self.trial] = reward
             
             # -- Agent's timer ticks here !!!
             self.trial += 1
@@ -144,10 +147,38 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             # Note that this will update the q values **after the last trial**, a final update that
             # will not be used to make the next action (because task is *done*) but may be used for
             # correlating with physiology recordings
-            self.learn(observation, choice, reward, next_observation, task_done)  
-            observation = next_observation
+            self.learn(_, choice, reward, _, task_done)  
+            
+    def predictive_perform(
+        self, 
+        fit_choice_history, 
+        fit_reward_history
+    ):  
+        """Simulates the agent over a fixed choice and reward history using its params.
+        
+        Unlike .perform() ("generative" simulation), this is called "predictive" simulation, 
+        which does not need a task and is used for model fitting.
+        """        
+        self.reset()
+        
+        while self.trial <= len(fit_choice_history) - 1:
+            # -- Compute and cache choice_prob (key to model fitting)
+            _, choice_prob = self.act(None)
+            self.choice_prob[:, self.trial] = choice_prob 
+             
+            # -- Clamp history to fit_history
+            clamped_choice = fit_choice_history[self.trial].astype(int)
+            clamped_reward = fit_reward_history[self.trial]
+            self.choice_history[self.trial] = clamped_choice
+            self.reward_history[self.trial] = clamped_reward
+            
+            # -- Agent's timer ticks here !!!
+            self.trial += 1
+            
+            # -- Update q values
+            self.learn(None, clamped_choice, clamped_reward, None, None)
 
-    def act(self, observation):
+    def act(self, _):
         choice, choice_prob = act_softmax(
             q_estimation_t=self.q_estimation[:, self.trial],
             softmax_inverse_temperature=self.params.softmax_inverse_temperature,
@@ -158,7 +189,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         )
         return choice, choice_prob
 
-    def learn(self, observation, choice, reward, next_observation, done):
+    def learn(self, _observation, choice, reward, _next_observation, done):
         """Update Q values"""
         # Update Q values
         self.q_estimation[:, self.trial] = learn_RWlike(
@@ -179,9 +210,8 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         """
         if self.task is None:
             return None
-        
         # Make sure agent's history is consistent with the task's history and return
-        np.testing.assert_array_equal(self.choice_history[0], self.task.get_choice_history())
+        np.testing.assert_array_equal(self.choice_history, self.task.get_choice_history())
         return self.task.get_choice_history()
     
     def get_reward_history(self):
@@ -191,7 +221,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         if self.task is None:
             return None
         # Make sure agent's history is consistent with the task's history and return
-        np.testing.assert_array_equal(np.sum(self.reward_history, axis=0), 
+        np.testing.assert_array_equal(self.reward_history, 
                                       self.task.get_reward_history())
         return self.task.get_reward_history()
     
@@ -331,23 +361,6 @@ class forager_Hattori2019(DynamicForagingAgentBase):
 
         return negLL
 
-    def simulate_fit(
-        self, fit_choice_history, fit_reward_history
-    ):  # This simulates the agent over a fixed choice and reward history
-        self.n_actions, self.n_trials = np.shape(fit_reward_history)  # Use the targeted histories
-        self.fit_choice_history = fit_choice_history
-        self.fit_reward_history = fit_reward_history
-        self.reset()
-        for t in range(self.n_trials):
-            choice, choice_prob = (
-                self.act()
-            )  # Compute choice and choice probabilities, updates choice history and choice probability
-            choice = fit_choice_history[0, self.trial]  # Override choice
-            reward = fit_reward_history[choice, self.trial]  # get reward from data
-            self.choice_prob[:, self.trial] = choice_prob
-            self.choice_history[0, self.trial] = choice
-            self.reward_history[choice, self.trial] = reward
-            self.step(choice, reward)  # updates reward history, and update time
             
     def plot_session(self):
         fig, axes = plot_foraging_session(

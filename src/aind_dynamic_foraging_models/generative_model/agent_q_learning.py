@@ -278,12 +278,13 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         DE_workers : int, optional
             Number of workers for differential evolution, by default 1.
             In CO, fitting a typical session of 1000 trials takes:
-                1 worker: ~120s
-                2 workers: 
-                4 workers: 
-                8 workers: ~20 s
-                16 workers: ~20s
-            That is to say, the parallel speedup is sublinear. 
+                1 worker: ~100 s
+                4 workers: ~35 s
+                8 workers: ~22 s
+                16 workers: ~20 s
+            That is to say, the parallel speedup in DE is sublinear. Therefore, given a constant 
+            number of total CPUs, it is more efficient to parallelize on the level of session, 
+            instead of on DE's workers.
 
         Returns
         -------

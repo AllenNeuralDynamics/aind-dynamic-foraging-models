@@ -332,10 +332,8 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             clamp_params=clamp_params,
             agent_kwargs=agent_kwargs,
         )
-        fitting_result.k_model = np.sum(
-            np.diff(np.array(fit_bounds_override), axis=0) > 0
-        )  # Get the number of fitted parameters with non-zero range of bounds
-        fitting_result.n_trials = np.shape(fit_choice_history)[1]
+        fitting_result.k_model = len(fit_names)
+        fitting_result.n_trials = len(fit_choice_history)
         fitting_result.log_likelihood = -fitting_result.fun
 
         fitting_result.AIC = -2 * fitting_result.log_likelihood + 2 * fitting_result.k_model

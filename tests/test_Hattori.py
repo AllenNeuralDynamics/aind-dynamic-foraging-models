@@ -20,7 +20,11 @@ class TestHattori(unittest.TestCase):
                 ),
             seed=42,
             )
-        task = CoupledBlockTask(reward_baiting=True, seed=42)
+        task = CoupledBlockTask(
+            reward_baiting=True, 
+            num_trials=1000,
+            seed=42
+            )
 
         # -- 1. Generative run --
         forager.perform(task)
@@ -46,6 +50,15 @@ class TestHattori(unittest.TestCase):
         # It should recover the ground truth choice_prob because the params are exactly the same
         forager.predictive_perform(choice_history, reward_history)
         np.testing.assert_array_almost_equal(forager.choice_prob, ground_truth_choice_prob)
+        
+        # --    2.2 model fitting --
+        
+        forager.fit(choice_history, reward_history, 
+                    fit_bounds_override={'softmax_inverse_temperature': [0, 100]},
+                    clamp_params={'biasL': 0.5},
+                    DE_workers=16)
+        
+        fitting_result = forager.fitting_result
         
         
 

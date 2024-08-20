@@ -14,14 +14,6 @@ from .learn_functions import learn_RWlike
 
 from aind_dynamic_foraging_basic_analysis import plot_foraging_session
 
-class Bounds(BaseModel):
-    lower: float = Field(..., description="Lower bound for the parameter")
-    upper: float = Field(..., description="Upper bound for the parameter")
-    
-    @model_validator(mode="after")
-    def check_bounds(cls, values):
-        if values.lower >= values.upper:
-            raise ValueError("Upper bound must be greater than lower bound")
 
 class forager_Hattori2019(DynamicForagingAgentBase):
     """
@@ -42,22 +34,38 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         forget_rate: float = Field(default=0.2, ge=0.0, le=1.0, description="Forgetting rate for unchosen options")
         softmax_inverse_temperature: float = Field(default=10, ge=0.0, description="Softmax temperature")
         biasL: float = Field(default=0.0, description="Bias term for softmax")
-        pass
+        
+        class Config:
+            extra = 'forbid'  # This forbids extra fields
+            
 
     class ParamFitBounds(BaseModel):
         """Bounds for fitting parameters.
         After overriden in subclasses, calling ClassName.ParamFitBounds() returns default bounds.
         """
         # For example:
-        # param1: Bounds = Field(default=Bounds(lower=0.0, upper=1.0), description="Bounds for param1")
-        # param2: Bounds = Field(default=Bounds(lower=0.0, upper=1.0), description="Bounds for param2")
+        # param1: list = Field(default=[0.0, 1.0], description="Bounds for param1")
+        # param2: list = Field(default=[0.0, 1.0], description="Bounds for param2")
         # raise NotImplementedError("ParamFitBounds class must be defined in subclasses")
-        learn_rate_rew: Bounds = Field(default=Bounds(lower=0.0, upper=1.0))
-        learn_rate_unrew: Bounds = Field(default=Bounds(lower=0.0, upper=1.0))
-        forget_rate: Bounds = Field(default=Bounds(lower=0.0, upper=1.0))
-        softmax_inverse_temperature: Bounds = Field(default=Bounds(lower=0.0, upper=100.0))
-        biasL: Bounds = Field(default=Bounds(lower=-5.0, upper=5.0))
-        pass
+        learn_rate_rew: list = Field(default=[0.0, 1.0])
+        learn_rate_unrew: list = Field(default=[0.0, 1.0])
+        forget_rate: list = Field(default=[0.0, 1.0])
+        softmax_inverse_temperature: list = Field(default=[0.0, 100.0])
+        biasL: list = Field(default=[-5.0, 5.0])
+                
+        @model_validator(mode='after')
+        def check_all_params(cls, values):
+            for key, value in values.__dict__.items():
+                if not isinstance(value, list):
+                    raise ValueError(f'Value of "{key}" must be a list')
+                if len(value) != 2:
+                    raise ValueError(f'List "{key}" must have exactly 2 elements')
+                if value[1] < value[0]:
+                    raise ValueError(f'Upper bound of "{key}" must be greater than the lower bound')
+            return values
+        
+        class Config:
+            extra = 'forbid'  # This forbids extra fields
 
     def __init__(
         self,
@@ -72,12 +80,12 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         
         # Add model fitting related attributes
         self.fitting_result = None
-        self.fit_bounds_default = dict()
         
         # Some switches
         self.fit_choice_kernel = False
         
         # Some initializations
+        self.n_actions = 2
         self.task = None
 
     def reset(self):
@@ -117,7 +125,6 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         Override the base class method to include choice_prob caching etc.
         """
         self.task = task
-        self.n_actions = task.action_space.n
         self.n_trials = task.num_trials
 
         # --- Main task loop ---
@@ -159,9 +166,10 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         Unlike .perform() ("generative" simulation), this is called "predictive" simulation, 
         which does not need a task and is used for model fitting.
         """        
+        self.n_trials = len(fit_choice_history)
         self.reset()
         
-        while self.trial <= len(fit_choice_history) - 1:
+        while self.trial <= self.n_trials - 1:
             # -- Compute and cache choice_prob (key to model fitting)
             _, choice_prob = self.act(None)
             self.choice_prob[:, self.trial] = choice_prob 
@@ -237,21 +245,67 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         self,
         fit_choice_history,
         fit_reward_history,
-        fit_bounds: dict = {},  # Specify parameters to fit and their bounds. It must be validated 
-        # by the ParamFitBounds class of the model, but only params in the fit_bounds will be fitted
+        fit_bounds_override: dict = {},
+        clamp_params: dict = {}, 
+        agent_kwargs: dict = {},
         DE_pop_size=16,
-        pool="",
+        DE_workers=1,
     ):
-        """A class method for fitting the model
+        """Fit the model to the data using differential evolution.
+        
+        It handles fit_bounds_override and clamp_params as follows:
+        1. It will first clamp the parameters specified in clamp_params
+        2. For other parameters, if it is specified in fit_bounds_override, the specified 
+           bound will be used; otherwise, the bound in the model's ParamFitBounds will be used.
+           
+        For example, if params_to_fit and clamp_params are all empty, all parameters will 
+        be fitted with default bounds in the model's ParamFitBounds.
+
+        Parameters
+        ----------
+        fit_choice_history : _type_
+            _description_
+        fit_reward_history : _type_
+            _description_
+        fit_bounds_override : dict, optional
+            Override the default bounds for fitting parameters, by default {}
+        clamp_params : dict, optional
+            Specify parameters to fix to certain values, by default {}
+        agent_kwargs : dict, optional
+            Other kwargs to pass to the model, by default {}
+        DE_pop_size : int, optional
+            population size for differential evolution, by default 16
+        pool : str, optional
+            _description_, by default ""
+
+        Returns
+        -------
+        _type_
+            _description_
         """
+        # -- Sanity checks --
+        # Ensure params_to_fit and clamp_params are not overlapping
+        assert set(fit_bounds_override.keys()).isdisjoint(clamp_params.keys())
+        # Validate clamp_params
+        assert self.Param(**clamp_params)
+        
+        # -- Get fit_names and fit_bounds --
+        # Validate fit_bounds_override and fill in the missing bounds with default bounds
+        fit_bounds = self.ParamFitBounds(**fit_bounds_override).model_dump()
+        # Remove clamped parameters from fit_bounds
+        for name in clamp_params.keys():
+            fit_bounds.pop(name)
+        # Get the names of the parameters to fit
+        fit_names = list(fit_bounds.keys()) 
+        # Parse bounds
+        lower_bounds = [fit_bounds[name][0] for name in fit_names]
+        upper_bounds = [fit_bounds[name][1] for name in fit_names]
+        # Validate bounds themselves are valid parameters
+        assert self.Param(**dict(zip(fit_names, lower_bounds)))
+        assert self.Param(**dict(zip(fit_names, upper_bounds)))
 
-        fit_names = list(fit_bounds.keys()) # Get the names of the parameters to fit
-        assert self.ParamFitBounds(fit_bounds) # Only assert that the fit_bounds are valid, 
-        # but the user input fit_bounds will be used in the fitting function
-
-        lower_bounds = [fit_bounds[name].lower for name in fit_names]
-        upper_bounds = [fit_bounds[name].upper for name in fit_names]
-
+        # -- Call differential_evolution --
+        # Note that 
         fitting_result = optimize.differential_evolution(
             func=self.__class__.negLL_func_for_de,
             bounds=optimize.Bounds(lower_bounds, upper_bounds),
@@ -259,20 +313,21 @@ class forager_Hattori2019(DynamicForagingAgentBase):
                 fit_choice_history,
                 fit_reward_history,
                 fit_names,  # Pass names so that negLL_func_for_de knows which parameters to fit
+                clamp_params, # Clamped parameters
+                agent_kwargs  # Other kwargs to pass to the model
             ),
             mutation=(0.5, 1),
             recombination=0.7,
             popsize=DE_pop_size,
             strategy="best1bin",
             disp=False,
-            workers=1 if pool == "" else int(mp.cpu_count()),
-            # For DE, use pool to control if_parallel, although we don't use pool for DE
+            workers=DE_workers,
             updating="immediate" if pool == "" else "deferred",
             callback=None,
         )
 
         fitting_result.k_model = np.sum(
-            np.diff(np.array(fit_bounds), axis=0) > 0
+            np.diff(np.array(fit_bounds_override), axis=0) > 0
         )  # Get the number of fitted parameters with non-zero range of bounds
         fitting_result.n_trials = np.shape(fit_choice_history)[1]
         fitting_result.log_likelihood = -fitting_result.fun
@@ -295,7 +350,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
     @classmethod
     def negLL_func_for_de(
         cls,
-        fit_values, # the current fitting values of params in fit_names
+        current_values, # the current fitting values of params in fit_names
         *args
     ):
         """ The core function that interacts with optimize.differential_evolution(). 
@@ -304,19 +359,21 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         
         Note that this is a class method.
         """
-        # Arguments interpretation
-        fit_choice_history, fit_reward_history, fit_names, fit_bandit_kwargs = args
+        # This is the only way to pass multiple arguments to differential_evolution...
+        fit_choice_history, fit_reward_history, fit_names, clamp_params, agent_kwargs = args
+        
+        # -- Parse params and initialize a new agent --
+        params = dict(zip(fit_names, current_values))  # Current fitting values
+        params.update(clamp_params)  # Add clamped params
+        agent = cls(params, **agent_kwargs)
 
-        for name, value in zip(fit_names, fit_values):
-            fit_bandit_kwargs.update({name: value})
-
-        # Run **PREDICTIVE** simulation
+        # -- Run **PREDICTIVE** simulation --
         # (clamp the history and do only one forward step on each trial)
-        # Use the current class to initialize a new agent for simulation
-        bandit = cls(**fit_bandit_kwargs)
-        bandit.simulate_fit(fit_choice_history, fit_reward_history)
-        negLL = bandit.negLL(fit_choice_history, fit_reward_history)
-        return negLL
+        agent.predictive_perform(fit_choice_history, fit_reward_history)
+        
+        # Note that, again, we have an extra update after the last trial, which is not used for fitting
+        choice_prob = agent.choice_prob[:, :-1] 
+        return negLL(choice_prob, fit_choice_history, fit_reward_history)
 
     def set_fitparams_random(self):
         x0 = []
@@ -336,31 +393,6 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             x0.append(getattr(self, name))
         return x0
 
-    def negLL(self, fit_choice_history, fit_reward_history):
-        likelihood_all_trial = []
-
-        # Compute negative likelihood
-        choice_prob = self.choice_prob[
-            :, :-1
-        ]  # Get all predictive choice probability [K, num_trials], exclude the final update after the last trial
-        likelihood_each_trial = choice_prob[
-            fit_choice_history[0, :], range(len(fit_choice_history[0]))
-        ]  # Get the actual likelihood for each trial
-
-        # TODO: check this!
-        # Deal with numerical precision
-        likelihood_each_trial[(likelihood_each_trial <= 0) & (likelihood_each_trial > -1e-5)] = (
-            1e-16  # To avoid infinity, which makes the number of zero likelihoods informative!
-        )
-        likelihood_each_trial[likelihood_each_trial > 1] = 1
-
-        # Cache likelihoods
-        likelihood_all_trial.extend(likelihood_each_trial)
-        likelihood_all_trial = np.array(likelihood_all_trial)
-        negLL = -sum(np.log(likelihood_all_trial))
-
-        return negLL
-
             
     def plot_session(self):
         fig, axes = plot_foraging_session(
@@ -377,3 +409,24 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         return fig
 
 
+def negLL(choice_prob, fit_choice_history, fit_reward_history):
+    likelihood_all_trial = []
+
+    # Compute negative likelihood
+    likelihood_each_trial = choice_prob[
+        fit_choice_history.astype(int), range(len(fit_choice_history))
+    ]  # Get the actual likelihood for each trial
+
+    # TODO: check this!
+    # Deal with numerical precision
+    likelihood_each_trial[(likelihood_each_trial <= 0) & (likelihood_each_trial > -1e-5)] = (
+        1e-16  # To avoid infinity, which makes the number of zero likelihoods informative!
+    )
+    likelihood_each_trial[likelihood_each_trial > 1] = 1
+
+    # Cache likelihoods
+    likelihood_all_trial.extend(likelihood_each_trial)
+    likelihood_all_trial = np.array(likelihood_all_trial)
+    negLL = -sum(np.log(likelihood_all_trial))
+
+    return negLL

@@ -47,6 +47,11 @@ class TestHattori(unittest.TestCase):
         forager.predictive_perform(choice_history, reward_history)
         np.testing.assert_array_almost_equal(forager.choice_prob, ground_truth_choice_prob)
         
+        # --    2.2 model fitting --
+        forager.fit(choice_history, reward_history, 
+                    fit_bounds_override={'softmax_inverse_temperature': [0, 100]},
+                    clamp_params={'biasL': 0.5},
+                    DE_workers=16)
         
 
 if __name__ == '__main__':

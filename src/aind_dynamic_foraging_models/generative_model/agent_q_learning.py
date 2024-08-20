@@ -282,6 +282,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
                 4 workers: ~35 s
                 8 workers: ~22 s
                 16 workers: ~20 s
+            (see https://github.com/AllenNeuralDynamics/aind-dynamic-foraging-models/blob/22075b85360c0a5db475a90bcb025deaa4318f05/notebook/demo_rl_mle_fitting_new_test_time.ipynb) # noqa E501
             That is to say, the parallel speedup in DE is sublinear. Therefore, given a constant 
             number of total CPUs, it is more efficient to parallelize on the level of session, 
             instead of on DE's workers.

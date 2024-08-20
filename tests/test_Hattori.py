@@ -1,9 +1,7 @@
 import unittest
 import numpy as np
 
-from aind_dynamic_foraging_models.generative_model.agent_q_learning import (
-    forager_Hattori2019
-)
+from aind_dynamic_foraging_models.generative_model.agent_q_learning import forager_Hattori2019
 from aind_behavior_gym.dynamic_foraging.task.coupled_block_task import CoupledBlockTask
 from aind_dynamic_foraging_basic_analysis import plot_foraging_session
 
@@ -16,19 +14,15 @@ class TestHattori(unittest.TestCase):
         forager = forager_Hattori2019(
             dict(
                 softmax_inverse_temperature=5,
-                biasL=0.5,
-                ),
+                biasL=0,
+            ),
             seed=42,
-            )
-        task = CoupledBlockTask(
-            reward_baiting=True, 
-            num_trials=1000,
-            seed=42
-            )
+        )
+        task = CoupledBlockTask(reward_baiting=True, num_trials=1000, seed=42)
 
         # -- 1. Generative run --
         forager.perform(task)
-        ground_truth_params = forager.params
+        ground_truth_params = forager.params.model_dump()
         ground_truth_choice_prob = forager.choice_prob
 
         # --    1.1 test figure --
@@ -38,8 +32,7 @@ class TestHattori(unittest.TestCase):
 
         # --    1.2 make sure histories match between agent and env --
         np.testing.assert_array_equal(forager.choice_history, forager.task.get_choice_history())
-        np.testing.assert_array_equal(forager.reward_history, 
-                                      forager.task.get_reward_history())
+        np.testing.assert_array_equal(forager.reward_history, forager.task.get_reward_history())
 
         # -- 2. Parameter recovery --
         choice_history = forager.get_choice_history()
@@ -50,17 +43,33 @@ class TestHattori(unittest.TestCase):
         # It should recover the ground truth choice_prob because the params are exactly the same
         forager.predictive_perform(choice_history, reward_history)
         np.testing.assert_array_almost_equal(forager.choice_prob, ground_truth_choice_prob)
-        
-        # --    2.2 model fitting --
-        
-        forager.fit(choice_history, reward_history, 
-                    fit_bounds_override={'softmax_inverse_temperature': [0, 100]},
-                    clamp_params={'biasL': 0.5},
-                    DE_workers=16)
-        
-        fitting_result = forager.fitting_result
-        
-        
 
-if __name__ == '__main__':
+        # --    2.2 model fitting --
+        forager = forager_Hattori2019()  # To fit a model, just create a new forager
+        forager.fit(
+            choice_history,
+            reward_history,
+            fit_bounds_override={"softmax_inverse_temperature": [0, 100]},
+            clamp_params={"biasL": 0},
+            DE_workers=16,
+        )
+
+        fitting_result = forager.fitting_result
+        assert fitting_result.success
+        
+        # Check fitted parameters
+        fit_names = fitting_result.fit_settings["fit_names"]
+        ground_truth = [num for name, num in ground_truth_params.items() 
+                        if name in fit_names]
+        print(f'Fitted parameters: {fit_names}')
+        print(f'Ground truth: {[f"{num:.4f}" for num in ground_truth]}')
+        print(f'Fitted:       {[f"{num:.4f}" for num in fitting_result.x]}')
+        
+        np.testing.assert_array_almost_equal(
+            fitting_result.x, 
+            [0.6010, 0.1087, 0.1544, 4.8908],
+            decimal=2
+        )
+
+if __name__ == "__main__":
     unittest.main(verbosity=2)

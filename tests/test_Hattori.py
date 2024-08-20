@@ -69,22 +69,8 @@ class TestHattori(unittest.TestCase):
             fitting_result.x, [0.6010, 0.1087, 0.1544, 4.8908], decimal=2
         )
 
-        # Plot fitted Q and choice_prob
-        forager.predictive_perform(
-            choice_history, reward_history
-        )  # Note that forager's params are already set to fitted params
-        # Plot fitted Q values
-        axes[0].plot(forager.q_estimation[0], lw=1, color="red", ls=":", label="fitted_Q(L)")
-        axes[0].plot(forager.q_estimation[1], lw=1, color="blue", ls=":", label="fitted_Q(R)")
-        # Plot fitted choice_prob
-        axes[0].plot(
-            forager.choice_prob[1] / forager.choice_prob.sum(axis=0),
-            lw=2,
-            color="green",
-            ls=":",
-            label="fitted_choice_prob(R/R+L)",
-        )
-        axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=4)
+        # Plot fitted latent variables
+        forager.plot_fitted_latent_variables(ax=axes[0])
         fig.savefig("tests/results/test_Hattori_fitted.png")
 
 

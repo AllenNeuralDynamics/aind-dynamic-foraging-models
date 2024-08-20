@@ -408,6 +408,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         return self.params.model_dump()
             
     def plot_session(self):
+        """Plot session after .perform(task)"""
         fig, axes = plot_foraging_session(
             choice_history=self.task.get_choice_history(),
             reward_history=self.task.get_reward_history(),
@@ -419,31 +420,45 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=3)
         return fig, axes
     
-    def plot_fitted_latent_variables(self, ax):
-        """Use latent variables q_estimation and choice_prob to ax"""
+    def plot_fitted_session(self):
+        """Plot session after .fit()
+        
+        1. choice and reward history will be the history used for fitting
+        2. laten variables q_estimate and choice_prob will be plotted
+        3. p_reward will be missing (since it is not used for fitting)
+        """
         if self.fitting_result is None:
             print("No fitting result found. Please fit the model first.")
             return
-            
-        # Retrieve fitting results and perform the predictive simiulation
+        
+        # -- Retrieve fitting results and perform the predictive simiulation
         self.set_params(self.fitting_result.params)
         fit_choice_history = self.fitting_result.fit_settings["fit_choice_history"]
         fit_reward_history = self.fitting_result.fit_settings["fit_reward_history"]
         self.predictive_perform(fit_choice_history, fit_reward_history)
+
+        # -- Plot the target session
+        # Note that the p_reward could be agnostic to the model fitting.
+        fig, axes = plot_foraging_session(
+            choice_history=fit_choice_history,
+            reward_history=fit_reward_history,
+            p_reward=np.full((2, len(fit_choice_history)), np.nan) # Dummy p_reward
+        )
         
-        # Plot fitted Q values
-        ax.plot(self.q_estimation[0], lw=1, color="red", ls=":", label="fitted_Q(L)")
-        ax.plot(self.q_estimation[1], lw=1, color="blue", ls=":", label="fitted_Q(R)")
-        # Plot fitted choice_prob
-        ax.plot(
+        # -- Plot fitted Q values
+        axes[0].plot(self.q_estimation[0], lw=1, color="red", ls=":", label="fitted_Q(L)")
+        axes[0].plot(self.q_estimation[1], lw=1, color="blue", ls=":", label="fitted_Q(R)")
+        
+        # -- Plot fitted choice_prob
+        axes[0].plot(
             self.choice_prob[1] / self.choice_prob.sum(axis=0),
             lw=2,
             color="green",
             ls=":",
             label="fitted_choice_prob(R/R+L)",
         )
-        ax.legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=4)
-        return ax
+        axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=4)
+        return fig, axes
         
 
 def negLL(choice_prob, fit_choice_history, fit_reward_history):

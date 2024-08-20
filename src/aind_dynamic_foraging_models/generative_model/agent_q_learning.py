@@ -423,6 +423,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         """Use latent variables q_estimation and choice_prob to ax"""
         if self.fitting_result is None:
             print("No fitting result found. Please fit the model first.")
+            return
             
         # Retrieve fitting results and perform the predictive simiulation
         self.set_params(self.fitting_result.params)

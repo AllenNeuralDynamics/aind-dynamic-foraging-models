@@ -334,6 +334,8 @@ class forager_Hattori2019(DynamicForagingAgentBase):
 
         # -- Save fitting results --
         fitting_result.fit_settings = dict(
+            fit_choice_history=fit_choice_history,
+            fit_reward_history=fit_reward_history,
             fit_names=fit_names,
             fit_bounds=fit_bounds,
             clamp_params=clamp_params,
@@ -342,7 +344,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         # Full parameter set
         params = dict(zip(fit_names, fitting_result.x))
         params.update(clamp_params)
-        self.params = self.Param(**params)  # Update the model parameters of the fitting instance
+        self.set_params(params)
         fitting_result.params = self.params.model_dump() # Save as a dictionary
         
         fitting_result.k_model = len(fit_names)
@@ -360,8 +362,12 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         )  # Raw LPT without penality
         fitting_result.LPT_AIC = np.exp(-fitting_result.AIC / 2 / fitting_result.n_trials)
         fitting_result.LPT_BIC = np.exp(-fitting_result.BIC / 2 / fitting_result.n_trials)
-
         self.fitting_result = fitting_result
+        
+        # -- Rerun the predictive simulation with the fitted params--
+        # To fill in the latent variables like q_estimation and choice_prob
+        self.predictive_perform(fit_choice_history, fit_reward_history)
+        
         return fitting_result
 
     @classmethod
@@ -396,12 +402,10 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         """Update the model parameters and validate"""
         self.params = self.params.model_copy(update=params)
         return self.get_params()
-        
 
     def get_params(self):
         """Return the model parameters in a dictionary format"""
         return self.params.model_dump()
-
             
     def plot_session(self):
         fig, axes = plot_foraging_session(
@@ -409,14 +413,37 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             reward_history=self.task.get_reward_history(),
             p_reward=self.task.get_p_reward(),
         )
-        
         # Add Q value
         axes[0].plot(self.q_estimation[L, :], label="Q_left", color='red', lw=0.5) 
         axes[0].plot(self.q_estimation[R, :], label="R_left", color='blue', lw=0.5) 
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=3)
-        
         return fig, axes
-
+    
+    def plot_fitted_latent_variables(self, ax):
+        """Use latent variables q_estimation and choice_prob to ax"""
+        if self.fitting_result is None:
+            print("No fitting result found. Please fit the model first.")
+            
+        # Retrieve fitting results and perform the predictive simiulation
+        self.set_params(self.fitting_result.params)
+        fit_choice_history = self.fitting_result.fit_settings["fit_choice_history"]
+        fit_reward_history = self.fitting_result.fit_settings["fit_reward_history"]
+        self.predictive_perform(fit_choice_history, fit_reward_history)
+        
+        # Plot fitted Q values
+        ax.plot(self.q_estimation[0], lw=1, color="red", ls=":", label="fitted_Q(L)")
+        ax.plot(self.q_estimation[1], lw=1, color="blue", ls=":", label="fitted_Q(R)")
+        # Plot fitted choice_prob
+        ax.plot(
+            self.choice_prob[1] / self.choice_prob.sum(axis=0),
+            lw=2,
+            color="green",
+            ls=":",
+            label="fitted_choice_prob(R/R+L)",
+        )
+        ax.legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=4)
+        return ax
+        
 
 def negLL(choice_prob, fit_choice_history, fit_reward_history):
     likelihood_all_trial = []

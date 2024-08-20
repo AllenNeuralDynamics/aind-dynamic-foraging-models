@@ -274,9 +274,16 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         agent_kwargs : dict, optional
             Other kwargs to pass to the model, by default {}
         DE_pop_size : int, optional
-            population size for differential evolution, by default 16
-        pool : str, optional
-            _description_, by default ""
+            Population size for differential evolution, by default 16
+        DE_workers : int, optional
+            Number of workers for differential evolution, by default 1.
+            In CO, fitting a typical session of 1000 trials takes:
+                1 worker: ~120s
+                2 workers: 
+                4 workers: 
+                8 workers: ~20 s
+                16 workers: ~20s
+            That is to say, the parallel speedup is sublinear. 
 
         Returns
         -------
@@ -305,7 +312,6 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         assert self.Param(**dict(zip(fit_names, upper_bounds)))
 
         # -- Call differential_evolution --
-        # Note that 
         fitting_result = optimize.differential_evolution(
             func=self.__class__.negLL_func_for_de,
             bounds=optimize.Bounds(lower_bounds, upper_bounds),
@@ -326,12 +332,19 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             callback=None,
         )
 
+        # -- Save fitting results --
         fitting_result.fit_settings = dict(
             fit_names=fit_names,
             fit_bounds=fit_bounds,
             clamp_params=clamp_params,
             agent_kwargs=agent_kwargs,
         )
+        # Full parameter set
+        params = dict(zip(fit_names, fitting_result.x))
+        params.update(clamp_params)
+        self.params = self.Param(**params)  # Update the model parameters of the fitting instance
+        fitting_result.params = self.params.model_dump() # Save as a dictionary
+        
         fitting_result.k_model = len(fit_names)
         fitting_result.n_trials = len(fit_choice_history)
         fitting_result.log_likelihood = -fitting_result.fun
@@ -379,23 +392,15 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         choice_prob = agent.choice_prob[:, :-1] 
         return negLL(choice_prob, fit_choice_history, fit_reward_history)
 
-    def set_fitparams_random(self):
-        x0 = []
-        for lb, ub in zip(self.fit_bounds[0], self.fit_bounds[1]):
-            x0.append(self.rng.uniform(lb, ub))
-        for i_name, name in enumerate(self.fit_names):
-            setattr(self, name, x0[i_name])
-        return x0
+    def set_params(self, params):
+        """Update the model parameters and validate"""
+        self.params = self.params.model_copy(update=params)
+        return self.get_params()
+        
 
-    def set_fitparams_values(self, x0):
-        for i_name, name in enumerate(self.fit_names):
-            setattr(self, name, x0[i_name])
-
-    def get_fitparams_values(self):
-        x0 = list()
-        for i_name, name in enumerate(self.fit_names):
-            x0.append(getattr(self, name))
-        return x0
+    def get_params(self):
+        """Return the model parameters in a dictionary format"""
+        return self.params.model_dump()
 
             
     def plot_session(self):
@@ -410,7 +415,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         axes[0].plot(self.q_estimation[R, :], label="R_left", color='blue', lw=0.5) 
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=3)
         
-        return fig
+        return fig, axes
 
 
 def negLL(choice_prob, fit_choice_history, fit_reward_history):

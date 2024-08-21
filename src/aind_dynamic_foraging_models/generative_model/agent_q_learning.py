@@ -2,7 +2,6 @@
 """
 
 import logging
-import multiprocessing as mp
 
 # %%
 from typing import Optional
@@ -10,7 +9,7 @@ from typing import Optional
 import numpy as np
 import scipy.optimize as optimize
 from aind_behavior_gym.dynamic_foraging.agent import DynamicForagingAgentBase
-from aind_behavior_gym.dynamic_foraging.task import IGNORE, DynamicForagingTaskBase, L, R
+from aind_behavior_gym.dynamic_foraging.task import DynamicForagingTaskBase, L, R
 from aind_dynamic_foraging_basic_analysis import plot_foraging_session
 from pydantic import BaseModel, Field, model_validator
 
@@ -114,7 +113,8 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         """Reset the agent"""
         self.trial = 0
 
-        # Latent variables have n_trials + 1 length to capture the update after the last trial (HH20210726)
+        # Latent variables have n_trials + 1 length to capture the update
+        # after the last trial (HH20210726)
         self.q_estimation = np.full([self.n_actions, self.n_trials + 1], np.nan)
         self.q_estimation[:, 0] = 0  # Initial Q values as 0
 
@@ -472,7 +472,8 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         # (clamp the history and do only one forward step on each trial)
         agent.predictive_perform(fit_choice_history, fit_reward_history)
 
-        # Note that, again, we have an extra update after the last trial, which is not used for fitting
+        # Note that, again, we have an extra update after the last trial,
+        # which is not used for fitting
         choice_prob = agent.choice_prob[:, :-1]
 
         return negLL(
@@ -554,15 +555,6 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         fitting_result.LPT_BIC = np.exp(-fitting_result.BIC / 2 / fitting_result.n_trials)
 
         return fitting_result
-
-    def set_params(self, params):
-        """Update the model parameters and validate"""
-        self.params = self.params.model_copy(update=params)
-        return self.get_params()
-
-    def get_params(self):
-        """Return the model parameters in a dictionary format"""
-        return self.params.model_dump()
 
     def plot_session(self):
         """Plot session after .perform(task)"""

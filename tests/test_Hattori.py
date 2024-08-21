@@ -43,7 +43,6 @@ class TestHattori(unittest.TestCase):
         # -- 2. Parameter recovery --
         choice_history = forager.get_choice_history()
         reward_history = forager.get_reward_history()
-        p_reward = forager.get_p_reward()
 
         # --    2.1 check predictive_perform --
         # It should recover the ground truth choice_prob because the params are exactly the same

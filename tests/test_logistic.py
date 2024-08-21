@@ -3,17 +3,12 @@
 import os
 import unittest
 import zipfile
-from io import BytesIO
 
 import numpy as np
 import requests
-from aind_dynamic_foraging_basic_analysis import plot_foraging_session
-from pynwb import NWBHDF5IO, NWBFile, TimeSeries
+from pynwb import NWBHDF5IO
 
 from aind_dynamic_foraging_models.logistic_regression import (
-    COLOR_MAPPER,
-    MODEL_MAPPER,
-    exp_func,
     fit_logistic_regression,
     plot_logistic_regression,
 )
@@ -50,7 +45,7 @@ class TestLogistic(unittest.TestCase):
         choice_history = df_trial["animal_response"].values
         choice_history[choice_history == 2] = np.nan
         reward_history = (
-            ((df_trial["rewarded_historyL"] == True) + (df_trial["rewarded_historyR"] == True))
+            ((df_trial["rewarded_historyL"] is True) + (df_trial["rewarded_historyR"] is True))
             .astype(int)
             .values
         )

@@ -37,7 +37,8 @@ def act_softmax(
     if choice_kernel is not None:
         q_estimation_t = np.vstack(
             [q_estimation_t, choice_kernel]
-        ).transpose()  # the first dimension is the choice and the second is usual valu in position 0 and kernel in position 1
+        ).transpose()  # the first dimension is the choice and the second is usual
+        # valu in position 0 and kernel in position 1
         softmax_inverse_temperature = np.array(
             [softmax_inverse_temperature, choice_softmax_inverse_temperature]
         )[np.newaxis, :]
@@ -49,7 +50,8 @@ def act_softmax(
 
 
 def softmax(x, inverse_temperature=1, bias=0, rng=None):
-    """I switched to inverse_temperature from temperature to make the fittings more numerically stable.
+    """I switched to inverse_temperature from temperature to make
+    the fittings more numerically stable.
 
     Parameters
     ----------
@@ -67,7 +69,8 @@ def softmax(x, inverse_temperature=1, bias=0, rng=None):
     _type_
         _description_
     """
-    # Put the bias outside /sigma to make it comparable across different softmax_inverse_temperatures.
+    # Put the bias outside /sigma to make it comparable across
+    # different softmax_inverse_temperatures.
     rng = rng or np.random.default_rng()
 
     if len(x.shape) == 1:

@@ -65,6 +65,8 @@ class TestHattori(unittest.TestCase):
         print(f"Fitted parameters: {fit_names}")
         print(f'Ground truth: {[f"{num:.4f}" for num in ground_truth]}')
         print(f'Fitted:       {[f"{num:.4f}" for num in fitting_result.x]}')
+        print(f'Likelihood-Per-Trial: {fitting_result.LPT}')
+        print(f'Prediction accuracy: {fitting_result.prediction_accuracy}')
 
         np.testing.assert_array_almost_equal(
             fitting_result.x, [0.6010, 0.1087, 0.1544, 4.8908], decimal=2

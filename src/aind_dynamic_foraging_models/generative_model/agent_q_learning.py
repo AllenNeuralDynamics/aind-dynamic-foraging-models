@@ -28,16 +28,15 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         # param1: float = Field(default=0.5, ge=0.0, le=2.0, description="Parameter 1")
         # param2: float = Field(default=0.2, ge=0.0, description="Parameter 2")
         # raise NotImplementedError("Params class must be defined in subclasses")
-        
+
         learn_rate_rew: float = Field(default=0.5, ge=0.0, le=1.0, description="Learning rate for rewarded choice")
         learn_rate_unrew : float = Field(default=0.1, ge=0.0, le=1.0, description="Learning rate for unrewarded choice")
         forget_rate: float = Field(default=0.2, ge=0.0, le=1.0, description="Forgetting rate for unchosen options")
         softmax_inverse_temperature: float = Field(default=10, ge=0.0, description="Softmax temperature")
         biasL: float = Field(default=0.0, description="Bias term for softmax")
-        
+
         class Config:
             extra = 'forbid'  # This forbids extra fields
-            
 
     class ParamFitBounds(BaseModel):
         """Bounds for fitting parameters.
@@ -52,7 +51,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         forget_rate: list = Field(default=[0.0, 1.0])
         softmax_inverse_temperature: list = Field(default=[0.0, 100.0])
         biasL: list = Field(default=[-5.0, 5.0])
-                
+
         @model_validator(mode='after')
         def check_all_params(cls, values):
             for key, value in values.__dict__.items():
@@ -63,7 +62,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
                 if value[1] < value[0]:
                     raise ValueError(f'Upper bound of "{key}" must be greater than the lower bound')
             return values
-        
+
         class Config:
             extra = 'forbid'  # This forbids extra fields
 
@@ -77,35 +76,34 @@ class forager_Hattori2019(DynamicForagingAgentBase):
 
         # Set and validate the model parameters. Use default parameters if some are not provided
         self.params = self.Param(**params)
-        
+
         # Add model fitting related attributes
         self.fitting_result = None
-        
+
         # Some switches
         self.fit_choice_kernel = False
-        
+
         # Some initializations
         self.n_actions = 2
         self.task = None
 
     def reset(self):
         self.trial = 0
-        
+
         # Latent variables have n_trials + 1 length to capture the update after the last trial (HH20210726)
         self.q_estimation = np.full([self.n_actions, self.n_trials + 1], np.nan)
         self.q_estimation[:, 0] = 0  # Initial Q values as 0
-        
+
         self.choice_prob = np.full([self.n_actions, self.n_trials + 1], np.nan)
         self.choice_prob[:, 0] = 1 / self.n_actions  # To be strict (actually no use)   
-             
+
         if self.fit_choice_kernel:
             self.choice_kernel = np.zeros([self.n_actions, self.n_trials + 1])
-        
+
         # Choice and reward history have n_trials length
         self.choice_history = np.full(self.n_trials, fill_value=-1, dtype=int)  # Choice history        
         # Reward history, separated for each port (Corrado Newsome 2005)
         self.reward_history = np.zeros(self.n_trials)
-
 
     def set_params(self, params):
         """Update the model parameters and validate"""
@@ -136,7 +134,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
 
             # -- Agent performs an action
             choice, choice_prob = self.act(_)
-            
+
             # -- Environment steps (enviromnet's timer ticks here!!!)
             _, reward, task_done, _, _ = task.step(choice)
 
@@ -146,16 +144,16 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             # In Sutton & Barto's convention, reward belongs to the next time step, but we put it
             # in the current time step for the sake of consistency with neuroscience convention
             self.reward_history[self.trial] = reward
-            
+
             # -- Agent's timer ticks here !!!
             self.trial += 1
-            
+
             # -- Update q values
             # Note that this will update the q values **after the last trial**, a final update that
             # will not be used to make the next action (because task is *done*) but may be used for
             # correlating with physiology recordings
             self.learn(_, choice, reward, _, task_done)  
-            
+
     def predictive_perform(
         self, 
         fit_choice_history, 
@@ -168,21 +166,21 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         """        
         self.n_trials = len(fit_choice_history)
         self.reset()
-        
+
         while self.trial <= self.n_trials - 1:
             # -- Compute and cache choice_prob (key to model fitting)
             _, choice_prob = self.act(None)
             self.choice_prob[:, self.trial] = choice_prob 
-             
+
             # -- Clamp history to fit_history
             clamped_choice = fit_choice_history[self.trial].astype(int)
             clamped_reward = fit_reward_history[self.trial]
             self.choice_history[self.trial] = clamped_choice
             self.reward_history[self.trial] = clamped_reward
-            
+
             # -- Agent's timer ticks here !!!
             self.trial += 1
-            
+
             # -- Update q values
             self.learn(None, clamped_choice, clamped_reward, None, None)
 
@@ -211,7 +209,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         )
         if self.fit_choice_kernel and (self.trial < self.n_trials):
             self.step_choice_kernel(choice)
-            
+
     def get_choice_history(self):
         """Return the history of actions in format that is compatible with other library such as
         aind_dynamic_foraging_basic_analysis
@@ -221,7 +219,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         # Make sure agent's history is consistent with the task's history and return
         np.testing.assert_array_equal(self.choice_history, self.task.get_choice_history())
         return self.task.get_choice_history()
-    
+
     def get_reward_history(self):
         """Return the history of reward in format that is compatible with other library such as
         aind_dynamic_foraging_basic_analysis
@@ -232,7 +230,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         np.testing.assert_array_equal(self.reward_history, 
                                       self.task.get_reward_history())
         return self.task.get_reward_history()
-    
+
     def get_p_reward(self):
         """Return the reward probabilities for each arm in each trial which is compatible with
         other library such as aind_dynamic_foraging_basic_analysis
@@ -297,7 +295,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         assert set(fit_bounds_override.keys()).isdisjoint(clamp_params.keys())
         # Validate clamp_params
         assert self.Param(**clamp_params)
-        
+
         # -- Get fit_names and fit_bounds --
         # Validate fit_bounds_override and fill in the missing bounds with default bounds
         fit_bounds = self.ParamFitBounds(**fit_bounds_override).model_dump()
@@ -348,7 +346,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         params.update(clamp_params)
         self.set_params(params)
         fitting_result.params = self.params.model_dump() # Save as a dictionary
-        
+
         fitting_result.k_model = len(fit_names)
         fitting_result.n_trials = len(fit_choice_history)
         fitting_result.log_likelihood = -fitting_result.fun
@@ -365,11 +363,17 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         fitting_result.LPT_AIC = np.exp(-fitting_result.AIC / 2 / fitting_result.n_trials)
         fitting_result.LPT_BIC = np.exp(-fitting_result.BIC / 2 / fitting_result.n_trials)
         self.fitting_result = fitting_result
-        
+
         # -- Rerun the predictive simulation with the fitted params--
         # To fill in the latent variables like q_estimation and choice_prob
         self.predictive_perform(fit_choice_history, fit_reward_history)
-        
+        # Compute prediction accuracy
+        this_predictive_choice = np.argmax(
+            self.choice_prob[:, :-1], axis=0
+        )  # Exclude the last update
+        fitting_result.prediction_accuracy = (
+            np.sum(this_predictive_choice == fit_choice_history) / fitting_result.n_trials
+        )
         return fitting_result
 
     @classmethod
@@ -386,7 +390,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         """
         # This is the only way to pass multiple arguments to differential_evolution...
         fit_choice_history, fit_reward_history, fit_names, clamp_params, agent_kwargs = args
-        
+
         # -- Parse params and initialize a new agent --
         params = dict(zip(fit_names, current_values))  # Current fitting values
         params.update(clamp_params)  # Add clamped params
@@ -395,7 +399,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         # -- Run **PREDICTIVE** simulation --
         # (clamp the history and do only one forward step on each trial)
         agent.predictive_perform(fit_choice_history, fit_reward_history)
-        
+
         # Note that, again, we have an extra update after the last trial, which is not used for fitting
         choice_prob = agent.choice_prob[:, :-1] 
         return negLL(choice_prob, fit_choice_history, fit_reward_history)
@@ -408,7 +412,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
     def get_params(self):
         """Return the model parameters in a dictionary format"""
         return self.params.model_dump()
-            
+
     def plot_session(self):
         """Plot session after .perform(task)"""
         fig, axes = plot_foraging_session(
@@ -421,7 +425,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         axes[0].plot(self.q_estimation[R, :], label="R_left", color='blue', lw=0.5) 
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=3)
         return fig, axes
-    
+
     def plot_fitted_session(self):
         """Plot session after .fit()
         
@@ -432,7 +436,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         if self.fitting_result is None:
             print("No fitting result found. Please fit the model first.")
             return
-        
+
         # -- Retrieve fitting results and perform the predictive simiulation
         self.set_params(self.fitting_result.params)
         fit_choice_history = self.fitting_result.fit_settings["fit_choice_history"]
@@ -446,11 +450,11 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             reward_history=fit_reward_history,
             p_reward=np.full((2, len(fit_choice_history)), np.nan) # Dummy p_reward
         )
-        
+
         # -- Plot fitted Q values
         axes[0].plot(self.q_estimation[0], lw=1, color="red", ls=":", label="fitted_Q(L)")
         axes[0].plot(self.q_estimation[1], lw=1, color="blue", ls=":", label="fitted_Q(R)")
-        
+
         # -- Plot fitted choice_prob
         axes[0].plot(
             self.choice_prob[1] / self.choice_prob.sum(axis=0),
@@ -460,9 +464,9 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             label="fitted_choice_prob(R/R+L)",
         )
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=4)
-        
+
         return fig, axes
-        
+
 
 def negLL(choice_prob, fit_choice_history, fit_reward_history):
     likelihood_all_trial = []

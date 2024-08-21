@@ -1,3 +1,5 @@
+"""Functions for action selection in generative models"""
+
 import numpy as np
 
 

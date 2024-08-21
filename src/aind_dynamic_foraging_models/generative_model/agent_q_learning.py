@@ -92,6 +92,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         params: dict = {},
         **kwargs,
     ):
+        """Init"""
 
         super().__init__(**kwargs)
 
@@ -110,6 +111,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         self.task = None
 
     def reset(self):
+        """Reset the agent"""
         self.trial = 0
 
         # Latent variables have n_trials + 1 length to capture the update after the last trial (HH20210726)
@@ -203,6 +205,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             self.learn(None, clamped_choice, clamped_reward, None, None)
 
     def act(self, _):
+        """Action selection"""
         choice, choice_prob = act_softmax(
             q_estimation_t=self.q_estimation[:, self.trial],
             softmax_inverse_temperature=self.params.softmax_inverse_temperature,
@@ -489,6 +492,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         agent_kwargs,
         DE_kwargs,
     ):
+        """A wrapper of DE fitting for the model. It returns fitting results."""
         # --- Arguments for differential_evolution ---
         kwargs = dict(
             mutation=(0.5, 1),

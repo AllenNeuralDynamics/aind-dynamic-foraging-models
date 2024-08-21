@@ -1,3 +1,5 @@
+"""Testing Hattori2019 model"""
+
 import multiprocessing as mp
 import unittest
 
@@ -10,8 +12,10 @@ from aind_dynamic_foraging_models.generative_model.agent_q_learning import forag
 
 # Start a new test case
 class TestHattori(unittest.TestCase):
+    """Testing Hattori2019 model"""
 
     def test_Hattori(self):
+        """Test Hattori2019 model"""
         # -- Create task and forager --
         forager = forager_Hattori2019(
             dict(

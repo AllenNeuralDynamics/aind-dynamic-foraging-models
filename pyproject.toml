@@ -23,7 +23,7 @@ dependencies = [
     'scipy',
     'pydantic',
     'aind_dynamic_foraging_basic_analysis',
-    'aind-behavior-gym @ git+https://github.com/AllenNeuralDynamics/aind-behavior-gym.git@develop',
+    'aind-behavior-gym',
 ]
 
 [project.optional-dependencies]

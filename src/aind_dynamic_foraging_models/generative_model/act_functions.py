@@ -10,7 +10,7 @@ def act_softmax(
     rng=None,
 ):
     """Given q values and softmax_inverse_temperature, return the choice and choice probability.
-    If chocie_kernel is not None, it will sum it into the softmax function    
+    If chocie_kernel is not None, it will sum it into the softmax function
 
     Parameters
     ----------
@@ -36,10 +36,12 @@ def act_softmax(
         q_estimation_t = np.vstack(
             [q_estimation_t, choice_kernel]
         ).transpose()  # the first dimension is the choice and the second is usual valu in position 0 and kernel in position 1
-        softmax_inverse_temperature = np.array([softmax_inverse_temperature, choice_softmax_inverse_temperature])[
-            np.newaxis, :
-        ]
-    choice_prob = softmax(q_estimation_t, inverse_temperature=softmax_inverse_temperature, bias=bias_terms, rng=rng)
+        softmax_inverse_temperature = np.array(
+            [softmax_inverse_temperature, choice_softmax_inverse_temperature]
+        )[np.newaxis, :]
+    choice_prob = softmax(
+        q_estimation_t, inverse_temperature=softmax_inverse_temperature, bias=bias_terms, rng=rng
+    )
     choice = choose_ps(choice_prob, rng=rng)
     return choice, choice_prob
 
@@ -65,11 +67,13 @@ def softmax(x, inverse_temperature=1, bias=0, rng=None):
     """
     # Put the bias outside /sigma to make it comparable across different softmax_inverse_temperatures.
     rng = rng or np.random.default_rng()
-    
+
     if len(x.shape) == 1:
         X = x * inverse_temperature + bias  # Backward compatibility
     else:
-        X = np.sum(x * inverse_temperature, axis=1) + bias  # Allow more than one kernels (e.g., choice kernel)
+        X = (
+            np.sum(x * inverse_temperature, axis=1) + bias
+        )  # Allow more than one kernels (e.g., choice kernel)
 
     max_temp = np.max(X)
 
@@ -80,11 +84,12 @@ def softmax(x, inverse_temperature=1, bias=0, rng=None):
     else:  # Normal softmax
         return np.exp(X) / np.sum(np.exp(X))  # Accept np.
 
+
 def choose_ps(ps, rng=None):
-    '''
+    """
     "Poisson"-choice process
-    '''
+    """
     rng = rng or np.random.default_rng()
-    
+
     ps = ps / np.sum(ps)
     return np.max(np.argwhere(np.hstack([-1e-16, np.cumsum(ps)]) < rng.random()))

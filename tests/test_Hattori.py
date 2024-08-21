@@ -1,10 +1,11 @@
-import unittest
-import numpy as np
 import multiprocessing as mp
+import unittest
 
-from aind_dynamic_foraging_models.generative_model.agent_q_learning import forager_Hattori2019
+import numpy as np
 from aind_behavior_gym.dynamic_foraging.task.coupled_block_task import CoupledBlockTask
 from aind_dynamic_foraging_basic_analysis import plot_foraging_session
+
+from aind_dynamic_foraging_models.generative_model.agent_q_learning import forager_Hattori2019
 
 
 # Start a new test case
@@ -64,18 +65,24 @@ class TestHattori(unittest.TestCase):
         # Check fitted parameters
         fit_names = fitting_result.fit_settings["fit_names"]
         ground_truth = [num for name, num in ground_truth_params.items() if name in fit_names]
-        print(f'Num of trials: {len(choice_history)}')
+        print(f"Num of trials: {len(choice_history)}")
         print(f"Fitted parameters: {fit_names}")
         print(f'Ground truth: {[f"{num:.4f}" for num in ground_truth]}')
         print(f'Fitted:       {[f"{num:.4f}" for num in fitting_result.x]}')
-        print(f'Likelihood-Per-Trial: {fitting_result.LPT}')
-        print(f'Prediction accuracy full dataset: {fitting_result.prediction_accuracy}\n')
-        print(f'Prediction accuracy cross-validation (training): '
-              f'{np.mean(fitting_result_cross_validation["prediction_accuracy_fit"])}')
-        print(f'Prediction accuracy cross-validation (test): '
-              f'{np.mean(fitting_result_cross_validation["prediction_accuracy_test"])}')
-        print(f'Prediction accuracy cross-validation (test, bias only): '
-              f'{np.mean(fitting_result_cross_validation["prediction_accuracy_test_bias_only"])}')
+        print(f"Likelihood-Per-Trial: {fitting_result.LPT}")
+        print(f"Prediction accuracy full dataset: {fitting_result.prediction_accuracy}\n")
+        print(
+            f"Prediction accuracy cross-validation (training): "
+            f'{np.mean(fitting_result_cross_validation["prediction_accuracy_fit"])}'
+        )
+        print(
+            f"Prediction accuracy cross-validation (test): "
+            f'{np.mean(fitting_result_cross_validation["prediction_accuracy_test"])}'
+        )
+        print(
+            f"Prediction accuracy cross-validation (test, bias only): "
+            f'{np.mean(fitting_result_cross_validation["prediction_accuracy_test_bias_only"])}'
+        )
 
         np.testing.assert_array_almost_equal(
             fitting_result.x, [0.6033, 0.1988, 0.2559, 5.3600], decimal=2

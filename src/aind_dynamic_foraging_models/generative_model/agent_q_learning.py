@@ -1,21 +1,21 @@
 """Maximum likelihood fitting of foraging models
 """
+
+import logging
+import multiprocessing as mp
+
 # %%
 from typing import Optional
+
 import numpy as np
 import scipy.optimize as optimize
-import multiprocessing as mp
-from pydantic import BaseModel, Field, model_validator
-import logging
-
 from aind_behavior_gym.dynamic_foraging.agent import DynamicForagingAgentBase
-from aind_behavior_gym.dynamic_foraging.task import DynamicForagingTaskBase, L, R, IGNORE
+from aind_behavior_gym.dynamic_foraging.task import IGNORE, DynamicForagingTaskBase, L, R
+from aind_dynamic_foraging_basic_analysis import plot_foraging_session
+from pydantic import BaseModel, Field, model_validator
 
 from .act_functions import act_softmax
 from .learn_functions import learn_RWlike
-
-from aind_dynamic_foraging_basic_analysis import plot_foraging_session
-
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -35,24 +35,34 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         """Parameters for the model and their default values.
         After overriden in subclasses, calling ClassName.Param() returns default parameters.
         """
+
         # For example:
         # param1: float = Field(default=0.5, ge=0.0, le=2.0, description="Parameter 1")
         # param2: float = Field(default=0.2, ge=0.0, description="Parameter 2")
         # raise NotImplementedError("Params class must be defined in subclasses")
 
-        learn_rate_rew: float = Field(default=0.5, ge=0.0, le=1.0, description="Learning rate for rewarded choice")
-        learn_rate_unrew : float = Field(default=0.1, ge=0.0, le=1.0, description="Learning rate for unrewarded choice")
-        forget_rate: float = Field(default=0.2, ge=0.0, le=1.0, description="Forgetting rate for unchosen options")
-        softmax_inverse_temperature: float = Field(default=10, ge=0.0, description="Softmax temperature")
+        learn_rate_rew: float = Field(
+            default=0.5, ge=0.0, le=1.0, description="Learning rate for rewarded choice"
+        )
+        learn_rate_unrew: float = Field(
+            default=0.1, ge=0.0, le=1.0, description="Learning rate for unrewarded choice"
+        )
+        forget_rate: float = Field(
+            default=0.2, ge=0.0, le=1.0, description="Forgetting rate for unchosen options"
+        )
+        softmax_inverse_temperature: float = Field(
+            default=10, ge=0.0, description="Softmax temperature"
+        )
         biasL: float = Field(default=0.0, description="Bias term for softmax")
 
         class Config:
-            extra = 'forbid'  # This forbids extra fields
+            extra = "forbid"  # This forbids extra fields
 
     class ParamFitBounds(BaseModel):
         """Bounds for fitting parameters.
         After overriden in subclasses, calling ClassName.ParamFitBounds() returns default bounds.
         """
+
         # For example:
         # param1: list = Field(default=[0.0, 1.0], description="Bounds for param1")
         # param2: list = Field(default=[0.0, 1.0], description="Bounds for param2")
@@ -63,7 +73,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         softmax_inverse_temperature: list = Field(default=[0.0, 100.0])
         biasL: list = Field(default=[-5.0, 5.0])
 
-        @model_validator(mode='after')
+        @model_validator(mode="after")
         def check_all_params(cls, values):
             for key, value in values.__dict__.items():
                 if not isinstance(value, list):
@@ -75,13 +85,13 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             return values
 
         class Config:
-            extra = 'forbid'  # This forbids extra fields
+            extra = "forbid"  # This forbids extra fields
 
     def __init__(
         self,
         params: dict = {},
         **kwargs,
-        ):
+    ):
 
         super().__init__(**kwargs)
 
@@ -107,13 +117,13 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         self.q_estimation[:, 0] = 0  # Initial Q values as 0
 
         self.choice_prob = np.full([self.n_actions, self.n_trials + 1], np.nan)
-        self.choice_prob[:, 0] = 1 / self.n_actions  # To be strict (actually no use)   
+        self.choice_prob[:, 0] = 1 / self.n_actions  # To be strict (actually no use)
 
         if self.fit_choice_kernel:
             self.choice_kernel = np.zeros([self.n_actions, self.n_trials + 1])
 
         # Choice and reward history have n_trials length
-        self.choice_history = np.full(self.n_trials, fill_value=-1, dtype=int)  # Choice history        
+        self.choice_history = np.full(self.n_trials, fill_value=-1, dtype=int)  # Choice history
         # Reward history, separated for each port (Corrado Newsome 2005)
         self.reward_history = np.zeros(self.n_trials)
 
@@ -131,7 +141,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         task: DynamicForagingTaskBase,
     ):
         """Generative simulation of a task.
-        
+
         Override the base class method to include choice_prob caching etc.
         """
         self.task = task
@@ -152,7 +162,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
 
             # -- Update agent history
             self.choice_prob[:, self.trial] = choice_prob
-            self.choice_history[self.trial] = choice     
+            self.choice_history[self.trial] = choice
             # In Sutton & Barto's convention, reward belongs to the next time step, but we put it
             # in the current time step for the sake of consistency with neuroscience convention
             self.reward_history[self.trial] = reward
@@ -164,25 +174,21 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             # Note that this will update the q values **after the last trial**, a final update that
             # will not be used to make the next action (because task is *done*) but may be used for
             # correlating with physiology recordings
-            self.learn(_, choice, reward, _, task_done)  
+            self.learn(_, choice, reward, _, task_done)
 
-    def predictive_perform(
-        self, 
-        fit_choice_history, 
-        fit_reward_history
-    ):  
+    def predictive_perform(self, fit_choice_history, fit_reward_history):
         """Simulates the agent over a fixed choice and reward history using its params.
-        
-        Unlike .perform() ("generative" simulation), this is called "predictive" simulation, 
+
+        Unlike .perform() ("generative" simulation), this is called "predictive" simulation,
         which does not need a task and is used for model fitting.
-        """        
+        """
         self.n_trials = len(fit_choice_history)
         self.reset()
 
         while self.trial <= self.n_trials - 1:
             # -- Compute and cache choice_prob (key to model fitting)
             _, choice_prob = self.act(None)
-            self.choice_prob[:, self.trial] = choice_prob 
+            self.choice_prob[:, self.trial] = choice_prob
 
             # -- Clamp history to fit_history
             clamped_choice = fit_choice_history[self.trial].astype(int)
@@ -216,7 +222,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
                 "reward": reward,
                 "q_estimation_tminus1": self.q_estimation[:, self.trial - 1],
                 "learn_rates": [self.params.learn_rate_rew, self.params.learn_rate_unrew],
-                "forget_rates": [self.params.forget_rate, 0],   # 0: unchosen, 1: chosen
+                "forget_rates": [self.params.forget_rate, 0],  # 0: unchosen, 1: chosen
             }
         )
         if self.fit_choice_kernel and (self.trial < self.n_trials):
@@ -239,8 +245,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         if self.task is None:
             return None
         # Make sure agent's history is consistent with the task's history and return
-        np.testing.assert_array_equal(self.reward_history, 
-                                      self.task.get_reward_history())
+        np.testing.assert_array_equal(self.reward_history, self.task.get_reward_history())
         return self.task.get_reward_history()
 
     def get_p_reward(self):
@@ -248,7 +253,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         other library such as aind_dynamic_foraging_basic_analysis
         """
         if self.task is None:
-            return None   
+            return None
         return self.task.get_p_reward()
 
     def fit(
@@ -259,16 +264,16 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         clamp_params: dict = {},
         k_fold_cross_validation: Optional[int] = None,
         agent_kwargs: dict = {},
-        DE_kwargs: dict = {'workers': 1},
+        DE_kwargs: dict = {"workers": 1},
     ):
         """Fit the model to the data using differential evolution.
-        
+
         It handles fit_bounds_override and clamp_params as follows:
         1. It will first clamp the parameters specified in clamp_params
-        2. For other parameters, if it is specified in fit_bounds_override, the specified 
+        2. For other parameters, if it is specified in fit_bounds_override, the specified
            bound will be used; otherwise, the bound in the model's ParamFitBounds will be used.
-           
-        For example, if params_to_fit and clamp_params are all empty, all parameters will 
+
+        For example, if params_to_fit and clamp_params are all empty, all parameters will
         be fitted with default bounds in the model's ParamFitBounds.
 
         Parameters
@@ -298,8 +303,8 @@ class forager_Hattori2019(DynamicForagingAgentBase):
                         8 workers: ~22 s
                         16 workers: ~20 s
                     (see https://github.com/AllenNeuralDynamics/aind-dynamic-foraging-models/blob/22075b85360c0a5db475a90bcb025deaa4318f05/notebook/demo_rl_mle_fitting_new_test_time.ipynb) # noqa E501
-                    That is to say, the parallel speedup in DE is sublinear. Therefore, given a constant 
-                    number of total CPUs, it is more efficient to parallelize on the level of session, 
+                    That is to say, the parallel speedup in DE is sublinear. Therefore, given a constant
+                    number of total CPUs, it is more efficient to parallelize on the level of session,
                     instead of on DE's workers.
 
         Returns
@@ -321,7 +326,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         for name in clamp_params.keys():
             fit_bounds.pop(name)
         # Get the names of the parameters to fit
-        fit_names = list(fit_bounds.keys()) 
+        fit_names = list(fit_bounds.keys())
         # Parse bounds
         lower_bounds = [fit_bounds[name][0] for name in fit_names]
         upper_bounds = [fit_bounds[name][1] for name in fit_names]
@@ -351,9 +356,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         self.set_params(fitting_result.params)
         self.predictive_perform(fit_choice_history, fit_reward_history)
         # Compute prediction accuracy
-        predictive_choice = np.argmax(
-            self.choice_prob[:, :-1], axis=0
-        )  # Exclude the last update
+        predictive_choice = np.argmax(self.choice_prob[:, :-1], axis=0)  # Exclude the last update
         fitting_result.prediction_accuracy = (
             np.sum(predictive_choice == fit_choice_history) / fitting_result.n_trials
         )
@@ -362,7 +365,9 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             return fitting_result, None
 
         # ======  Cross-validation ======
-        logger.info(f"Cross-validating the model using {k_fold_cross_validation}-fold cross-validation...")
+        logger.info(
+            f"Cross-validating the model using {k_fold_cross_validation}-fold cross-validation..."
+        )
         n_trials = len(fit_choice_history)
         trial_numbers_shuffled = np.arange(n_trials)
         self.rng.shuffle(trial_numbers_shuffled)
@@ -376,9 +381,11 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             logger.info(f"Cross-validation fold {kk+1}/{k_fold_cross_validation}...")
             # -- Split the data --
             test_idx_begin = int(kk * np.floor(n_trials / k_fold_cross_validation))
-            test_idx_end = int(n_trials 
-                               if (kk == k_fold_cross_validation - 1) 
-                               else (kk + 1) * np.floor(n_trials / k_fold_cross_validation))
+            test_idx_end = int(
+                n_trials
+                if (kk == k_fold_cross_validation - 1)
+                else (kk + 1) * np.floor(n_trials / k_fold_cross_validation)
+            )
             test_set_this = trial_numbers_shuffled[test_idx_begin:test_idx_end]
             fit_set_this = np.hstack(
                 (trial_numbers_shuffled[:test_idx_begin], trial_numbers_shuffled[test_idx_end:])
@@ -402,12 +409,12 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             # Run PREDICTIVE simulation using temp_agent with the fitted parms of this fold
             tmp_agent = self.__class__(fitting_result_this_fold.params, **agent_kwargs)
             tmp_agent.predictive_perform(fit_choice_history, fit_reward_history)
-            
+
             # Compute prediction accuracy
             predictive_choice_prob_this_fold = np.argmax(
                 tmp_agent.choice_prob[:, :-1], axis=0
             )  # Exclude the last update
-            
+
             correct_predicted = predictive_choice_prob_this_fold == fit_choice_history
             prediction_accuracy_fit.append(
                 np.sum(correct_predicted[fit_set_this]) / len(fit_set_this)
@@ -424,7 +431,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
                 prediction_accuracy_test_bias_only.append(
                     sum(prediction_correct_bias_only[test_set_this]) / len(test_set_this)
                 )
-            
+
         # --- Save all cross_validation results, including raw fitting result of each fold ---
         fitting_result_cross_validation = dict(
             prediction_accuracy_test=prediction_accuracy_test,
@@ -438,7 +445,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
     @classmethod
     def negLL_func_wrapper_for_de(
         cls,
-        current_values, # the current fitting values of params in fit_names (passed by DE)
+        current_values,  # the current fitting values of params in fit_names (passed by DE)
         fit_choice_history,
         fit_reward_history,
         fit_trial_set,
@@ -492,10 +499,10 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             workers=1,
             updating="immediate",
             callback=None,
-        )   # Default DE kwargs
+        )  # Default DE kwargs
         kwargs.update(DE_kwargs)  # Update user specified kwargs
         if kwargs["workers"] > 1:
-            kwargs['updating'] = "deferred"
+            kwargs["updating"] = "deferred"
 
         # --- Heavy lifting here!! ---
         fitting_result = optimize.differential_evolution(
@@ -504,14 +511,14 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             args=(
                 fit_choice_history,
                 fit_reward_history,
-                fit_trial_set, # subset of trials to fit; if empty, use all trials)
+                fit_trial_set,  # subset of trials to fit; if empty, use all trials)
                 fit_names,  # Pass names so that negLL_func_for_de knows which parameters to fit
-                clamp_params, # Clamped parameters
-                agent_kwargs  # Other kwargs to pass to the model
+                clamp_params,  # Clamped parameters
+                agent_kwargs,  # Other kwargs to pass to the model
             ),
             **kwargs,
         )
-        
+
         # --- Post-processing ---
         fitting_result.fit_settings = dict(
             fit_choice_history=fit_choice_history,
@@ -541,7 +548,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         )  # Raw LPT without penality
         fitting_result.LPT_AIC = np.exp(-fitting_result.AIC / 2 / fitting_result.n_trials)
         fitting_result.LPT_BIC = np.exp(-fitting_result.BIC / 2 / fitting_result.n_trials)
-        
+
         return fitting_result
 
     def set_params(self, params):
@@ -610,7 +617,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
 
 def negLL(choice_prob, fit_choice_history, fit_reward_history, fit_trial_set=None):
     """Compute total negLL of the trials in fit_trial_set given the data."""
-    
+
     # Compute negative likelihood
     likelihood_each_trial = choice_prob[
         fit_choice_history.astype(int), range(len(fit_choice_history))
@@ -624,7 +631,7 @@ def negLL(choice_prob, fit_choice_history, fit_reward_history, fit_trial_set=Non
     likelihood_each_trial[likelihood_each_trial > 1] = 1
 
     # Return total likelihoods
-    if fit_trial_set is None:   # Use all trials
+    if fit_trial_set is None:  # Use all trials
         return -np.sum(np.log(likelihood_each_trial))
     else:
         return -np.sum(np.log(likelihood_each_trial[fit_trial_set]))

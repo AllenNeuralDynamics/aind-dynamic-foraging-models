@@ -1,4 +1,4 @@
-"""Testing Hattori2019 model"""
+"""Testing SimpleQ model"""
 
 import multiprocessing as mp
 import unittest
@@ -6,17 +6,17 @@ import unittest
 import numpy as np
 from aind_behavior_gym.dynamic_foraging.task.coupled_block_task import CoupledBlockTask
 
-from aind_dynamic_foraging_models.generative_model.agent_q_learning import forager_Hattori2019
+from aind_dynamic_foraging_models.generative_model.agent_q_learning import forager_simpleQ
 
 
 # Start a new test case
-class TestHattori(unittest.TestCase):
-    """Testing Hattori2019 model"""
+class TestSimpleQ(unittest.TestCase):
+    """Testing SimpleQ model"""
 
     def test_Hattori(self):
-        """Test Hattori2019 model"""
+        """Test Hattori model"""
         # -- Create task and forager --
-        forager = forager_Hattori2019(
+        forager = forager_simpleQ(
             dict(
                 softmax_inverse_temperature=5,
                 biasL=0,
@@ -50,7 +50,7 @@ class TestHattori(unittest.TestCase):
         np.testing.assert_array_almost_equal(forager.choice_prob, ground_truth_choice_prob)
 
         # --    2.2 model fitting with cross-validation --
-        forager = forager_Hattori2019()  # To fit a model, just create a new forager
+        forager = forager_simpleQ()  # To fit a model, just create a new forager
         forager.fit(
             choice_history,
             reward_history,

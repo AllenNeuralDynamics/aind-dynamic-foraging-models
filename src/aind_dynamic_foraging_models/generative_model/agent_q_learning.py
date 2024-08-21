@@ -25,7 +25,7 @@ console_handler.setFormatter(
 logger.addHandler(console_handler)
 
 
-class forager_Hattori2019(DynamicForagingAgentBase):
+class forager_simpleQ(DynamicForagingAgentBase):
     """
     Base class for maximum likelihood estimation.
     """

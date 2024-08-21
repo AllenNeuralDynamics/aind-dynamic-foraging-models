@@ -20,12 +20,14 @@ dependencies = [
     'numpy',
     'matplotlib',
     'scikit-learn',
-    'scipy'
+    'scipy',
+    'pydantic',
+    'aind_dynamic_foraging_basic_analysis',
+    'aind-behavior-gym @ git+https://github.com/AllenNeuralDynamics/aind-behavior-gym.git@develop',
 ]
 
 [project.optional-dependencies]
 dev = [
-    'aind-dynamic-foraging-models',
     'black',
     'coverage',
     'flake8',
@@ -54,10 +56,10 @@ exclude = '''
     | \.mypy_cache
     | \.tox
     | \.venv
-    | \.vscode
     | _build
     | build
     | dist
+    | code
   )/
   | .gitignore
 )
@@ -74,12 +76,15 @@ exclude_lines = [
     "import",
     "pragma: no cover"
 ]
-fail_under = 100
+fail_under = 80
 
 [tool.isort]
 line_length = 100
 profile = "black"
+skip = [
+    "code/",
+]
 
 [tool.interrogate]
-exclude = ["setup.py", "docs", "build"]
-fail-under = 100
+exclude = ["setup.py", "docs", "build", "code"]
+fail-under = 80

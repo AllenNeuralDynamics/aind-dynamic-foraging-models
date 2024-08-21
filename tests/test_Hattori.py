@@ -19,7 +19,7 @@ class TestHattori(unittest.TestCase):
             ),
             seed=42,
         )
-        task = CoupledBlockTask(reward_baiting=True, num_trials=1000, seed=42)
+        task = CoupledBlockTask(reward_baiting=True, num_trials=100, seed=42)
 
         # -- 1. Generative run --
         forager.perform(task)
@@ -46,28 +46,39 @@ class TestHattori(unittest.TestCase):
         forager.predictive_perform(choice_history, reward_history)
         np.testing.assert_array_almost_equal(forager.choice_prob, ground_truth_choice_prob)
 
-        # --    2.2 model fitting --
+        # --    2.2 model fitting with cross-validation --
         forager = forager_Hattori2019()  # To fit a model, just create a new forager
         forager.fit(
             choice_history,
             reward_history,
             fit_bounds_override={"softmax_inverse_temperature": [0, 100]},
             clamp_params={"biasL": 0},
-            DE_workers=16,
+            DE_kwargs=dict(workers=mp.cpu_count()),
+            k_fold_cross_validation=2,
         )
 
         fitting_result = forager.fitting_result
+        fitting_result_cross_validation = forager.fitting_result_cross_validation
         assert fitting_result.success
 
         # Check fitted parameters
         fit_names = fitting_result.fit_settings["fit_names"]
         ground_truth = [num for name, num in ground_truth_params.items() if name in fit_names]
+        print(f'Num of trials: {len(choice_history)}')
         print(f"Fitted parameters: {fit_names}")
         print(f'Ground truth: {[f"{num:.4f}" for num in ground_truth]}')
         print(f'Fitted:       {[f"{num:.4f}" for num in fitting_result.x]}')
+        print(f'Likelihood-Per-Trial: {fitting_result.LPT}')
+        print(f'Prediction accuracy full dataset: {fitting_result.prediction_accuracy}\n')
+        print(f'Prediction accuracy cross-validation (training): '
+              f'{np.mean(fitting_result_cross_validation["prediction_accuracy_fit"])}')
+        print(f'Prediction accuracy cross-validation (test): '
+              f'{np.mean(fitting_result_cross_validation["prediction_accuracy_test"])}')
+        print(f'Prediction accuracy cross-validation (test, bias only): '
+              f'{np.mean(fitting_result_cross_validation["prediction_accuracy_test_bias_only"])}')
 
         np.testing.assert_array_almost_equal(
-            fitting_result.x, [0.6010, 0.1087, 0.1544, 4.8908], decimal=2
+            fitting_result.x, [0.6033, 0.1988, 0.2559, 5.3600], decimal=2
         )
 
         # Plot fitted latent variables

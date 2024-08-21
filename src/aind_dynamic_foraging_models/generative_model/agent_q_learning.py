@@ -6,6 +6,7 @@ import numpy as np
 import scipy.optimize as optimize
 import multiprocessing as mp
 from pydantic import BaseModel, Field, model_validator
+import logging
 
 from aind_behavior_gym.dynamic_foraging.agent import DynamicForagingAgentBase
 from aind_behavior_gym.dynamic_foraging.task import DynamicForagingTaskBase, L, R, IGNORE
@@ -14,6 +15,15 @@ from .act_functions import act_softmax
 from .learn_functions import learn_RWlike
 
 from aind_dynamic_foraging_basic_analysis import plot_foraging_session
+
+
+logger = logging.getLogger(__name__)
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(
+    logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+)
+console_handler.setLevel(logging.INFO)
+logger.addHandler(console_handler)
 
 
 class forager_Hattori2019(DynamicForagingAgentBase):
@@ -320,6 +330,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         assert self.Param(**dict(zip(fit_names, upper_bounds)))
 
         # # ===== Fit using the whole dataset ======
+        logger.info("Fitting the model using the whole dataset...")
         fitting_result = self.__class__._optimize_DE(
             fit_choice_history=fit_choice_history,
             fit_reward_history=fit_reward_history,
@@ -351,6 +362,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             return fitting_result, None
 
         # ======  Cross-validation ======
+        logger.info(f"Cross-validating the model using {k_fold_cross_validation}-fold cross-validation...")
         n_trials = len(fit_choice_history)
         trial_numbers_shuffled = np.arange(n_trials)
         self.rng.shuffle(trial_numbers_shuffled)
@@ -361,6 +373,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         fitting_results_all_folds = []
 
         for kk in range(k_fold_cross_validation):
+            logger.info(f"Cross-validation fold {kk+1}/{k_fold_cross_validation}...")
             # -- Split the data --
             test_idx_begin = int(kk * np.floor(n_trials / k_fold_cross_validation))
             test_idx_end = int(n_trials 
@@ -403,8 +416,8 @@ class forager_Hattori2019(DynamicForagingAgentBase):
                 np.sum(correct_predicted[test_set_this]) / len(test_set_this)
             )
             # Also return cross-validated prediction_accuracy_bias_only
-            if "biasL" in params_this_fold:
-                bias_this = params_this_fold["biasL"]
+            if "biasL" in fitting_result_this_fold.params:
+                bias_this = fitting_result_this_fold.params["biasL"]
                 prediction_correct_bias_only = (
                     int(bias_this <= 0) == fit_choice_history
                 )  # If bias_this < 0, bias predicts all rightward choices
@@ -412,7 +425,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
                     sum(prediction_correct_bias_only[test_set_this]) / len(test_set_this)
                 )
             
-        # --- Save all cross_validation results, including raw fiting result of each fold ---
+        # --- Save all cross_validation results, including raw fitting result of each fold ---
         fitting_result_cross_validation = dict(
             prediction_accuracy_test=prediction_accuracy_test,
             prediction_accuracy_fit=prediction_accuracy_fit,

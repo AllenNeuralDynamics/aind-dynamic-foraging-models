@@ -53,7 +53,7 @@ class TestHattori(unittest.TestCase):
             reward_history,
             fit_bounds_override={"softmax_inverse_temperature": [0, 100]},
             clamp_params={"biasL": 0},
-            DE_workers=16,
+            DE_kwargs=dict(workers=16),
         )
 
         fitting_result = forager.fitting_result
@@ -80,6 +80,18 @@ class TestHattori(unittest.TestCase):
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=4)
         fig_fitting.savefig("tests/results/test_Hattori_fitted.png")
 
+
+        # --    2.3 fit_cross_validation --
+        # forager = forager_Hattori2019()
+        # forager.fit_cross_validation(
+        #     choice_history,
+        #     reward_history,
+        #     fit_bounds_override={"softmax_inverse_temperature": [0, 100]},
+        #     clamp_params={"biasL": 0},
+        #     DE_workers=16,
+        #     k_fold=5,
+        # )
+        
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

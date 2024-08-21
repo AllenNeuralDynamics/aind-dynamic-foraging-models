@@ -246,8 +246,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         fit_bounds_override: dict = {},
         clamp_params: dict = {}, 
         agent_kwargs: dict = {},
-        DE_pop_size=16,
-        DE_workers=1,
+        DE_kwargs: dict = {'workers': 1},
     ):
         """Fit the model to the data using differential evolution.
         
@@ -266,24 +265,25 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         fit_reward_history : _type_
             _description_
         fit_bounds_override : dict, optional
-            Override the default bounds for fitting parameters, by default {}
+            Override the default bounds for fitting parameters in ParamFitBounds, by default {}
         clamp_params : dict, optional
             Specify parameters to fix to certain values, by default {}
         agent_kwargs : dict, optional
             Other kwargs to pass to the model, by default {}
-        DE_pop_size : int, optional
-            Population size for differential evolution, by default 16
-        DE_workers : int, optional
-            Number of workers for differential evolution, by default 1.
-            In CO, fitting a typical session of 1000 trials takes:
-                1 worker: ~100 s
-                4 workers: ~35 s
-                8 workers: ~22 s
-                16 workers: ~20 s
-            (see https://github.com/AllenNeuralDynamics/aind-dynamic-foraging-models/blob/22075b85360c0a5db475a90bcb025deaa4318f05/notebook/demo_rl_mle_fitting_new_test_time.ipynb) # noqa E501
-            That is to say, the parallel speedup in DE is sublinear. Therefore, given a constant 
-            number of total CPUs, it is more efficient to parallelize on the level of session, 
-            instead of on DE's workers.
+        DE_kwargs : dict, optional
+            kwargs for differential_evolution, by default {'workers': 1}
+            For example:
+                workers : int
+                    Number of workers for differential evolution, by default 1.
+                    In CO, fitting a typical session of 1000 trials takes:
+                        1 worker: ~100 s
+                        4 workers: ~35 s
+                        8 workers: ~22 s
+                        16 workers: ~20 s
+                    (see https://github.com/AllenNeuralDynamics/aind-dynamic-foraging-models/blob/22075b85360c0a5db475a90bcb025deaa4318f05/notebook/demo_rl_mle_fitting_new_test_time.ipynb) # noqa E501
+                    That is to say, the parallel speedup in DE is sublinear. Therefore, given a constant 
+                    number of total CPUs, it is more efficient to parallelize on the level of session, 
+                    instead of on DE's workers.
 
         Returns
         -------
@@ -312,25 +312,16 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         assert self.Param(**dict(zip(fit_names, upper_bounds)))
 
         # -- Call differential_evolution --
-        fitting_result = optimize.differential_evolution(
-            func=self.__class__.negLL_func_for_de,
-            bounds=optimize.Bounds(lower_bounds, upper_bounds),
-            args=(
-                fit_choice_history,
-                fit_reward_history,
-                [], # fit_trial_set (subset of trials to fit; if empty, use all trials)
-                fit_names,  # Pass names so that negLL_func_for_de knows which parameters to fit
-                clamp_params, # Clamped parameters
-                agent_kwargs  # Other kwargs to pass to the model
-            ),
-            mutation=(0.5, 1),
-            recombination=0.7,
-            popsize=DE_pop_size,
-            strategy="best1bin",
-            disp=False,
-            workers=DE_workers,
-            updating="immediate" if DE_workers == 1 else "deferred",
-            callback=None,
+        fitting_result = self.__class__._optimize_DE(
+            fit_choice_history=fit_choice_history,
+            fit_reward_history=fit_reward_history,
+            fit_names=fit_names,
+            lower_bounds=lower_bounds,
+            upper_bounds=upper_bounds,
+            fit_trial_set=[],  # empty means use all trials to fit
+            clamp_params=clamp_params,
+            agent_kwargs=agent_kwargs,
+            DE_kwargs=DE_kwargs,
         )
 
         # -- Save fitting results --
@@ -411,6 +402,47 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             choice_prob, fit_choice_history, fit_reward_history, fit_trial_set
         )  # Return total negative log likelihood of the fit_trial_set
 
+    @classmethod
+    def _optimize_DE(
+        cls,
+        fit_choice_history,
+        fit_reward_history,
+        fit_names,
+        lower_bounds,
+        upper_bounds,
+        fit_trial_set,
+        clamp_params,
+        agent_kwargs,
+        DE_kwargs,
+    ):
+        kwargs = dict(
+            mutation=(0.5, 1),
+            recombination=0.7,
+            popsize=16,
+            strategy="best1bin",
+            disp=False,
+            workers=1,
+            updating="immediate",
+            callback=None,
+        )   # Default DE kwargs
+        kwargs.update(DE_kwargs)  # Update user specified kwargs
+        if kwargs["workers"] > 1:
+            kwargs['updating'] = "deferred"
+        
+        return optimize.differential_evolution(
+            func=cls.negLL_func_for_de,
+            bounds=optimize.Bounds(lower_bounds, upper_bounds),
+            args=(
+                fit_choice_history,
+                fit_reward_history,
+                fit_trial_set, # subset of trials to fit; if empty, use all trials)
+                fit_names,  # Pass names so that negLL_func_for_de knows which parameters to fit
+                clamp_params, # Clamped parameters
+                agent_kwargs  # Other kwargs to pass to the model
+            ),
+            **kwargs,
+        )
+        
     def fit_cross_validation(
         self,
         fit_choice_history,
@@ -423,8 +455,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         DE_workers=1,
         if_verbose=True,
     ):
-        """
-        k-fold cross-validation of MLE fitting.
+        """K-fold cross-validation of MLE fitting.
         """
 
         # -- Shuffle the trial numbers --

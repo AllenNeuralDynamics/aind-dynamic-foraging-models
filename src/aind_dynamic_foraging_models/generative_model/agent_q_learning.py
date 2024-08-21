@@ -18,11 +18,11 @@ from aind_dynamic_foraging_basic_analysis import plot_foraging_session
 
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 console_handler = logging.StreamHandler()
 console_handler.setFormatter(
     logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 )
-console_handler.setLevel(logging.INFO)
 logger.addHandler(console_handler)
 
 

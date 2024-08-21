@@ -1,6 +1,7 @@
 """Maximum likelihood fitting of foraging models
 """
 # %%
+from typing import Optional
 import numpy as np
 import scipy.optimize as optimize
 import multiprocessing as mp
@@ -79,6 +80,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
 
         # Add model fitting related attributes
         self.fitting_result = None
+        self.fitting_result_cross_validation = None
 
         # Some switches
         self.fit_choice_kernel = False
@@ -244,7 +246,8 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         fit_choice_history,
         fit_reward_history,
         fit_bounds_override: dict = {},
-        clamp_params: dict = {}, 
+        clamp_params: dict = {},
+        k_fold_cross_validation: Optional[int] = None,
         agent_kwargs: dict = {},
         DE_kwargs: dict = {'workers': 1},
     ):
@@ -268,6 +271,10 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             Override the default bounds for fitting parameters in ParamFitBounds, by default {}
         clamp_params : dict, optional
             Specify parameters to fix to certain values, by default {}
+        k_fold_cross_validation : Optional[int], optional
+            Whether to do cross-validation, by default None (no cross-validation).
+            If k_fold_cross_validation > 1, it will do k-fold cross-validation and return the
+            prediction accuracy of the test set for model comparison.
         agent_kwargs : dict, optional
             Other kwargs to pass to the model, by default {}
         DE_kwargs : dict, optional
@@ -290,6 +297,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         _type_
             _description_
         """
+        # ===== Preparation =====
         # -- Sanity checks --
         # Ensure params_to_fit and clamp_params are not overlapping
         assert set(fit_bounds_override.keys()).isdisjoint(clamp_params.keys())
@@ -311,65 +319,111 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         assert self.Param(**dict(zip(fit_names, lower_bounds)))
         assert self.Param(**dict(zip(fit_names, upper_bounds)))
 
-        # -- Call differential_evolution --
+        # # ===== Fit using the whole dataset ======
         fitting_result = self.__class__._optimize_DE(
             fit_choice_history=fit_choice_history,
             fit_reward_history=fit_reward_history,
             fit_names=fit_names,
             lower_bounds=lower_bounds,
             upper_bounds=upper_bounds,
-            fit_trial_set=[],  # empty means use all trials to fit
+            fit_trial_set=None,  # None means use all trials to fit
             clamp_params=clamp_params,
             agent_kwargs=agent_kwargs,
             DE_kwargs=DE_kwargs,
         )
 
         # -- Save fitting results --
-        fitting_result.fit_settings = dict(
-            fit_choice_history=fit_choice_history,
-            fit_reward_history=fit_reward_history,
-            fit_names=fit_names,
-            fit_bounds=fit_bounds,
-            clamp_params=clamp_params,
-            agent_kwargs=agent_kwargs,
-        )
-        # Full parameter set
-        params = dict(zip(fit_names, fitting_result.x))
-        params.update(clamp_params)
-        self.set_params(params)
-        fitting_result.params = self.params.model_dump() # Save as a dictionary
-
-        fitting_result.k_model = len(fit_names)
-        fitting_result.n_trials = len(fit_choice_history)
-        fitting_result.log_likelihood = -fitting_result.fun
-
-        fitting_result.AIC = -2 * fitting_result.log_likelihood + 2 * fitting_result.k_model
-        fitting_result.BIC = -2 * fitting_result.log_likelihood + fitting_result.k_model * np.log(
-            fitting_result.n_trials
-        )
-
-        # Likelihood-Per-Trial. See Wilson 2019 (but their formula was wrong...)
-        fitting_result.LPT = np.exp(
-            fitting_result.log_likelihood / fitting_result.n_trials
-        )  # Raw LPT without penality
-        fitting_result.LPT_AIC = np.exp(-fitting_result.AIC / 2 / fitting_result.n_trials)
-        fitting_result.LPT_BIC = np.exp(-fitting_result.BIC / 2 / fitting_result.n_trials)
         self.fitting_result = fitting_result
 
         # -- Rerun the predictive simulation with the fitted params--
         # To fill in the latent variables like q_estimation and choice_prob
+        self.set_params(fitting_result.params)
         self.predictive_perform(fit_choice_history, fit_reward_history)
         # Compute prediction accuracy
-        this_predictive_choice = np.argmax(
+        predictive_choice = np.argmax(
             self.choice_prob[:, :-1], axis=0
         )  # Exclude the last update
         fitting_result.prediction_accuracy = (
-            np.sum(this_predictive_choice == fit_choice_history) / fitting_result.n_trials
+            np.sum(predictive_choice == fit_choice_history) / fitting_result.n_trials
         )
-        return fitting_result
+
+        if k_fold_cross_validation is None:  # Skip cross-validation
+            return fitting_result, None
+
+        # ======  Cross-validation ======
+        n_trials = len(fit_choice_history)
+        trial_numbers_shuffled = np.arange(n_trials)
+        self.rng.shuffle(trial_numbers_shuffled)
+
+        prediction_accuracy_fit = []
+        prediction_accuracy_test = []
+        prediction_accuracy_test_bias_only = []
+        fitting_results_all_folds = []
+
+        for kk in range(k_fold_cross_validation):
+            # -- Split the data --
+            test_idx_begin = int(kk * np.floor(n_trials / k_fold_cross_validation))
+            test_idx_end = int(n_trials 
+                               if (kk == k_fold_cross_validation - 1) 
+                               else (kk + 1) * np.floor(n_trials / k_fold_cross_validation))
+            test_set_this = trial_numbers_shuffled[test_idx_begin:test_idx_end]
+            fit_set_this = np.hstack(
+                (trial_numbers_shuffled[:test_idx_begin], trial_numbers_shuffled[test_idx_end:])
+            )
+
+            # -- Fit data using fit_set_this --
+            fitting_result_this_fold = self.__class__._optimize_DE(
+                fit_choice_history=fit_choice_history,
+                fit_reward_history=fit_reward_history,
+                fit_names=fit_names,
+                lower_bounds=lower_bounds,
+                upper_bounds=upper_bounds,
+                fit_trial_set=fit_set_this,
+                clamp_params=clamp_params,
+                agent_kwargs=agent_kwargs,
+                DE_kwargs=DE_kwargs,
+            )
+            fitting_results_all_folds.append(fitting_result_this_fold)
+
+            # -- Compute the prediction accuracy of testing set --
+            # Run PREDICTIVE simulation using temp_agent with the fitted parms of this fold
+            tmp_agent = self.__class__(fitting_result_this_fold.params, **agent_kwargs)
+            tmp_agent.predictive_perform(fit_choice_history, fit_reward_history)
+            
+            # Compute prediction accuracy
+            predictive_choice_prob_this_fold = np.argmax(
+                tmp_agent.choice_prob[:, :-1], axis=0
+            )  # Exclude the last update
+            
+            correct_predicted = predictive_choice_prob_this_fold == fit_choice_history
+            prediction_accuracy_fit.append(
+                np.sum(correct_predicted[fit_set_this]) / len(fit_set_this)
+            )
+            prediction_accuracy_test.append(
+                np.sum(correct_predicted[test_set_this]) / len(test_set_this)
+            )
+            # Also return cross-validated prediction_accuracy_bias_only
+            if "biasL" in params_this_fold:
+                bias_this = params_this_fold["biasL"]
+                prediction_correct_bias_only = (
+                    int(bias_this <= 0) == fit_choice_history
+                )  # If bias_this < 0, bias predicts all rightward choices
+                prediction_accuracy_test_bias_only.append(
+                    sum(prediction_correct_bias_only[test_set_this]) / len(test_set_this)
+                )
+            
+        # --- Save all cross_validation results, including raw fiting result of each fold ---
+        fitting_result_cross_validation = dict(
+            prediction_accuracy_test=prediction_accuracy_test,
+            prediction_accuracy_fit=prediction_accuracy_fit,
+            prediction_accuracy_test_bias_only=prediction_accuracy_test_bias_only,
+            fitting_results_all_folds=fitting_results_all_folds,
+        )
+        self.fitting_result_cross_validation = fitting_result_cross_validation
+        return fitting_result, fitting_result_cross_validation
 
     @classmethod
-    def negLL_func_for_de(
+    def negLL_func_wrapper_for_de(
         cls,
         current_values, # the current fitting values of params in fit_names (passed by DE)
         fit_choice_history,
@@ -415,6 +469,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         agent_kwargs,
         DE_kwargs,
     ):
+        # --- Arguments for differential_evolution ---
         kwargs = dict(
             mutation=(0.5, 1),
             recombination=0.7,
@@ -428,9 +483,10 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         kwargs.update(DE_kwargs)  # Update user specified kwargs
         if kwargs["workers"] > 1:
             kwargs['updating'] = "deferred"
-        
-        return optimize.differential_evolution(
-            func=cls.negLL_func_for_de,
+
+        # --- Heavy lifting here!! ---
+        fitting_result = optimize.differential_evolution(
+            func=cls.negLL_func_wrapper_for_de,
             bounds=optimize.Bounds(lower_bounds, upper_bounds),
             args=(
                 fit_choice_history,
@@ -443,119 +499,37 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             **kwargs,
         )
         
-    def fit_cross_validation(
-        self,
-        fit_choice_history,
-        fit_reward_history,
-        fit_bounds_override: dict = {},
-        clamp_params: dict = {}, 
-        agent_kwargs: dict = {},
-        k_fold=10,
-        DE_pop_size=16,
-        DE_workers=1,
-        if_verbose=True,
-    ):
-        """K-fold cross-validation of MLE fitting.
-        """
+        # --- Post-processing ---
+        fitting_result.fit_settings = dict(
+            fit_choice_history=fit_choice_history,
+            fit_reward_history=fit_reward_history,
+            fit_names=fit_names,
+            lower_bounds=lower_bounds,
+            upper_bounds=upper_bounds,
+            clamp_params=clamp_params,
+            agent_kwargs=agent_kwargs,
+        )
+        # Full parameter set
+        params = dict(zip(fit_names, fitting_result.x))
+        params.update(clamp_params)
+        fitting_result.params = params
+        fitting_result.k_model = len(fit_names)
+        fitting_result.n_trials = len(fit_choice_history)
+        fitting_result.log_likelihood = -fitting_result.fun
 
-        # -- Shuffle the trial numbers --
-        n_trials = len(fit_choice_history)
-        trial_numbers_shuffled = np.arange(n_trials)
-        self.rng.shuffle(trial_numbers_shuffled)
+        fitting_result.AIC = -2 * fitting_result.log_likelihood + 2 * fitting_result.k_model
+        fitting_result.BIC = -2 * fitting_result.log_likelihood + fitting_result.k_model * np.log(
+            fitting_result.n_trials
+        )
 
-        prediction_accuracy_test = []
-        prediction_accuracy_fit = []
-        prediction_accuracy_test_bias_only = []
-
-        for kk in range(k_fold):
-            # -- Split the data --
-            test_idx_begin = int(kk * np.floor(n_trials / k_fold))
-            test_idx_end = int((n_trials) if (kk == k_fold - 1) else (kk + 1) * np.floor(n_trials / k_fold))
-            test_set_this = trial_numbers_shuffled[test_idx_begin:test_idx_end]
-            fit_set_this = np.hstack(
-                (trial_numbers_shuffled[:test_idx_begin], trial_numbers_shuffled[test_idx_end:])
-            )
-
-            # -- Fit data using fit_set_this --
-            if if_verbose:
-                print("%g/%g..." % (kk + 1, k_fold), end="")
-
-            fitting_result = optimize.differential_evolution(
-                func=negLL_func,
-                args=(
-                    forager,
-                    fit_names,
-                    choice_history,
-                    reward_history,
-                    iti,
-                    session_num,
-                    {},
-                    fit_set_this,
-                ),
-                bounds=optimize.Bounds(fit_bounds[0], fit_bounds[1]),
-                mutation=(0.5, 1),
-                recombination=0.7,
-                popsize=DE_pop_size,
-                strategy="best1bin",
-                disp=False,
-                workers=(
-                    1 if pool == "" else int(mp.cpu_count())
-                ),  # For DE, use pool to control if_parallel, although we don't use pool for DE
-                updating="immediate" if pool == "" else "deferred",
-                callback=None,
-            )
-
-            # == Rerun predictive choice sequence and get the prediction accuracy of the test_set_this ==
-            kwargs_all = {}
-            for nn, vv in zip(fit_names, fitting_result.x):  # Use the fitted data
-                kwargs_all = {**kwargs_all, nn: vv}
-
-            # Handle data from different sessions
-            if session_num is None:
-                session_num = np.zeros_like(choice_history)[0]  # Regard as one session
-
-            unique_session = np.unique(session_num)
-            predictive_choice_prob = []
-            fitting_result.trial_numbers = []
-
-            # -- For each session --
-            for ss in unique_session:
-                # Data in this session
-                choice_this = choice_history[:, session_num == ss]
-                reward_this = reward_history[:, session_num == ss]
-
-                # Run PREDICTIVE simulation
-                bandit = BanditModel(
-                    forager=forager,
-                    **kwargs_all,
-                    fit_choice_history=choice_this,
-                    fit_reward_history=reward_this,
-                    fit_iti=iti,
-                )  # Into the fitting mode
-                bandit.simulate()
-                predictive_choice_prob.extend(
-                    bandit.predictive_choice_prob[:, :-1]
-                )  # Exclude the final update after the last trial
-
-            # Get prediction accuracy of the test_set and fitting_set
-            predictive_choice_prob = np.array(predictive_choice_prob)
-            predictive_choice = np.argmax(predictive_choice_prob, axis=0)
-            prediction_correct = predictive_choice == choice_history[0]
-
-            # Also return cross-validated prediction_accuracy_bias (Maybe this is why Hattori's bias_only is low? -- Not exactly...)
-            if "biasL" in kwargs_all:
-                bias_this = kwargs_all["biasL"]
-                prediction_correct_bias_only = (
-                    int(bias_this <= 0) == choice_history[0]
-                )  # If bias_this < 0, bias predicts all rightward choices
-                prediction_accuracy_test_bias_only.append(
-                    sum(prediction_correct_bias_only[test_set_this]) / len(test_set_this)
-                )
-
-            prediction_accuracy_test.append(sum(prediction_correct[test_set_this]) / len(test_set_this))
-            prediction_accuracy_fit.append(sum(prediction_correct[fit_set_this]) / len(fit_set_this))
-
-        return prediction_accuracy_test, prediction_accuracy_fit, prediction_accuracy_test_bias_only
+        # Likelihood-Per-Trial. See Wilson 2019 (but their formula was wrong...)
+        fitting_result.LPT = np.exp(
+            fitting_result.log_likelihood / fitting_result.n_trials
+        )  # Raw LPT without penality
+        fitting_result.LPT_AIC = np.exp(-fitting_result.AIC / 2 / fitting_result.n_trials)
+        fitting_result.LPT_BIC = np.exp(-fitting_result.BIC / 2 / fitting_result.n_trials)
+        
+        return fitting_result
 
     def set_params(self, params):
         """Update the model parameters and validate"""
@@ -621,7 +595,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         return fig, axes
 
 
-def negLL(choice_prob, fit_choice_history, fit_reward_history, fit_trial_set=[]):
+def negLL(choice_prob, fit_choice_history, fit_reward_history, fit_trial_set=None):
     """Compute total negLL of the trials in fit_trial_set given the data."""
     
     # Compute negative likelihood
@@ -637,7 +611,7 @@ def negLL(choice_prob, fit_choice_history, fit_reward_history, fit_trial_set=[])
     likelihood_each_trial[likelihood_each_trial > 1] = 1
 
     # Return total likelihoods
-    if fit_trial_set == []:   # Use all trials
+    if fit_trial_set is None:   # Use all trials
         return -np.sum(np.log(likelihood_each_trial))
     else:
         return -np.sum(np.log(likelihood_each_trial[fit_trial_set]))

@@ -54,6 +54,7 @@ class TestHattori(unittest.TestCase):
             fit_bounds_override={"softmax_inverse_temperature": [0, 100]},
             clamp_params={"biasL": 0},
             DE_kwargs=dict(workers=16),
+            k_fold_cross_validation=None,
         )
 
         fitting_result = forager.fitting_result

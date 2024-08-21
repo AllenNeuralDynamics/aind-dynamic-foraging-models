@@ -318,6 +318,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             args=(
                 fit_choice_history,
                 fit_reward_history,
+                [], # fit_trial_set (subset of trials to fit; if empty, use all trials)
                 fit_names,  # Pass names so that negLL_func_for_de knows which parameters to fit
                 clamp_params, # Clamped parameters
                 agent_kwargs  # Other kwargs to pass to the model
@@ -379,17 +380,20 @@ class forager_Hattori2019(DynamicForagingAgentBase):
     @classmethod
     def negLL_func_for_de(
         cls,
-        current_values, # the current fitting values of params in fit_names
-        *args
+        current_values, # the current fitting values of params in fit_names (passed by DE)
+        fit_choice_history,
+        fit_reward_history,
+        fit_trial_set,
+        fit_names,
+        clamp_params,
+        agent_kwargs,
     ):
-        """ The core function that interacts with optimize.differential_evolution(). 
-        For given params, run simulation using clamped history and 
+        """The core function that interacts with optimize.differential_evolution().
+        For given params, run simulation using clamped history and
         return negative log likelihood.
-        
+
         Note that this is a class method.
         """
-        # This is the only way to pass multiple arguments to differential_evolution...
-        fit_choice_history, fit_reward_history, fit_names, clamp_params, agent_kwargs = args
 
         # -- Parse params and initialize a new agent --
         params = dict(zip(fit_names, current_values))  # Current fitting values
@@ -401,8 +405,126 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         agent.predictive_perform(fit_choice_history, fit_reward_history)
 
         # Note that, again, we have an extra update after the last trial, which is not used for fitting
-        choice_prob = agent.choice_prob[:, :-1] 
-        return negLL(choice_prob, fit_choice_history, fit_reward_history)
+        choice_prob = agent.choice_prob[:, :-1]
+
+        return negLL(
+            choice_prob, fit_choice_history, fit_reward_history, fit_trial_set
+        )  # Return total negative log likelihood of the fit_trial_set
+
+    def fit_cross_validation(
+        self,
+        fit_choice_history,
+        fit_reward_history,
+        fit_bounds_override: dict = {},
+        clamp_params: dict = {}, 
+        agent_kwargs: dict = {},
+        k_fold=10,
+        DE_pop_size=16,
+        DE_workers=1,
+        if_verbose=True,
+    ):
+        """
+        k-fold cross-validation of MLE fitting.
+        """
+
+        # -- Shuffle the trial numbers --
+        n_trials = len(fit_choice_history)
+        trial_numbers_shuffled = np.arange(n_trials)
+        self.rng.shuffle(trial_numbers_shuffled)
+
+        prediction_accuracy_test = []
+        prediction_accuracy_fit = []
+        prediction_accuracy_test_bias_only = []
+
+        for kk in range(k_fold):
+            # -- Split the data --
+            test_idx_begin = int(kk * np.floor(n_trials / k_fold))
+            test_idx_end = int((n_trials) if (kk == k_fold - 1) else (kk + 1) * np.floor(n_trials / k_fold))
+            test_set_this = trial_numbers_shuffled[test_idx_begin:test_idx_end]
+            fit_set_this = np.hstack(
+                (trial_numbers_shuffled[:test_idx_begin], trial_numbers_shuffled[test_idx_end:])
+            )
+
+            # -- Fit data using fit_set_this --
+            if if_verbose:
+                print("%g/%g..." % (kk + 1, k_fold), end="")
+
+            fitting_result = optimize.differential_evolution(
+                func=negLL_func,
+                args=(
+                    forager,
+                    fit_names,
+                    choice_history,
+                    reward_history,
+                    iti,
+                    session_num,
+                    {},
+                    fit_set_this,
+                ),
+                bounds=optimize.Bounds(fit_bounds[0], fit_bounds[1]),
+                mutation=(0.5, 1),
+                recombination=0.7,
+                popsize=DE_pop_size,
+                strategy="best1bin",
+                disp=False,
+                workers=(
+                    1 if pool == "" else int(mp.cpu_count())
+                ),  # For DE, use pool to control if_parallel, although we don't use pool for DE
+                updating="immediate" if pool == "" else "deferred",
+                callback=None,
+            )
+
+            # == Rerun predictive choice sequence and get the prediction accuracy of the test_set_this ==
+            kwargs_all = {}
+            for nn, vv in zip(fit_names, fitting_result.x):  # Use the fitted data
+                kwargs_all = {**kwargs_all, nn: vv}
+
+            # Handle data from different sessions
+            if session_num is None:
+                session_num = np.zeros_like(choice_history)[0]  # Regard as one session
+
+            unique_session = np.unique(session_num)
+            predictive_choice_prob = []
+            fitting_result.trial_numbers = []
+
+            # -- For each session --
+            for ss in unique_session:
+                # Data in this session
+                choice_this = choice_history[:, session_num == ss]
+                reward_this = reward_history[:, session_num == ss]
+
+                # Run PREDICTIVE simulation
+                bandit = BanditModel(
+                    forager=forager,
+                    **kwargs_all,
+                    fit_choice_history=choice_this,
+                    fit_reward_history=reward_this,
+                    fit_iti=iti,
+                )  # Into the fitting mode
+                bandit.simulate()
+                predictive_choice_prob.extend(
+                    bandit.predictive_choice_prob[:, :-1]
+                )  # Exclude the final update after the last trial
+
+            # Get prediction accuracy of the test_set and fitting_set
+            predictive_choice_prob = np.array(predictive_choice_prob)
+            predictive_choice = np.argmax(predictive_choice_prob, axis=0)
+            prediction_correct = predictive_choice == choice_history[0]
+
+            # Also return cross-validated prediction_accuracy_bias (Maybe this is why Hattori's bias_only is low? -- Not exactly...)
+            if "biasL" in kwargs_all:
+                bias_this = kwargs_all["biasL"]
+                prediction_correct_bias_only = (
+                    int(bias_this <= 0) == choice_history[0]
+                )  # If bias_this < 0, bias predicts all rightward choices
+                prediction_accuracy_test_bias_only.append(
+                    sum(prediction_correct_bias_only[test_set_this]) / len(test_set_this)
+                )
+
+            prediction_accuracy_test.append(sum(prediction_correct[test_set_this]) / len(test_set_this))
+            prediction_accuracy_fit.append(sum(prediction_correct[fit_set_this]) / len(fit_set_this))
+
+        return prediction_accuracy_test, prediction_accuracy_fit, prediction_accuracy_test_bias_only
 
     def set_params(self, params):
         """Update the model parameters and validate"""
@@ -421,14 +543,14 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             p_reward=self.task.get_p_reward(),
         )
         # Add Q value
-        axes[0].plot(self.q_estimation[L, :], label="Q_left", color='red', lw=0.5) 
-        axes[0].plot(self.q_estimation[R, :], label="R_left", color='blue', lw=0.5) 
+        axes[0].plot(self.q_estimation[L, :], label="Q_left", color="red", lw=0.5)
+        axes[0].plot(self.q_estimation[R, :], label="R_left", color="blue", lw=0.5)
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=3)
         return fig, axes
 
     def plot_fitted_session(self):
         """Plot session after .fit()
-        
+
         1. choice and reward history will be the history used for fitting
         2. laten variables q_estimate and choice_prob will be plotted
         3. p_reward will be missing (since it is not used for fitting)
@@ -448,7 +570,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         fig, axes = plot_foraging_session(
             choice_history=fit_choice_history,
             reward_history=fit_reward_history,
-            p_reward=np.full((2, len(fit_choice_history)), np.nan) # Dummy p_reward
+            p_reward=np.full((2, len(fit_choice_history)), np.nan),  # Dummy p_reward
         )
 
         # -- Plot fitted Q values
@@ -468,24 +590,23 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         return fig, axes
 
 
-def negLL(choice_prob, fit_choice_history, fit_reward_history):
-    likelihood_all_trial = []
-
+def negLL(choice_prob, fit_choice_history, fit_reward_history, fit_trial_set=[]):
+    """Compute total negLL of the trials in fit_trial_set given the data."""
+    
     # Compute negative likelihood
     likelihood_each_trial = choice_prob[
         fit_choice_history.astype(int), range(len(fit_choice_history))
     ]  # Get the actual likelihood for each trial
 
     # TODO: check this!
-    # Deal with numerical precision
+    # Deal with numerical precision (in rare cases, likelihood can be < 0 or > 1)
     likelihood_each_trial[(likelihood_each_trial <= 0) & (likelihood_each_trial > -1e-5)] = (
         1e-16  # To avoid infinity, which makes the number of zero likelihoods informative!
     )
     likelihood_each_trial[likelihood_each_trial > 1] = 1
 
-    # Cache likelihoods
-    likelihood_all_trial.extend(likelihood_each_trial)
-    likelihood_all_trial = np.array(likelihood_all_trial)
-    negLL = -sum(np.log(likelihood_all_trial))
-
-    return negLL
+    # Return total likelihoods
+    if fit_trial_set == []:   # Use all trials
+        return -np.sum(np.log(likelihood_each_trial))
+    else:
+        return -np.sum(np.log(likelihood_each_trial[fit_trial_set]))

@@ -1,22 +1,22 @@
 """Testing logistic regression model"""
 
+import os
 import unittest
 import zipfile
-import os
 from io import BytesIO
-import requests
-
-from pynwb import NWBFile, TimeSeries, NWBHDF5IO
 
 import numpy as np
-from aind_dynamic_foraging_models.logistic_regression import (
-    fit_logistic_regression,
-    MODEL_MAPPER,
-    plot_logistic_regression,
-    exp_func,
-    COLOR_MAPPER,
-)
+import requests
 from aind_dynamic_foraging_basic_analysis import plot_foraging_session
+from pynwb import NWBHDF5IO, NWBFile, TimeSeries
+
+from aind_dynamic_foraging_models.logistic_regression import (
+    COLOR_MAPPER,
+    MODEL_MAPPER,
+    exp_func,
+    fit_logistic_regression,
+    plot_logistic_regression,
+)
 
 
 # Start a new test case
@@ -76,19 +76,31 @@ class TestLogistic(unittest.TestCase):
             n_bootstrap_iters=1000,
             n_bootstrap_samplesize=None,
         )
-        
+
         # -- Check the result --
-        df_beta = dict_logistic_result['df_beta']
-        
+        df_beta = dict_logistic_result["df_beta"]
+
         np.testing.assert_almost_equal(
             df_beta.cross_validation[:10].to_numpy(),
-            np.array([-0.14618642,  0.06559765,  0.13649798, -0.10842585,  0.28067104,
-                       0.29741248, -0.04829112,  0.0008956 ,  0.21110653,  0.1979053 ]),
+            np.array(
+                [
+                    -0.14618642,
+                    0.06559765,
+                    0.13649798,
+                    -0.10842585,
+                    0.28067104,
+                    0.29741248,
+                    -0.04829112,
+                    0.0008956,
+                    0.21110653,
+                    0.1979053,
+                ]
+            ),
             decimal=3,
         )
         np.testing.assert_almost_equal(
-            dict_logistic_result['df_beta_exp_fit'].iloc[0, :].to_numpy(),
-            np.array([1.29269355, 0.32109687, 2.6384484 , 0.75849041]),
+            dict_logistic_result["df_beta_exp_fit"].iloc[0, :].to_numpy(),
+            np.array([1.29269355, 0.32109687, 2.6384484, 0.75849041]),
             decimal=3,
         )
 
@@ -96,7 +108,7 @@ class TestLogistic(unittest.TestCase):
         ax = plot_logistic_regression(dict_logistic_result)
         ax.get_figure().savefig("tests/results/test_logistic_regression.png")
         self.assertIsNotNone(ax)
-        
-        
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

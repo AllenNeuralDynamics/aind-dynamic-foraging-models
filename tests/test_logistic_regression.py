@@ -22,7 +22,7 @@ class TestLogistic(unittest.TestCase):
         """Set up the test case by downloading an example NWB file and extracting the data."""
         url = "https://github.com/user-attachments/files/16698772/example_nwb_1.zip"
         nwb_name = "703548_2024-03-20_10-47-42.nwb"
-        example_data_path = "~/example_data/"
+        example_data_path = "data/"
         zip_path = example_data_path + "example_nwb_1.zip"
         extract_path = example_data_path + "example_nwb_1/"
 

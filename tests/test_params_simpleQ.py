@@ -29,11 +29,11 @@ class TestParamsSimpleQ(unittest.TestCase):
         ParamsModel, FittingBoundsModel = generate_pydantic_q_learning_params(
             number_of_learning_rate=1,
             number_of_forget_rate=1,
-            choice_kernel="onestep",
+            choice_kernel="one_step",
             action_selection="softmax",
         )
         expected_fields = ["learn_rate", "forget_rate_unchosen", 
-                           "choice_step_size", "choice_softmax_inverse_temperature",
+                           "choice_step_size", "choice_kernel_relative_weight",
                            "softmax_inverse_temperature", "biasL"]
         
         self.check_fields(ParamsModel, FittingBoundsModel, expected_fields)

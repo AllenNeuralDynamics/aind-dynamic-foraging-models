@@ -8,7 +8,7 @@ from typing import Type, Optional, Dict, Any, Literal, List, Tuple
 def generate_pydantic_q_learning_params(
     number_of_learning_rate: Literal[1, 2] = 2,
     number_of_forget_rate: Literal[0, 1] = 1,
-    choice_kernel: Literal["none", "onestep", "full"] = "none",
+    choice_kernel: Literal["none", "one_step", "full"] = "none",
     action_selection: Literal["softmax", "epsilon-greedy"] = "softmax",
 ) -> Tuple[Type[BaseModel], Type[BaseModel]]:
     """Dynamically generate Pydantic models for Q-learning agent parameters.
@@ -26,12 +26,12 @@ def generate_pydantic_q_learning_params(
         Number of forget_rates, by default 1.
         If 0, forget_rate_unchosen will not be included in the model.
         If 1, forget_rate_unchosen will be included in the model.
-    choice_kernel : Literal["none", "onestep", "full"], optional
+    choice_kernel : Literal["none", "one_step", "full"], optional
         Choice kernel type, by default "none"
         If "none", no choice kernel will be included in the model.
-        If "onestep", choice_step_size will be set to 1.0, i.e., only the previous choice
+        If "one_step", choice_step_size will be set to 1.0, i.e., only the previous choice
             affects the choice kernel. (Bari2019)
-        If "full", both choice_step_size and choice_softmax_inverse_temperature will be included
+        If "full", both choice_step_size and choice_kernel_relative_weight will be included
     action_selection : Literal["softmax", "epsilon-greedy"], optional
         Action selection type, by default "softmax"
     """
@@ -71,17 +71,17 @@ def generate_pydantic_q_learning_params(
 
     # -- Handle choice kernel fields --
     assert (
-        choice_kernel in ["none", "onestep", "full"], 
-        "choice_kernel must be 'none', 'onestep', or 'full'"
+        choice_kernel in ["none", "one_step", "full"], 
+        "choice_kernel must be 'none', 'one_step', or 'full'"
         )
     if choice_kernel == "none":
         pass
     else:
-        params["choice_softmax_inverse_temperature"] = (
+        params["choice_kernel_relative_weight"] = (
             float,
             Field(default=10, ge=0.0, description="Softmax temperature for choice kernel"),
         )
-        fitting_bounds["choice_softmax_inverse_temperature"] = (0.0, 100.0)
+        fitting_bounds["choice_kernel_relative_weight"] = (0.0, 100.0)
         
         if choice_kernel == "full":
             params["choice_step_size"] = (
@@ -89,7 +89,7 @@ def generate_pydantic_q_learning_params(
                 Field(default=0.1, ge=0.0, le=1.0, description="Step size for choice kernel"),
             )
             fitting_bounds["choice_step_size"] = (0.0, 1.0)
-        elif choice_kernel == "onestep":
+        elif choice_kernel == "one_step":
             # If choice kernel is one-step (only the previous choice affects the choice kernel like
             # in Bari2019), set choice_step_size to 1.0
             params["choice_step_size"] = (

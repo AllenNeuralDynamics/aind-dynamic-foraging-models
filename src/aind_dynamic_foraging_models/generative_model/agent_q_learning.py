@@ -14,7 +14,7 @@ from aind_dynamic_foraging_basic_analysis import plot_foraging_session
 from pydantic import BaseModel, Field, model_validator
 
 from .act_functions import act_softmax
-from .learn_functions import learn_RWlike
+from .learn_functions import learn_RWlike, learn_choice_kernel
 from .agent_q_learning_params import generate_pydantic_q_learning_params
 
 logger = logging.getLogger(__name__)
@@ -35,14 +35,13 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
         self,
         number_of_learning_rate: Literal[1, 2],
         number_of_forget_rate: Literal[0, 1],
-        choice_kernel: Literal["none", "onestep", "full"],
+        choice_kernel: Literal["none", "one_step", "full"],
         action_selection: Literal["softmax", "epsilon-greedy"],
         params: dict = {},
         **kwargs,
     ):
         """Init"""
-
-        super().__init__(**kwargs)
+        super().__init__(**kwargs)  # Set self.rng etc.
 
         # Dynamically generate Pydantic models for parameters and fitting bounds
         self.ParamModel, self.ParamFitBoundModel = generate_pydantic_q_learning_params(
@@ -84,8 +83,8 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
         self.choice_prob = np.full([self.n_actions, self.n_trials + 1], np.nan)
         self.choice_prob[:, 0] = 1 / self.n_actions  # To be strict (actually no use)
 
-        if self.fit_choice_kernel:
-            self.choice_kernel = np.zeros([self.n_actions, self.n_trials + 1])
+        # Always initialize choice_kernel with nan, even if choice_kernel = "none"
+        self.choice_kernel = np.full([self.n_actions, self.n_trials + 1], np.nan)
 
         # Choice and reward history have n_trials length
         self.choice_history = np.full(self.n_trials, fill_value=-1, dtype=int)  # Choice history
@@ -169,31 +168,61 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
 
     def act(self, _):
         """Action selection"""
-        choice, choice_prob = act_softmax(
-            q_estimation_t=self.q_estimation[:, self.trial],
-            softmax_inverse_temperature=self.params.softmax_inverse_temperature,
-            bias_terms=np.array([self.params.biasL, 0]),
-            choice_softmax_inverse_temperature=None,
-            choice_kernel=None,
-            rng=self.rng,
-        )
+        
+        if self.agent_kwargs["action_selection"] == "softmax":
+            # Handle choice kernel
+            if self.agent_kwargs['choice_kernel'] == "none":
+                choice_kernel = None
+                choice_kernel_relative_weight = None
+            else:
+                choice_kernel = self.choice_kernel[:, self.trial - 1]
+                choice_kernel_relative_weight = self.params.choice_kernel_relative_weight
+            
+            choice, choice_prob = act_softmax(
+                q_estimation_t=self.q_estimation[:, self.trial],
+                softmax_inverse_temperature=self.params.softmax_inverse_temperature,
+                bias_terms=np.array([self.params.biasL, 0]),
+                # -- Choice kernel --
+                choice_kernel=choice_kernel,
+                choice_kernel_relative_weight=choice_kernel_relative_weight,
+                rng=self.rng,
+            )
+        elif self.agent_kwargs["action_selection"] == "epsilon-greedy":
+            raise NotImplementedError("Epsilon-greedy is not implemented yet.")
+            
         return choice, choice_prob
 
     def learn(self, _observation, choice, reward, _next_observation, done):
         """Update Q values"""
+        
+        # Handle params
+        if self.agent_kwargs["number_of_learning_rate"] == 1:
+            learn_rates = [self.params.learn_rate] * 2
+        else:
+            learn_rates = [self.params.learn_rate_rew, self.params.learn_rate_unrew]
+            
+        if self.agent_kwargs["number_of_forget_rate"] == 0:
+            forget_rates = [0, 0]
+        else:
+            forget_rates = [self.params.forget_rate_unchosen, 0]
+        
         # Update Q values
         self.q_estimation[:, self.trial] = learn_RWlike(
-            **{
-                "choice": choice,
-                "reward": reward,
-                "q_estimation_tminus1": self.q_estimation[:, self.trial - 1],
-                "learn_rates": [self.params.learn_rate_rew, self.params.learn_rate_unrew],
-                "forget_rates": [self.params.forget_rate_unchosen, 0],  # 0: unchosen, 1: chosen
-            }
+            choice=choice,
+            reward=reward,
+            q_estimation_tminus1=self.q_estimation[:, self.trial - 1],
+            learn_rates=learn_rates,
+            forget_rates=forget_rates,
         )
-        if self.fit_choice_kernel and (self.trial < self.n_trials):
-            self.step_choice_kernel(choice)
-
+        
+        # Update choice kernel
+        if self.agent_kwargs['choice_kernel'] != "none":
+            self.choice_kernel[:, self.trial] = learn_choice_kernel(
+                choice=choice,
+                choice_kernel_tminus1=self.choice_kernel[:, self.trial - 1],
+                choice_step_size=self.params.choice_step_size,
+            )
+            
     def get_choice_history(self):
         """Return the history of actions in format that is compatible with other library such as
         aind_dynamic_foraging_basic_analysis
@@ -525,8 +554,14 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
             p_reward=self.task.get_p_reward(),
         )
         # Add Q value
-        axes[0].plot(self.q_estimation[L, :], label="Q_left", color="red", lw=0.5)
-        axes[0].plot(self.q_estimation[R, :], label="R_left", color="blue", lw=0.5)
+        axes[0].plot(self.q_estimation[L, :], label="Q(L)", color="red", lw=0.5)
+        axes[0].plot(self.q_estimation[R, :], label="Q(R)", color="blue", lw=0.5)
+        
+        # Add choice kernel, if used
+        if self.agent_kwargs['choice_kernel'] != "none":
+            axes[0].plot(self.choice_kernel[L, :], label="choice_kernel(L)", color="purple", lw=0.5)
+            axes[0].plot(self.choice_kernel[R, :], label="choice_kernel(R)", color="cyan", lw=0.5)
+        
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=3)
         return fig, axes
 

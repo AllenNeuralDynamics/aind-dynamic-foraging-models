@@ -4,7 +4,7 @@
 import logging
 
 # %%
-from typing import Optional
+from typing import Optional, Literal
 
 import numpy as np
 import scipy.optimize as optimize
@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from .act_functions import act_softmax
 from .learn_functions import learn_RWlike
+from .agent_q_learning_params import generate_pydantic_q_learning_params
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -25,69 +26,17 @@ console_handler.setFormatter(
 logger.addHandler(console_handler)
 
 
-class forager_simpleQ(DynamicForagingAgentBase):
+class ForagerSimpleQ(DynamicForagingAgentBase):
     """
-    Base class for maximum likelihood estimation.
+    Base class for the familiy of simple Q-learning models.
     """
-
-    class Param(BaseModel):
-        """Parameters for the model and their default values.
-        After overriden in subclasses, calling ClassName.Param() returns default parameters.
-        """
-
-        # For example:
-        # param1: float = Field(default=0.5, ge=0.0, le=2.0, description="Parameter 1")
-        # param2: float = Field(default=0.2, ge=0.0, description="Parameter 2")
-        # raise NotImplementedError("Params class must be defined in subclasses")
-
-        learn_rate_rew: float = Field(
-            default=0.5, ge=0.0, le=1.0, description="Learning rate for rewarded choice"
-        )
-        learn_rate_unrew: float = Field(
-            default=0.1, ge=0.0, le=1.0, description="Learning rate for unrewarded choice"
-        )
-        forget_rate: float = Field(
-            default=0.2, ge=0.0, le=1.0, description="Forgetting rate for unchosen options"
-        )
-        softmax_inverse_temperature: float = Field(
-            default=10, ge=0.0, description="Softmax temperature"
-        )
-        biasL: float = Field(default=0.0, description="Bias term for softmax")
-
-        class Config:
-            extra = "forbid"  # This forbids extra fields
-
-    class ParamFitBounds(BaseModel):
-        """Bounds for fitting parameters.
-        After overriden in subclasses, calling ClassName.ParamFitBounds() returns default bounds.
-        """
-
-        # For example:
-        # param1: list = Field(default=[0.0, 1.0], description="Bounds for param1")
-        # param2: list = Field(default=[0.0, 1.0], description="Bounds for param2")
-        # raise NotImplementedError("ParamFitBounds class must be defined in subclasses")
-        learn_rate_rew: list = Field(default=[0.0, 1.0])
-        learn_rate_unrew: list = Field(default=[0.0, 1.0])
-        forget_rate: list = Field(default=[0.0, 1.0])
-        softmax_inverse_temperature: list = Field(default=[0.0, 100.0])
-        biasL: list = Field(default=[-5.0, 5.0])
-
-        @model_validator(mode="after")
-        def check_all_params(cls, values):
-            for key, value in values.__dict__.items():
-                if not isinstance(value, list):
-                    raise ValueError(f'Value of "{key}" must be a list')
-                if len(value) != 2:
-                    raise ValueError(f'List "{key}" must have exactly 2 elements')
-                if value[1] < value[0]:
-                    raise ValueError(f'Upper bound of "{key}" must be greater than the lower bound')
-            return values
-
-        class Config:
-            extra = "forbid"  # This forbids extra fields
 
     def __init__(
         self,
+        number_of_learning_rate: Literal[1, 2] = 2,
+        number_of_forget_rate: Literal[0, 1] = 1,
+        choice_kernel: Literal["none", "onestep", "full"] = "none",
+        action_selection: Literal["softmax", "epsilon-greedy"] = "softmax",
         params: dict = {},
         **kwargs,
     ):
@@ -95,8 +44,22 @@ class forager_simpleQ(DynamicForagingAgentBase):
 
         super().__init__(**kwargs)
 
+        # Dynamically generate Pydantic models for parameters and fitting bounds
+        self.ParamModel, self.ParamFitBoundModel = generate_pydantic_q_learning_params(
+            number_of_learning_rate=number_of_learning_rate,
+            number_of_forget_rate=number_of_forget_rate,
+            choice_kernel=choice_kernel,
+            action_selection=action_selection,
+        )
+        self.agent_kwargs = dict(
+            number_of_learning_rate=number_of_learning_rate,
+            number_of_forget_rate=number_of_forget_rate,
+            choice_kernel=choice_kernel,
+            action_selection=action_selection,
+        )  # Note that the class and self.agent_kwargs fully define the agent
+
         # Set and validate the model parameters. Use default parameters if some are not provided
-        self.params = self.Param(**params)
+        self.params = self.ParamModel(**params)
 
         # Add model fitting related attributes
         self.fitting_result = None
@@ -136,7 +99,7 @@ class forager_simpleQ(DynamicForagingAgentBase):
 
     def get_params(self):
         """Get the model parameters in a dictionary format"""
-        return self.params.dict()
+        return self.params.model_dump()
 
     def perform(
         self,
@@ -225,7 +188,7 @@ class forager_simpleQ(DynamicForagingAgentBase):
                 "reward": reward,
                 "q_estimation_tminus1": self.q_estimation[:, self.trial - 1],
                 "learn_rates": [self.params.learn_rate_rew, self.params.learn_rate_unrew],
-                "forget_rates": [self.params.forget_rate, 0],  # 0: unchosen, 1: chosen
+                "forget_rates": [self.params.forget_rate_unchosen, 0],  # 0: unchosen, 1: chosen
             }
         )
         if self.fit_choice_kernel and (self.trial < self.n_trials):
@@ -266,7 +229,6 @@ class forager_simpleQ(DynamicForagingAgentBase):
         fit_bounds_override: dict = {},
         clamp_params: dict = {},
         k_fold_cross_validation: Optional[int] = None,
-        agent_kwargs: dict = {},
         DE_kwargs: dict = {"workers": 1},
     ):
         """Fit the model to the data using differential evolution.
@@ -293,8 +255,6 @@ class forager_simpleQ(DynamicForagingAgentBase):
             Whether to do cross-validation, by default None (no cross-validation).
             If k_fold_cross_validation > 1, it will do k-fold cross-validation and return the
             prediction accuracy of the test set for model comparison.
-        agent_kwargs : dict, optional
-            Other kwargs to pass to the model, by default {}
         DE_kwargs : dict, optional
             kwargs for differential_evolution, by default {'workers': 1}
             For example:
@@ -320,11 +280,11 @@ class forager_simpleQ(DynamicForagingAgentBase):
         # Ensure params_to_fit and clamp_params are not overlapping
         assert set(fit_bounds_override.keys()).isdisjoint(clamp_params.keys())
         # Validate clamp_params
-        assert self.Param(**clamp_params)
+        assert self.ParamModel(**clamp_params)
 
         # -- Get fit_names and fit_bounds --
         # Validate fit_bounds_override and fill in the missing bounds with default bounds
-        fit_bounds = self.ParamFitBounds(**fit_bounds_override).model_dump()
+        fit_bounds = self.ParamFitBoundModel(**fit_bounds_override).model_dump()
         # Remove clamped parameters from fit_bounds
         for name in clamp_params.keys():
             fit_bounds.pop(name)
@@ -334,8 +294,8 @@ class forager_simpleQ(DynamicForagingAgentBase):
         lower_bounds = [fit_bounds[name][0] for name in fit_names]
         upper_bounds = [fit_bounds[name][1] for name in fit_names]
         # Validate bounds themselves are valid parameters
-        assert self.Param(**dict(zip(fit_names, lower_bounds)))
-        assert self.Param(**dict(zip(fit_names, upper_bounds)))
+        assert self.ParamModel(**dict(zip(fit_names, lower_bounds)))
+        assert self.ParamModel(**dict(zip(fit_names, upper_bounds)))
 
         # # ===== Fit using the whole dataset ======
         logger.info("Fitting the model using the whole dataset...")
@@ -345,9 +305,9 @@ class forager_simpleQ(DynamicForagingAgentBase):
             fit_names=fit_names,
             lower_bounds=lower_bounds,
             upper_bounds=upper_bounds,
-            fit_trial_set=None,  # None means use all trials to fit
             clamp_params=clamp_params,
-            agent_kwargs=agent_kwargs,
+            fit_trial_set=None,  # None means use all trials to fit
+            agent_kwargs=self.agent_kwargs, # the class AND agent_kwargs fully define the agent
             DE_kwargs=DE_kwargs,
         )
 
@@ -396,21 +356,21 @@ class forager_simpleQ(DynamicForagingAgentBase):
 
             # -- Fit data using fit_set_this --
             fitting_result_this_fold = self.__class__._optimize_DE(
+                agent_kwargs=self.agent_kwargs,  # the class AND agent_kwargs fully define the agent
                 fit_choice_history=fit_choice_history,
                 fit_reward_history=fit_reward_history,
                 fit_names=fit_names,
                 lower_bounds=lower_bounds,
                 upper_bounds=upper_bounds,
-                fit_trial_set=fit_set_this,
                 clamp_params=clamp_params,
-                agent_kwargs=agent_kwargs,
+                fit_trial_set=fit_set_this,
                 DE_kwargs=DE_kwargs,
             )
             fitting_results_all_folds.append(fitting_result_this_fold)
 
             # -- Compute the prediction accuracy of testing set --
             # Run PREDICTIVE simulation using temp_agent with the fitted parms of this fold
-            tmp_agent = self.__class__(fitting_result_this_fold.params, **agent_kwargs)
+            tmp_agent = self.__class__(params=fitting_result_this_fold.params, **self.agent_kwargs)
             tmp_agent.predictive_perform(fit_choice_history, fit_reward_history)
 
             # Compute prediction accuracy
@@ -449,12 +409,13 @@ class forager_simpleQ(DynamicForagingAgentBase):
     def negLL_func_wrapper_for_de(
         cls,
         current_values,  # the current fitting values of params in fit_names (passed by DE)
+        # ---- Below are the arguments passed by args. The order must be the same! ----
+        agent_kwargs,
         fit_choice_history,
         fit_reward_history,
         fit_trial_set,
         fit_names,
         clamp_params,
-        agent_kwargs,
     ):
         """The core function that interacts with optimize.differential_evolution().
         For given params, run simulation using clamped history and
@@ -466,7 +427,7 @@ class forager_simpleQ(DynamicForagingAgentBase):
         # -- Parse params and initialize a new agent --
         params = dict(zip(fit_names, current_values))  # Current fitting values
         params.update(clamp_params)  # Add clamped params
-        agent = cls(params, **agent_kwargs)
+        agent = cls(params=params, **agent_kwargs)
 
         # -- Run **PREDICTIVE** simulation --
         # (clamp the history and do only one forward step on each trial)
@@ -483,14 +444,14 @@ class forager_simpleQ(DynamicForagingAgentBase):
     @classmethod
     def _optimize_DE(
         cls,
+        agent_kwargs,
         fit_choice_history,
         fit_reward_history,
         fit_names,
         lower_bounds,
         upper_bounds,
-        fit_trial_set,
         clamp_params,
-        agent_kwargs,
+        fit_trial_set,
         DE_kwargs,
     ):
         """A wrapper of DE fitting for the model. It returns fitting results."""
@@ -514,12 +475,12 @@ class forager_simpleQ(DynamicForagingAgentBase):
             func=cls.negLL_func_wrapper_for_de,
             bounds=optimize.Bounds(lower_bounds, upper_bounds),
             args=(
+                agent_kwargs,  # Other kwargs to pass to the model
                 fit_choice_history,
                 fit_reward_history,
                 fit_trial_set,  # subset of trials to fit; if empty, use all trials)
                 fit_names,  # Pass names so that negLL_func_for_de knows which parameters to fit
                 clamp_params,  # Clamped parameters
-                agent_kwargs,  # Other kwargs to pass to the model
             ),
             **kwargs,
         )

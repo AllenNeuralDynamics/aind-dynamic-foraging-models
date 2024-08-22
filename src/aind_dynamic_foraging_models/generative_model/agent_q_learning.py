@@ -33,10 +33,10 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
 
     def __init__(
         self,
-        number_of_learning_rate: Literal[1, 2] = 2,
-        number_of_forget_rate: Literal[0, 1] = 1,
-        choice_kernel: Literal["none", "onestep", "full"] = "none",
-        action_selection: Literal["softmax", "epsilon-greedy"] = "softmax",
+        number_of_learning_rate: Literal[1, 2],
+        number_of_forget_rate: Literal[0, 1],
+        choice_kernel: Literal["none", "onestep", "full"],
+        action_selection: Literal["softmax", "epsilon-greedy"],
         params: dict = {},
         **kwargs,
     ):

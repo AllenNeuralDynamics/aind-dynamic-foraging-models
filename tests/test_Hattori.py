@@ -54,7 +54,12 @@ class TestSimpleQ(unittest.TestCase):
         np.testing.assert_array_almost_equal(forager.choice_prob, ground_truth_choice_prob)
 
         # --    2.2 model fitting with cross-validation --
-        forager = ForagerSimpleQ()  # To fit a model, just create a new forager
+        forager = ForagerSimpleQ(
+            number_of_learning_rate=2,
+            number_of_forget_rate=1,
+            choice_kernel="none",
+            action_selection="softmax",
+        )  # To fit a model, just create a new forager
         forager.fit(
             choice_history,
             reward_history,

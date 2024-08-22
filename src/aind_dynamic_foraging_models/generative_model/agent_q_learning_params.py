@@ -79,9 +79,9 @@ def generate_pydantic_q_learning_params(
     else:
         params["choice_kernel_relative_weight"] = (
             float,
-            Field(default=10, ge=0.0, description="Softmax temperature for choice kernel"),
+            Field(default=0.5, ge=0.0, description="Softmax temperature for choice kernel"),
         )
-        fitting_bounds["choice_kernel_relative_weight"] = (0.0, 100.0)
+        fitting_bounds["choice_kernel_relative_weight"] = (0.0, 5.0)
         
         if choice_kernel == "full":
             params["choice_step_size"] = (

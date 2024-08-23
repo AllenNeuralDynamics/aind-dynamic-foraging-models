@@ -93,10 +93,10 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
 
     def set_params(self, params):
         """Update the model parameters and validate"""
-        self.params = self.params.model_copy(update=params)
-        
-        # Note that model_copy(update=params) will NOT revalidate!
-        assert self.ParamModel.model_validate(self.params.model_dump())  # Revalidate
+        # This is safer than model_copy(update) because it will NOT validate the input params
+        _params = self.params.model_dump()
+        _params.update(params)
+        self.params = self.ParamModel(**_params)
         return self.get_params()
 
     def get_params(self):

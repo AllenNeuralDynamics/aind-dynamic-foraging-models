@@ -85,6 +85,7 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
 
         # Always initialize choice_kernel with nan, even if choice_kernel = "none"
         self.choice_kernel = np.full([self.n_actions, self.n_trials + 1], np.nan)
+        self.choice_kernel[:, 0] = 0  # Initial choice kernel as 0
 
         # Choice and reward history have n_trials length
         self.choice_history = np.full(self.n_trials, fill_value=-1, dtype=int)  # Choice history
@@ -556,14 +557,17 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
             reward_history=self.task.get_reward_history(),
             p_reward=self.task.get_p_reward(),
         )
+        
+        x = np.arange(self.n_trials + 1) + 1  # When plotting, we start from 1
+        
         # Add Q value
-        axes[0].plot(self.q_estimation[L, :], label="Q(L)", color="red", lw=0.5)
-        axes[0].plot(self.q_estimation[R, :], label="Q(R)", color="blue", lw=0.5)
+        axes[0].plot(x, self.q_estimation[L, :], label="Q(L)", color="red", lw=0.5)
+        axes[0].plot(x, self.q_estimation[R, :], label="Q(R)", color="blue", lw=0.5)
         
         # Add choice kernel, if used
         if self.agent_kwargs['choice_kernel'] != "none":
-            axes[0].plot(self.choice_kernel[L, :], label="choice_kernel(L)", color="purple", lw=0.5)
-            axes[0].plot(self.choice_kernel[R, :], label="choice_kernel(R)", color="cyan", lw=0.5)
+            axes[0].plot(x, self.choice_kernel[L, :], label="choice_kernel(L)", color="purple", lw=0.5)
+            axes[0].plot(x, self.choice_kernel[R, :], label="choice_kernel(R)", color="cyan", lw=0.5)
         
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=3)
         return fig, axes
@@ -594,11 +598,13 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
         )
 
         # -- Plot fitted Q values
-        axes[0].plot(self.q_estimation[0], lw=1, color="red", ls=":", label="fitted_Q(L)")
-        axes[0].plot(self.q_estimation[1], lw=1, color="blue", ls=":", label="fitted_Q(R)")
+        x = np.arange(self.n_trials + 1) + 1  # When plotting, we start from 1
+        axes[0].plot(x, self.q_estimation[0], lw=1, color="red", ls=":", label="fitted_Q(L)")
+        axes[0].plot(x, self.q_estimation[1], lw=1, color="blue", ls=":", label="fitted_Q(R)")
 
         # -- Plot fitted choice_prob
         axes[0].plot(
+            x,
             self.choice_prob[1] / self.choice_prob.sum(axis=0),
             lw=2,
             color="green",

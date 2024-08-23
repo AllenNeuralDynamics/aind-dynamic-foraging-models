@@ -71,7 +71,7 @@ class TestBari(unittest.TestCase):
         forager.fit(
             choice_history,
             reward_history,
-            DE_kwargs=dict(workers=mp.cpu_count(), disp=False, seed=42),
+            DE_kwargs=dict(workers=mp.cpu_count(), disp=False, seed=np.random.default_rng(42)),
             k_fold_cross_validation=2,
         )
 
@@ -131,7 +131,7 @@ class TestBari(unittest.TestCase):
         fig_fitting.savefig("tests/results/test_Bari_fitted.png")
 
         np.testing.assert_array_almost_equal(
-            fitting_result.x, [0.7816, 0.0, 0.0126, 1.0, -0.2547, 95.6083], decimal=2
+            fitting_result.x, [0.7810, 0.0000, 0.0127, 1.0000, -0.2543, 94.9749], decimal=2
         )
 
 

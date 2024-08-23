@@ -65,7 +65,7 @@ class TestHattori(unittest.TestCase):
             reward_history,
             fit_bounds_override={"softmax_inverse_temperature": [0, 100]},
             clamp_params={"biasL": 0},
-            DE_kwargs=dict(workers=mp.cpu_count(), disp=False, seed=42),
+            DE_kwargs=dict(workers=mp.cpu_count(), disp=False, seed=np.random.default_rng(42)),
             k_fold_cross_validation=2,
         )
 
@@ -104,7 +104,7 @@ class TestHattori(unittest.TestCase):
         fig_fitting.savefig("tests/results/test_Hattori_fitted.png")
 
         np.testing.assert_array_almost_equal(
-            fitting_result.x, [0.6033, 0.1988, 0.2559, 5.3600], decimal=2
+            fitting_result.x, [0.6033, 0.1988, 0.2559, 5.3599], decimal=2
         )
 
 

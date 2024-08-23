@@ -82,7 +82,7 @@ def generate_pydantic_q_learning_params(
             Field(default=0.5, ge=0.0, description="Softmax temperature for choice kernel"),
         )
         fitting_bounds["choice_kernel_relative_weight"] = (0.0, 5.0)
-        
+
         if choice_kernel == "full":
             params["choice_step_size"] = (
                 float,
@@ -115,17 +115,23 @@ def generate_pydantic_q_learning_params(
         )
         fitting_bounds["softmax_inverse_temperature"] = (0.0, 100.0)
     elif action_selection == "epsilon-greedy":
-        params['epsilon'] = (
+        params["epsilon"] = (
             float,
             Field(default=0.1, ge=0.0, le=1.0, description="Epsilon for epsilon-greedy"),
         )
-        fitting_bounds['epsilon'] = (0.0, 1.0)
+        fitting_bounds["epsilon"] = (0.0, 1.0)
     else:
         raise ValueError("action_selection must be 'softmax' or 'epsilon-greedy'")
 
     # ====== Dynamically create the pydantic models =====
-    params_model = create_model("ParamsModel", **params, 
-                                __config__=ConfigDict(extra="forbid"))
+    params_model = create_model(
+        "ParamsModel",
+        **params,
+        __config__=ConfigDict(
+            extra="forbid",
+            validate_assignment=True,
+        ),
+    )
 
     # Create the fitting bounds model
     fitting_bounds_fields = {}
@@ -152,7 +158,10 @@ def generate_pydantic_q_learning_params(
         "FittingBoundsModel",
         **fitting_bounds_fields,
         __validators__={"validate_bounds": model_validator(mode="after")(validate_bounds)},
-        __config__=ConfigDict(extra="forbid"),
+        __config__=ConfigDict(
+            extra="forbid",
+            validate_assignment=True,
+        ),
     )
 
     return params_model, fitting_bounds_model

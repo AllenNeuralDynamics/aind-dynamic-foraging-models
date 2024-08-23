@@ -1,4 +1,4 @@
-"""Testing SimpleQ model"""
+"""Testing Hattori2019 model"""
 
 import multiprocessing as mp
 import unittest
@@ -10,8 +10,8 @@ from aind_dynamic_foraging_models.generative_model.agent_q_learning import Forag
 
 
 # Start a new test case
-class TestSimpleQ(unittest.TestCase):
-    """Testing SimpleQ model"""
+class TestHattori(unittest.TestCase):
+    """Testing Hattori model"""
 
     def test_Hattori(self):
         """Test Hattori model"""

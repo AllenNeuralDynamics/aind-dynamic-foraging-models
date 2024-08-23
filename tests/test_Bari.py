@@ -137,9 +137,9 @@ class TestBari(unittest.TestCase):
             np.testing.assert_array_almost_equal(
                 fitting_result.x, [0.7810, 0.0000, 0.0127, 1.0000, -0.2543, 94.9749], decimal=2
             )
-            print('Fitting result tested')
+            print("Fitting result tested")
         else:
-            print('Not python 3.9. Fitting result not tested')
+            print("Not python 3.9. Fitting result not tested")
 
 
 if __name__ == "__main__":

@@ -327,8 +327,15 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
         lower_bounds = [fit_bounds[name][0] for name in fit_names]
         upper_bounds = [fit_bounds[name][1] for name in fit_names]
         # Validate bounds themselves are valid parameters
-        assert self.ParamModel(**dict(zip(fit_names, lower_bounds)))
-        assert self.ParamModel(**dict(zip(fit_names, upper_bounds)))
+        try:
+            self.ParamModel(**dict(zip(fit_names, lower_bounds)))
+            self.ParamModel(**dict(zip(fit_names, upper_bounds)))
+        except ValueError as e:
+            raise ValueError(
+                f"Invalid bounds for {e}.\n"
+                f"Bounds must be within the [ge, le] of the ParamModel.\n"
+                f"Please check the bounds in fit_bounds_override."
+            )
 
         # # ===== Fit using the whole dataset ======
         logger.info("Fitting the model using the whole dataset...")
@@ -439,7 +446,7 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
         return fitting_result, fitting_result_cross_validation
 
     @classmethod
-    def negLL_func_wrapper_for_de(
+    def cost_func_for_DE(
         cls,
         current_values,  # the current fitting values of params in fit_names (passed by DE)
         # ---- Below are the arguments passed by args. The order must be the same! ----
@@ -505,7 +512,7 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
 
         # --- Heavy lifting here!! ---
         fitting_result = optimize.differential_evolution(
-            func=cls.negLL_func_wrapper_for_de,
+            func=cls.cost_func_for_DE,
             bounds=optimize.Bounds(lower_bounds, upper_bounds),
             args=(
                 agent_kwargs,  # Other kwargs to pass to the model
@@ -601,6 +608,11 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
         x = np.arange(self.n_trials + 1) + 1  # When plotting, we start from 1
         axes[0].plot(x, self.q_estimation[0], lw=1, color="red", ls=":", label="fitted_Q(L)")
         axes[0].plot(x, self.q_estimation[1], lw=1, color="blue", ls=":", label="fitted_Q(R)")
+        
+        # Add choice kernel, if used
+        if self.agent_kwargs['choice_kernel'] != "none":
+            axes[0].plot(x, self.choice_kernel[L, :], label="choice_kernel(L)", color="purple", lw=0.5)
+            axes[0].plot(x, self.choice_kernel[R, :], label="choice_kernel(R)", color="cyan", lw=0.5)
 
         # -- Plot fitted choice_prob
         axes[0].plot(

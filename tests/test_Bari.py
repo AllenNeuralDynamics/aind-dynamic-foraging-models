@@ -4,7 +4,7 @@ import multiprocessing as mp
 import unittest
 
 import numpy as np
-from aind_behavior_gym.dynamic_foraging.task.coupled_block_task import CoupledBlockTask
+from aind_behavior_gym.dynamic_foraging.task import CoupledBlockTask
 
 from aind_dynamic_foraging_models.generative_model.agent_q_learning import ForagerSimpleQ
 
@@ -24,16 +24,16 @@ class TestBari(unittest.TestCase):
             seed=42,
         )
         forager.set_params(dict(
-            learn_rate=0.2,
+            learn_rate=0.3,
             forget_rate_unchosen=0.1,
             choice_kernel_relative_weight=0.1,
             choice_step_size=0.1,
-            softmax_inverse_temperature=5,
+            softmax_inverse_temperature=10,
             biasL=0,
             )
-        ),
+        )
         
-        task = CoupledBlockTask(reward_baiting=True, num_trials=100, seed=42)
+        task = CoupledBlockTask(reward_baiting=True, num_trials=1000, seed=42)
 
         # -- 1. Generative run --
         forager.perform(task)

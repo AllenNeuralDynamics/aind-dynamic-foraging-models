@@ -4,17 +4,17 @@
 import logging
 
 # %%
-from typing import Optional
+from typing import Literal, Optional
 
 import numpy as np
 import scipy.optimize as optimize
 from aind_behavior_gym.dynamic_foraging.agent import DynamicForagingAgentBase
 from aind_behavior_gym.dynamic_foraging.task import DynamicForagingTaskBase, L, R
 from aind_dynamic_foraging_basic_analysis import plot_foraging_session
-from pydantic import BaseModel, Field, model_validator
 
 from .act_functions import act_softmax
-from .learn_functions import learn_RWlike
+from .agent_q_learning_params import generate_pydantic_q_learning_params
+from .learn_functions import learn_choice_kernel, learn_RWlike
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -25,78 +25,62 @@ console_handler.setFormatter(
 logger.addHandler(console_handler)
 
 
-class forager_Hattori2019(DynamicForagingAgentBase):
+class ForagerSimpleQ(DynamicForagingAgentBase):
     """
-    Base class for maximum likelihood estimation.
+    Base class for the familiy of simple Q-learning models.
+
+    Parameters
+    ----------
+    number_of_learning_rate : Literal[1, 2], optional
+        Number of learning rates, by default 2
+        If 1, only one learn_rate will be included in the model.
+        If 2, learn_rate_rew and learn_rate_unrew will be included in the model.
+    number_of_forget_rate : Literal[0, 1], optional
+        Number of forget_rates, by default 1.
+        If 0, forget_rate_unchosen will not be included in the model.
+        If 1, forget_rate_unchosen will be included in the model.
+    choice_kernel : Literal["none", "one_step", "full"], optional
+        Choice kernel type, by default "none"
+        If "none", no choice kernel will be included in the model.
+        If "one_step", choice_step_size will be set to 1.0, i.e., only the previous choice
+            affects the choice kernel. (Bari2019)
+        If "full", both choice_step_size and choice_kernel_relative_weight will be included
+    action_selection : Literal["softmax", "epsilon-greedy"], optional
+        Action selection type, by default "softmax"
+    params: dict, optional
+        Initial parameters of the model, by default {}.
+        See the generated Pydantic model in agent_q_learning_params.py for the full
+        list of parameters.
     """
-
-    class Param(BaseModel):
-        """Parameters for the model and their default values.
-        After overriden in subclasses, calling ClassName.Param() returns default parameters.
-        """
-
-        # For example:
-        # param1: float = Field(default=0.5, ge=0.0, le=2.0, description="Parameter 1")
-        # param2: float = Field(default=0.2, ge=0.0, description="Parameter 2")
-        # raise NotImplementedError("Params class must be defined in subclasses")
-
-        learn_rate_rew: float = Field(
-            default=0.5, ge=0.0, le=1.0, description="Learning rate for rewarded choice"
-        )
-        learn_rate_unrew: float = Field(
-            default=0.1, ge=0.0, le=1.0, description="Learning rate for unrewarded choice"
-        )
-        forget_rate: float = Field(
-            default=0.2, ge=0.0, le=1.0, description="Forgetting rate for unchosen options"
-        )
-        softmax_inverse_temperature: float = Field(
-            default=10, ge=0.0, description="Softmax temperature"
-        )
-        biasL: float = Field(default=0.0, description="Bias term for softmax")
-
-        class Config:
-            extra = "forbid"  # This forbids extra fields
-
-    class ParamFitBounds(BaseModel):
-        """Bounds for fitting parameters.
-        After overriden in subclasses, calling ClassName.ParamFitBounds() returns default bounds.
-        """
-
-        # For example:
-        # param1: list = Field(default=[0.0, 1.0], description="Bounds for param1")
-        # param2: list = Field(default=[0.0, 1.0], description="Bounds for param2")
-        # raise NotImplementedError("ParamFitBounds class must be defined in subclasses")
-        learn_rate_rew: list = Field(default=[0.0, 1.0])
-        learn_rate_unrew: list = Field(default=[0.0, 1.0])
-        forget_rate: list = Field(default=[0.0, 1.0])
-        softmax_inverse_temperature: list = Field(default=[0.0, 100.0])
-        biasL: list = Field(default=[-5.0, 5.0])
-
-        @model_validator(mode="after")
-        def check_all_params(cls, values):
-            for key, value in values.__dict__.items():
-                if not isinstance(value, list):
-                    raise ValueError(f'Value of "{key}" must be a list')
-                if len(value) != 2:
-                    raise ValueError(f'List "{key}" must have exactly 2 elements')
-                if value[1] < value[0]:
-                    raise ValueError(f'Upper bound of "{key}" must be greater than the lower bound')
-            return values
-
-        class Config:
-            extra = "forbid"  # This forbids extra fields
 
     def __init__(
         self,
+        number_of_learning_rate: Literal[1, 2],
+        number_of_forget_rate: Literal[0, 1],
+        choice_kernel: Literal["none", "one_step", "full"],
+        action_selection: Literal["softmax", "epsilon-greedy"],
         params: dict = {},
         **kwargs,
     ):
         """Init"""
+        super().__init__(**kwargs)  # Set self.rng etc.
 
-        super().__init__(**kwargs)
+        # Dynamically generate Pydantic models for parameters and fitting bounds
+        self.ParamModel, self.ParamFitBoundModel = generate_pydantic_q_learning_params(
+            number_of_learning_rate=number_of_learning_rate,
+            number_of_forget_rate=number_of_forget_rate,
+            choice_kernel=choice_kernel,
+            action_selection=action_selection,
+        )
+        self.agent_kwargs = dict(
+            number_of_learning_rate=number_of_learning_rate,
+            number_of_forget_rate=number_of_forget_rate,
+            choice_kernel=choice_kernel,
+            action_selection=action_selection,
+        )  # Note that the class and self.agent_kwargs fully define the agent
 
         # Set and validate the model parameters. Use default parameters if some are not provided
-        self.params = self.Param(**params)
+        self.params = self.ParamModel(**params)
 
         # Add model fitting related attributes
         self.fitting_result = None
@@ -121,8 +105,9 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         self.choice_prob = np.full([self.n_actions, self.n_trials + 1], np.nan)
         self.choice_prob[:, 0] = 1 / self.n_actions  # To be strict (actually no use)
 
-        if self.fit_choice_kernel:
-            self.choice_kernel = np.zeros([self.n_actions, self.n_trials + 1])
+        # Always initialize choice_kernel with nan, even if choice_kernel = "none"
+        self.choice_kernel = np.full([self.n_actions, self.n_trials + 1], np.nan)
+        self.choice_kernel[:, 0] = 0  # Initial choice kernel as 0
 
         # Choice and reward history have n_trials length
         self.choice_history = np.full(self.n_trials, fill_value=-1, dtype=int)  # Choice history
@@ -131,12 +116,15 @@ class forager_Hattori2019(DynamicForagingAgentBase):
 
     def set_params(self, params):
         """Update the model parameters and validate"""
-        self.params = self.params.model_copy(update=params)
+        # This is safer than model_copy(update) because it will NOT validate the input params
+        _params = self.params.model_dump()
+        _params.update(params)
+        self.params = self.ParamModel(**_params)
         return self.get_params()
 
     def get_params(self):
         """Get the model parameters in a dictionary format"""
-        return self.params.dict()
+        return self.params.model_dump()
 
     def perform(
         self,
@@ -206,30 +194,60 @@ class forager_Hattori2019(DynamicForagingAgentBase):
 
     def act(self, _):
         """Action selection"""
-        choice, choice_prob = act_softmax(
-            q_estimation_t=self.q_estimation[:, self.trial],
-            softmax_inverse_temperature=self.params.softmax_inverse_temperature,
-            bias_terms=np.array([self.params.biasL, 0]),
-            choice_softmax_inverse_temperature=None,
-            choice_kernel=None,
-            rng=self.rng,
-        )
+
+        if self.agent_kwargs["action_selection"] == "softmax":
+            # Handle choice kernel
+            if self.agent_kwargs["choice_kernel"] == "none":
+                choice_kernel = None
+                choice_kernel_relative_weight = None
+            else:
+                choice_kernel = self.choice_kernel[:, self.trial]
+                choice_kernel_relative_weight = self.params.choice_kernel_relative_weight
+
+            choice, choice_prob = act_softmax(
+                q_estimation_t=self.q_estimation[:, self.trial],
+                softmax_inverse_temperature=self.params.softmax_inverse_temperature,
+                bias_terms=np.array([self.params.biasL, 0]),
+                # -- Choice kernel --
+                choice_kernel=choice_kernel,
+                choice_kernel_relative_weight=choice_kernel_relative_weight,
+                rng=self.rng,
+            )
+        elif self.agent_kwargs["action_selection"] == "epsilon-greedy":
+            raise NotImplementedError("Epsilon-greedy is not implemented yet.")
+
         return choice, choice_prob
 
     def learn(self, _observation, choice, reward, _next_observation, done):
         """Update Q values"""
+
+        # Handle params
+        if self.agent_kwargs["number_of_learning_rate"] == 1:
+            learn_rates = [self.params.learn_rate] * 2
+        else:
+            learn_rates = [self.params.learn_rate_rew, self.params.learn_rate_unrew]
+
+        if self.agent_kwargs["number_of_forget_rate"] == 0:
+            forget_rates = [0, 0]
+        else:
+            forget_rates = [self.params.forget_rate_unchosen, 0]
+
         # Update Q values
         self.q_estimation[:, self.trial] = learn_RWlike(
-            **{
-                "choice": choice,
-                "reward": reward,
-                "q_estimation_tminus1": self.q_estimation[:, self.trial - 1],
-                "learn_rates": [self.params.learn_rate_rew, self.params.learn_rate_unrew],
-                "forget_rates": [self.params.forget_rate, 0],  # 0: unchosen, 1: chosen
-            }
+            choice=choice,
+            reward=reward,
+            q_estimation_tminus1=self.q_estimation[:, self.trial - 1],
+            learn_rates=learn_rates,
+            forget_rates=forget_rates,
         )
-        if self.fit_choice_kernel and (self.trial < self.n_trials):
-            self.step_choice_kernel(choice)
+
+        # Update choice kernel
+        if self.agent_kwargs["choice_kernel"] != "none":
+            self.choice_kernel[:, self.trial] = learn_choice_kernel(
+                choice=choice,
+                choice_kernel_tminus1=self.choice_kernel[:, self.trial - 1],
+                choice_step_size=self.params.choice_step_size,
+            )
 
     def get_choice_history(self):
         """Return the history of actions in format that is compatible with other library such as
@@ -266,7 +284,6 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         fit_bounds_override: dict = {},
         clamp_params: dict = {},
         k_fold_cross_validation: Optional[int] = None,
-        agent_kwargs: dict = {},
         DE_kwargs: dict = {"workers": 1},
     ):
         """Fit the model to the data using differential evolution.
@@ -293,8 +310,6 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             Whether to do cross-validation, by default None (no cross-validation).
             If k_fold_cross_validation > 1, it will do k-fold cross-validation and return the
             prediction accuracy of the test set for model comparison.
-        agent_kwargs : dict, optional
-            Other kwargs to pass to the model, by default {}
         DE_kwargs : dict, optional
             kwargs for differential_evolution, by default {'workers': 1}
             For example:
@@ -320,11 +335,11 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         # Ensure params_to_fit and clamp_params are not overlapping
         assert set(fit_bounds_override.keys()).isdisjoint(clamp_params.keys())
         # Validate clamp_params
-        assert self.Param(**clamp_params)
+        assert self.ParamModel(**clamp_params)
 
         # -- Get fit_names and fit_bounds --
         # Validate fit_bounds_override and fill in the missing bounds with default bounds
-        fit_bounds = self.ParamFitBounds(**fit_bounds_override).model_dump()
+        fit_bounds = self.ParamFitBoundModel(**fit_bounds_override).model_dump()
         # Remove clamped parameters from fit_bounds
         for name in clamp_params.keys():
             fit_bounds.pop(name)
@@ -334,8 +349,15 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         lower_bounds = [fit_bounds[name][0] for name in fit_names]
         upper_bounds = [fit_bounds[name][1] for name in fit_names]
         # Validate bounds themselves are valid parameters
-        assert self.Param(**dict(zip(fit_names, lower_bounds)))
-        assert self.Param(**dict(zip(fit_names, upper_bounds)))
+        try:
+            self.ParamModel(**dict(zip(fit_names, lower_bounds)))
+            self.ParamModel(**dict(zip(fit_names, upper_bounds)))
+        except ValueError as e:
+            raise ValueError(
+                f"Invalid bounds for {e}.\n"
+                f"Bounds must be within the [ge, le] of the ParamModel.\n"
+                f"Please check the bounds in fit_bounds_override."
+            )
 
         # # ===== Fit using the whole dataset ======
         logger.info("Fitting the model using the whole dataset...")
@@ -345,9 +367,9 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             fit_names=fit_names,
             lower_bounds=lower_bounds,
             upper_bounds=upper_bounds,
-            fit_trial_set=None,  # None means use all trials to fit
             clamp_params=clamp_params,
-            agent_kwargs=agent_kwargs,
+            fit_trial_set=None,  # None means use all trials to fit
+            agent_kwargs=self.agent_kwargs,  # the class AND agent_kwargs fully define the agent
             DE_kwargs=DE_kwargs,
         )
 
@@ -396,21 +418,21 @@ class forager_Hattori2019(DynamicForagingAgentBase):
 
             # -- Fit data using fit_set_this --
             fitting_result_this_fold = self.__class__._optimize_DE(
+                agent_kwargs=self.agent_kwargs,  # the class AND agent_kwargs fully define the agent
                 fit_choice_history=fit_choice_history,
                 fit_reward_history=fit_reward_history,
                 fit_names=fit_names,
                 lower_bounds=lower_bounds,
                 upper_bounds=upper_bounds,
-                fit_trial_set=fit_set_this,
                 clamp_params=clamp_params,
-                agent_kwargs=agent_kwargs,
+                fit_trial_set=fit_set_this,
                 DE_kwargs=DE_kwargs,
             )
             fitting_results_all_folds.append(fitting_result_this_fold)
 
             # -- Compute the prediction accuracy of testing set --
             # Run PREDICTIVE simulation using temp_agent with the fitted parms of this fold
-            tmp_agent = self.__class__(fitting_result_this_fold.params, **agent_kwargs)
+            tmp_agent = self.__class__(params=fitting_result_this_fold.params, **self.agent_kwargs)
             tmp_agent.predictive_perform(fit_choice_history, fit_reward_history)
 
             # Compute prediction accuracy
@@ -446,15 +468,16 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         return fitting_result, fitting_result_cross_validation
 
     @classmethod
-    def negLL_func_wrapper_for_de(
+    def cost_func_for_DE(
         cls,
         current_values,  # the current fitting values of params in fit_names (passed by DE)
+        # ---- Below are the arguments passed by args. The order must be the same! ----
+        agent_kwargs,
         fit_choice_history,
         fit_reward_history,
         fit_trial_set,
         fit_names,
         clamp_params,
-        agent_kwargs,
     ):
         """The core function that interacts with optimize.differential_evolution().
         For given params, run simulation using clamped history and
@@ -466,7 +489,7 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         # -- Parse params and initialize a new agent --
         params = dict(zip(fit_names, current_values))  # Current fitting values
         params.update(clamp_params)  # Add clamped params
-        agent = cls(params, **agent_kwargs)
+        agent = cls(params=params, **agent_kwargs)
 
         # -- Run **PREDICTIVE** simulation --
         # (clamp the history and do only one forward step on each trial)
@@ -483,14 +506,14 @@ class forager_Hattori2019(DynamicForagingAgentBase):
     @classmethod
     def _optimize_DE(
         cls,
+        agent_kwargs,
         fit_choice_history,
         fit_reward_history,
         fit_names,
         lower_bounds,
         upper_bounds,
-        fit_trial_set,
         clamp_params,
-        agent_kwargs,
+        fit_trial_set,
         DE_kwargs,
     ):
         """A wrapper of DE fitting for the model. It returns fitting results."""
@@ -511,15 +534,15 @@ class forager_Hattori2019(DynamicForagingAgentBase):
 
         # --- Heavy lifting here!! ---
         fitting_result = optimize.differential_evolution(
-            func=cls.negLL_func_wrapper_for_de,
+            func=cls.cost_func_for_DE,
             bounds=optimize.Bounds(lower_bounds, upper_bounds),
             args=(
+                agent_kwargs,  # Other kwargs to pass to the model
                 fit_choice_history,
                 fit_reward_history,
                 fit_trial_set,  # subset of trials to fit; if empty, use all trials)
                 fit_names,  # Pass names so that negLL_func_for_de knows which parameters to fit
                 clamp_params,  # Clamped parameters
-                agent_kwargs,  # Other kwargs to pass to the model
             ),
             **kwargs,
         )
@@ -563,9 +586,22 @@ class forager_Hattori2019(DynamicForagingAgentBase):
             reward_history=self.task.get_reward_history(),
             p_reward=self.task.get_p_reward(),
         )
+
+        x = np.arange(self.n_trials + 1) + 1  # When plotting, we start from 1
+
         # Add Q value
-        axes[0].plot(self.q_estimation[L, :], label="Q_left", color="red", lw=0.5)
-        axes[0].plot(self.q_estimation[R, :], label="R_left", color="blue", lw=0.5)
+        axes[0].plot(x, self.q_estimation[L, :], label="Q(L)", color="red", lw=0.5)
+        axes[0].plot(x, self.q_estimation[R, :], label="Q(R)", color="blue", lw=0.5)
+
+        # Add choice kernel, if used
+        if self.agent_kwargs["choice_kernel"] != "none":
+            axes[0].plot(
+                x, self.choice_kernel[L, :], label="choice_kernel(L)", color="purple", lw=0.5
+            )
+            axes[0].plot(
+                x, self.choice_kernel[R, :], label="choice_kernel(R)", color="cyan", lw=0.5
+            )
+
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=3)
         return fig, axes
 
@@ -595,11 +631,22 @@ class forager_Hattori2019(DynamicForagingAgentBase):
         )
 
         # -- Plot fitted Q values
-        axes[0].plot(self.q_estimation[0], lw=1, color="red", ls=":", label="fitted_Q(L)")
-        axes[0].plot(self.q_estimation[1], lw=1, color="blue", ls=":", label="fitted_Q(R)")
+        x = np.arange(self.n_trials + 1) + 1  # When plotting, we start from 1
+        axes[0].plot(x, self.q_estimation[0], lw=2, color="red", ls=":", label="fitted_Q(L)")
+        axes[0].plot(x, self.q_estimation[1], lw=2, color="blue", ls=":", label="fitted_Q(R)")
+
+        # Add choice kernel, if used
+        if self.agent_kwargs["choice_kernel"] != "none":
+            axes[0].plot(
+                x, self.choice_kernel[L, :], label="choice_kernel(L)", color="purple", ls=":", lw=2
+            )
+            axes[0].plot(
+                x, self.choice_kernel[R, :], label="choice_kernel(R)", color="cyan", ls=":", lw=2
+            )
 
         # -- Plot fitted choice_prob
         axes[0].plot(
+            x,
             self.choice_prob[1] / self.choice_prob.sum(axis=0),
             lw=2,
             color="green",

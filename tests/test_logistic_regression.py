@@ -45,9 +45,7 @@ class TestLogistic(unittest.TestCase):
         choice_history = df_trial["animal_response"].values
         choice_history[choice_history == 2] = np.nan
         reward_history = (
-            (df_trial["rewarded_historyL"] + df_trial["rewarded_historyR"])
-            .astype(int)
-            .values
+            (df_trial["rewarded_historyL"] + df_trial["rewarded_historyR"]).astype(int).values
         )
 
         self.choice_history = choice_history

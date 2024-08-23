@@ -4,18 +4,17 @@
 import logging
 
 # %%
-from typing import Optional, Literal
+from typing import Literal, Optional
 
 import numpy as np
 import scipy.optimize as optimize
 from aind_behavior_gym.dynamic_foraging.agent import DynamicForagingAgentBase
 from aind_behavior_gym.dynamic_foraging.task import DynamicForagingTaskBase, L, R
 from aind_dynamic_foraging_basic_analysis import plot_foraging_session
-from pydantic import BaseModel, Field, model_validator
 
 from .act_functions import act_softmax
-from .learn_functions import learn_RWlike, learn_choice_kernel
 from .agent_q_learning_params import generate_pydantic_q_learning_params
+from .learn_functions import learn_choice_kernel, learn_RWlike
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -172,16 +171,16 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
 
     def act(self, _):
         """Action selection"""
-        
+
         if self.agent_kwargs["action_selection"] == "softmax":
             # Handle choice kernel
-            if self.agent_kwargs['choice_kernel'] == "none":
+            if self.agent_kwargs["choice_kernel"] == "none":
                 choice_kernel = None
                 choice_kernel_relative_weight = None
             else:
                 choice_kernel = self.choice_kernel[:, self.trial]
                 choice_kernel_relative_weight = self.params.choice_kernel_relative_weight
-            
+
             choice, choice_prob = act_softmax(
                 q_estimation_t=self.q_estimation[:, self.trial],
                 softmax_inverse_temperature=self.params.softmax_inverse_temperature,
@@ -193,23 +192,23 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
             )
         elif self.agent_kwargs["action_selection"] == "epsilon-greedy":
             raise NotImplementedError("Epsilon-greedy is not implemented yet.")
-            
+
         return choice, choice_prob
 
     def learn(self, _observation, choice, reward, _next_observation, done):
         """Update Q values"""
-        
+
         # Handle params
         if self.agent_kwargs["number_of_learning_rate"] == 1:
             learn_rates = [self.params.learn_rate] * 2
         else:
             learn_rates = [self.params.learn_rate_rew, self.params.learn_rate_unrew]
-            
+
         if self.agent_kwargs["number_of_forget_rate"] == 0:
             forget_rates = [0, 0]
         else:
             forget_rates = [self.params.forget_rate_unchosen, 0]
-        
+
         # Update Q values
         self.q_estimation[:, self.trial] = learn_RWlike(
             choice=choice,
@@ -218,15 +217,15 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
             learn_rates=learn_rates,
             forget_rates=forget_rates,
         )
-        
+
         # Update choice kernel
-        if self.agent_kwargs['choice_kernel'] != "none":
+        if self.agent_kwargs["choice_kernel"] != "none":
             self.choice_kernel[:, self.trial] = learn_choice_kernel(
                 choice=choice,
                 choice_kernel_tminus1=self.choice_kernel[:, self.trial - 1],
                 choice_step_size=self.params.choice_step_size,
             )
-            
+
     def get_choice_history(self):
         """Return the history of actions in format that is compatible with other library such as
         aind_dynamic_foraging_basic_analysis
@@ -347,7 +346,7 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
             upper_bounds=upper_bounds,
             clamp_params=clamp_params,
             fit_trial_set=None,  # None means use all trials to fit
-            agent_kwargs=self.agent_kwargs, # the class AND agent_kwargs fully define the agent
+            agent_kwargs=self.agent_kwargs,  # the class AND agent_kwargs fully define the agent
             DE_kwargs=DE_kwargs,
         )
 
@@ -564,18 +563,22 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
             reward_history=self.task.get_reward_history(),
             p_reward=self.task.get_p_reward(),
         )
-        
+
         x = np.arange(self.n_trials + 1) + 1  # When plotting, we start from 1
-        
+
         # Add Q value
         axes[0].plot(x, self.q_estimation[L, :], label="Q(L)", color="red", lw=0.5)
         axes[0].plot(x, self.q_estimation[R, :], label="Q(R)", color="blue", lw=0.5)
-        
+
         # Add choice kernel, if used
-        if self.agent_kwargs['choice_kernel'] != "none":
-            axes[0].plot(x, self.choice_kernel[L, :], label="choice_kernel(L)", color="purple", lw=0.5)
-            axes[0].plot(x, self.choice_kernel[R, :], label="choice_kernel(R)", color="cyan", lw=0.5)
-        
+        if self.agent_kwargs["choice_kernel"] != "none":
+            axes[0].plot(
+                x, self.choice_kernel[L, :], label="choice_kernel(L)", color="purple", lw=0.5
+            )
+            axes[0].plot(
+                x, self.choice_kernel[R, :], label="choice_kernel(R)", color="cyan", lw=0.5
+            )
+
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=3)
         return fig, axes
 
@@ -608,11 +611,15 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
         x = np.arange(self.n_trials + 1) + 1  # When plotting, we start from 1
         axes[0].plot(x, self.q_estimation[0], lw=2, color="red", ls=":", label="fitted_Q(L)")
         axes[0].plot(x, self.q_estimation[1], lw=2, color="blue", ls=":", label="fitted_Q(R)")
-        
+
         # Add choice kernel, if used
-        if self.agent_kwargs['choice_kernel'] != "none":
-            axes[0].plot(x, self.choice_kernel[L, :], label="choice_kernel(L)", color="purple", ls=":", lw=2)
-            axes[0].plot(x, self.choice_kernel[R, :], label="choice_kernel(R)", color="cyan", ls=":", lw=2)
+        if self.agent_kwargs["choice_kernel"] != "none":
+            axes[0].plot(
+                x, self.choice_kernel[L, :], label="choice_kernel(L)", color="purple", ls=":", lw=2
+            )
+            axes[0].plot(
+                x, self.choice_kernel[R, :], label="choice_kernel(R)", color="cyan", ls=":", lw=2
+            )
 
         # -- Plot fitted choice_prob
         axes[0].plot(

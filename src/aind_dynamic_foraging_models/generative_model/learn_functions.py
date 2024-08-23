@@ -65,7 +65,8 @@ def learn_choice_kernel(choice, choice_kernel_tminus1, choice_step_size):
     # Choice vector
     choice_vector = np.array([0, 0])
     choice_vector[choice] = 1
-    
+
     # Update choice kernel (see Model 5 of Wilson and Collins, 2019)
-    # Note that if chocie_step_size = 1, degenerates to Bari 2019 (choice kernel = the last choice only)
+    # Note that if chocie_step_size = 1, degenerates to Bari 2019
+    # (choice kernel = the last choice only)
     return choice_kernel_tminus1 + choice_step_size * (choice_vector - choice_kernel_tminus1)

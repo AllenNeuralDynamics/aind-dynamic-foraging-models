@@ -42,9 +42,10 @@ def act_softmax(
         ).transpose()  # the first dimension is the choice and the second is usual
         # valu in position 0 and kernel in position 1
         softmax_inverse_temperature = np.array(
-            [softmax_inverse_temperature, 
-             softmax_inverse_temperature * choice_kernel_relative_weight
-             ]
+            [
+                softmax_inverse_temperature,
+                softmax_inverse_temperature * choice_kernel_relative_weight,
+            ]
         )[np.newaxis, :]
     choice_prob = softmax(
         q_estimation_t, inverse_temperature=softmax_inverse_temperature, bias=bias_terms, rng=rng

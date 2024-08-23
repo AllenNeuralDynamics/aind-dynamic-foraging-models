@@ -102,7 +102,7 @@ class TestHattori(unittest.TestCase):
         axes[0].plot(ground_truth_q_estimation[1], lw=1, color="blue", ls="-", label="actual_Q(R)")
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=4)
         fig_fitting.savefig("tests/results/test_Hattori_fitted.png")
-        
+
         np.testing.assert_array_almost_equal(
             fitting_result.x, [0.6033, 0.1988, 0.2559, 5.3600], decimal=2
         )

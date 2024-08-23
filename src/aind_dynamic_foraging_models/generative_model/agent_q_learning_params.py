@@ -1,8 +1,9 @@
 """Dynamically generate pydantic models for Q-learning agent parameters."""
 
 # %%
-from pydantic import BaseModel, Field, create_model, model_validator, ValidationError, ConfigDict
-from typing import Type, Optional, Dict, Any, Literal, List, Tuple
+from typing import Any, Dict, List, Literal, Tuple, Type
+
+from pydantic import BaseModel, ConfigDict, Field, create_model, model_validator
 
 
 def generate_pydantic_q_learning_params(
@@ -15,7 +16,7 @@ def generate_pydantic_q_learning_params(
 
     All default values are hard-coded in this function. But when instantiating the model,
     you can always override the default values, both the params and the fitting bounds.
-    
+
     Parameters
     ----------
     number_of_learning_rate : Literal[1, 2], optional
@@ -41,91 +42,16 @@ def generate_pydantic_q_learning_params(
     fitting_bounds = {}
 
     # -- Handle learning rate fields --
-    assert number_of_learning_rate in [1, 2], "number_of_learning_rate must be 1 or 2"
-    if number_of_learning_rate == 1:
-        params["learn_rate"] = (
-            float,
-            Field(default=0.5, ge=0.0, le=1.0, description="Learning rate"),
-        )
-        fitting_bounds["learn_rate"] = (0.0, 1.0)
-    elif number_of_learning_rate == 2:
-        params["learn_rate_rew"] = (
-            float,
-            Field(default=0.5, ge=0.0, le=1.0, description="Learning rate for rewarded choice"),
-        )
-        fitting_bounds["learn_rate_rew"] = (0.0, 1.0)
-        params["learn_rate_unrew"] = (
-            float,
-            Field(default=0.1, ge=0.0, le=1.0, description="Learning rate for unrewarded choice"),
-        )
-        fitting_bounds["learn_rate_unrew"] = (0.0, 1.0)
+    _add_learning_rate_fields(params, fitting_bounds, number_of_learning_rate)
 
     # -- Handle forget rate field --
-    assert number_of_forget_rate in [0, 1], "number_of_forget_rate must be 0 or 1"
-    if number_of_forget_rate == 1:
-        params["forget_rate_unchosen"] = (
-            float,
-            Field(default=0.2, ge=0.0, le=1.0, description="Forgetting rate for unchosen side"),
-        )
-        fitting_bounds["forget_rate_unchosen"] = (0.0, 1.0)
+    _add_forget_rate_fields(params, fitting_bounds, number_of_forget_rate)
 
     # -- Handle choice kernel fields --
-    assert (
-        choice_kernel in ["none", "one_step", "full"], 
-        "choice_kernel must be 'none', 'one_step', or 'full'"
-        )
-    if choice_kernel == "none":
-        pass
-    else:
-        params["choice_kernel_relative_weight"] = (
-            float,
-            Field(
-                default=0.1,
-                ge=0.0,
-                description="Relative weight of choice kernel (very sensitive, should be quite small)",
-            ),
-        )
-        fitting_bounds["choice_kernel_relative_weight"] = (0.0, 1.0)
-
-        if choice_kernel == "full":
-            params["choice_step_size"] = (
-                float,
-                Field(default=0.1, ge=0.0, le=1.0, description="Step size for choice kernel"),
-            )
-            fitting_bounds["choice_step_size"] = (0.0, 1.0)
-        elif choice_kernel == "one_step":
-            # If choice kernel is one-step (only the previous choice affects the choice kernel like
-            # in Bari2019), set choice_step_size to 1.0
-            params["choice_step_size"] = (
-                float,
-                Field(
-                    default=1.0,
-                    ge=1.0,
-                    le=1.0,
-                    description="Step size for choice kernel == 1 (one-step choice kernel)",
-                ),
-            )
-            fitting_bounds["choice_step_size"] = (1.0, 1.0)
+    _add_choice_kernel_fields(params, fitting_bounds, choice_kernel)
 
     # -- Handle action selection fields --
-    # Always include biasL
-    params["biasL"] = (float, Field(default=0.0, description="Bias term for softmax"))
-    fitting_bounds["biasL"] = (-5.0, 5.0)
-
-    if action_selection == "softmax":
-        params["softmax_inverse_temperature"] = (
-            float,
-            Field(default=10, ge=0.0, description="Softmax temperature"),
-        )
-        fitting_bounds["softmax_inverse_temperature"] = (0.0, 100.0)
-    elif action_selection == "epsilon-greedy":
-        params["epsilon"] = (
-            float,
-            Field(default=0.1, ge=0.0, le=1.0, description="Epsilon for epsilon-greedy"),
-        )
-        fitting_bounds["epsilon"] = (0.0, 1.0)
-    else:
-        raise ValueError("action_selection must be 'softmax' or 'epsilon-greedy'")
+    _add_action_selection_fields(params, fitting_bounds, action_selection)
 
     # ====== Dynamically create the pydantic models =====
     params_model = create_model(
@@ -169,3 +95,102 @@ def generate_pydantic_q_learning_params(
     )
 
     return params_model, fitting_bounds_model
+
+
+def _add_learning_rate_fields(params, fitting_bounds, number_of_learning_rate):
+    """Add learning rate fields to the params and fitting_bounds dictionaries."""
+    assert number_of_learning_rate in [1, 2], "number_of_learning_rate must be 1 or 2"
+    if number_of_learning_rate == 1:
+        params["learn_rate"] = (
+            float,
+            Field(default=0.5, ge=0.0, le=1.0, description="Learning rate"),
+        )
+        fitting_bounds["learn_rate"] = (0.0, 1.0)
+    elif number_of_learning_rate == 2:
+        params["learn_rate_rew"] = (
+            float,
+            Field(default=0.5, ge=0.0, le=1.0, description="Learning rate for rewarded choice"),
+        )
+        fitting_bounds["learn_rate_rew"] = (0.0, 1.0)
+        params["learn_rate_unrew"] = (
+            float,
+            Field(default=0.1, ge=0.0, le=1.0, description="Learning rate for unrewarded choice"),
+        )
+        fitting_bounds["learn_rate_unrew"] = (0.0, 1.0)
+
+
+def _add_forget_rate_fields(params, fitting_bounds, number_of_forget_rate):
+    """Add forget rate fields to the params and fitting_bounds dictionaries."""
+    assert number_of_forget_rate in [0, 1], "number_of_forget_rate must be 0 or 1"
+    if number_of_forget_rate == 1:
+        params["forget_rate_unchosen"] = (
+            float,
+            Field(default=0.2, ge=0.0, le=1.0, description="Forgetting rate for unchosen side"),
+        )
+        fitting_bounds["forget_rate_unchosen"] = (0.0, 1.0)
+
+
+def _add_choice_kernel_fields(params, fitting_bounds, choice_kernel):
+    """Add choice kernel fields to the params and fitting_bounds dictionaries."""
+    assert choice_kernel in [
+        "none",
+        "one_step",
+        "full",
+    ], "choice_kernel must be 'none', 'one_step', or 'full'"
+
+    if choice_kernel == "none":
+        return
+
+    params["choice_kernel_relative_weight"] = (
+        float,
+        Field(
+            default=0.1,
+            ge=0.0,
+            description=(
+                "Relative weight of choice kernel (very sensitive, should be quite small)"
+            ),
+        ),
+    )
+    fitting_bounds["choice_kernel_relative_weight"] = (0.0, 1.0)
+
+    if choice_kernel == "full":
+        params["choice_step_size"] = (
+            float,
+            Field(default=0.1, ge=0.0, le=1.0, description="Step size for choice kernel"),
+        )
+        fitting_bounds["choice_step_size"] = (0.0, 1.0)
+    elif choice_kernel == "one_step":
+        # If choice kernel is one-step (only the previous choice affects the choice kernel like
+        # in Bari2019), set choice_step_size to 1.0
+        params["choice_step_size"] = (
+            float,
+            Field(
+                default=1.0,
+                ge=1.0,
+                le=1.0,
+                description="Step size for choice kernel == 1 (one-step choice kernel)",
+            ),
+        )
+        fitting_bounds["choice_step_size"] = (1.0, 1.0)
+
+
+def _add_action_selection_fields(params, fitting_bounds, action_selection):
+    """Add action selection fields to the params and fitting_bounds dictionaries."""
+    # Always include biasL
+    params["biasL"] = (float, Field(default=0.0, description="Bias term for softmax"))
+    fitting_bounds["biasL"] = (-5.0, 5.0)
+
+    if action_selection == "softmax":
+        params["softmax_inverse_temperature"] = (
+            float,
+            Field(default=10, ge=0.0, description="Softmax temperature"),
+        )
+        fitting_bounds["softmax_inverse_temperature"] = (0.0, 100.0)
+    elif action_selection == "epsilon-greedy":
+        params["epsilon"] = (
+            float,
+            Field(default=0.1, ge=0.0, le=1.0, description="Epsilon for epsilon-greedy"),
+        )
+        fitting_bounds["epsilon"] = (0.0, 1.0)
+    else:
+        raise ValueError("action_selection must be 'softmax' or 'epsilon-greedy'")

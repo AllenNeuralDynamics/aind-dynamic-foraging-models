@@ -23,15 +23,16 @@ class TestBari(unittest.TestCase):
             action_selection="softmax",
             seed=42,
         )
-        forager.set_params(dict(
-            learn_rate=0.3,
-            forget_rate_unchosen=0.1,
-            choice_kernel_relative_weight=0.1,
-            softmax_inverse_temperature=10,
-            biasL=0,
+        forager.set_params(
+            dict(
+                learn_rate=0.3,
+                forget_rate_unchosen=0.1,
+                choice_kernel_relative_weight=0.1,
+                softmax_inverse_temperature=10,
+                biasL=0,
             )
         )
-        
+
         task = CoupledBlockTask(reward_baiting=True, num_trials=100, seed=42)
 
         # -- 1. Generative run --
@@ -104,17 +105,34 @@ class TestBari(unittest.TestCase):
         fig_fitting, axes = forager.plot_fitted_session()
         # Add groundtruth
         x = np.arange(forager.n_trials + 1) + 1  # When plotting, we start from 1
-        axes[0].plot(x, ground_truth_q_estimation[0], lw=1, color="red", ls="-", label="actual_Q(L)")
-        axes[0].plot(x, ground_truth_q_estimation[1], lw=1, color="blue", ls="-", label="actual_Q(R)")
-        axes[0].plot(x, ground_truth_choice_kernel[0], lw=1, color="purple", ls="-", label="actual_choice_kernel(L)")
-        axes[0].plot(x, ground_truth_choice_kernel[1], lw=1, color="cyan", ls="-", label="actual_choice_kernel(R)")       
+        axes[0].plot(
+            x, ground_truth_q_estimation[0], lw=1, color="red", ls="-", label="actual_Q(L)"
+        )
+        axes[0].plot(
+            x, ground_truth_q_estimation[1], lw=1, color="blue", ls="-", label="actual_Q(R)"
+        )
+        axes[0].plot(
+            x,
+            ground_truth_choice_kernel[0],
+            lw=1,
+            color="purple",
+            ls="-",
+            label="actual_choice_kernel(L)",
+        )
+        axes[0].plot(
+            x,
+            ground_truth_choice_kernel[1],
+            lw=1,
+            color="cyan",
+            ls="-",
+            label="actual_choice_kernel(R)",
+        )
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=4)
         fig_fitting.savefig("tests/results/test_Bari_fitted.png")
-        
+
         np.testing.assert_array_almost_equal(
             fitting_result.x, [0.7816, 0.0, 0.0126, 1.0, -0.2547, 95.6083], decimal=2
         )
-
 
 
 if __name__ == "__main__":

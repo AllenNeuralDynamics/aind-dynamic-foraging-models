@@ -34,7 +34,8 @@ class TestBari(unittest.TestCase):
             )
         )
 
-        task = CoupledBlockTask(reward_baiting=True, num_trials=100, seed=42)
+        n_trials = 100
+        task = CoupledBlockTask(reward_baiting=True, num_trials=n_trials, seed=42)
 
         # -- 1. Generative run --
         forager.perform(task)
@@ -131,7 +132,7 @@ class TestBari(unittest.TestCase):
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=4)
         fig_fitting.savefig("tests/results/test_Bari_fitted.png")
 
-        if sys.version_info == (3, 9) and forager.n_trials == 100:
+        if sys.version_info == (3, 9) and n_trials == 100:
             """For unknown reasons the DE's rng will change behavior across python versions"""
             np.testing.assert_array_almost_equal(
                 fitting_result.x, [0.7810, 0.0000, 0.0127, 1.0000, -0.2543, 94.9749], decimal=2

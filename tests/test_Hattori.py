@@ -65,7 +65,7 @@ class TestHattori(unittest.TestCase):
             reward_history,
             fit_bounds_override={"softmax_inverse_temperature": [0, 100]},
             clamp_params={"biasL": 0},
-            DE_kwargs=dict(workers=mp.cpu_count()),
+            DE_kwargs=dict(workers=mp.cpu_count(), disp=False, seed=42),
             k_fold_cross_validation=2,
         )
 
@@ -95,10 +95,6 @@ class TestHattori(unittest.TestCase):
             f'{np.mean(fitting_result_cross_validation["prediction_accuracy_test_bias_only"])}'
         )
 
-        np.testing.assert_array_almost_equal(
-            fitting_result.x, [0.6033, 0.1988, 0.2559, 5.3600], decimal=2
-        )
-
         # Plot fitted latent variables
         fig_fitting, axes = forager.plot_fitted_session()
         # Add groundtruth
@@ -106,6 +102,10 @@ class TestHattori(unittest.TestCase):
         axes[0].plot(ground_truth_q_estimation[1], lw=1, color="blue", ls="-", label="actual_Q(R)")
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=4)
         fig_fitting.savefig("tests/results/test_Hattori_fitted.png")
+        
+        np.testing.assert_array_almost_equal(
+            fitting_result.x, [0.6033, 0.1988, 0.2559, 5.3600], decimal=2
+        )
 
 
 if __name__ == "__main__":

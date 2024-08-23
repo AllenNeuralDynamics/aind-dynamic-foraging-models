@@ -606,13 +606,13 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
 
         # -- Plot fitted Q values
         x = np.arange(self.n_trials + 1) + 1  # When plotting, we start from 1
-        axes[0].plot(x, self.q_estimation[0], lw=1, color="red", ls=":", label="fitted_Q(L)")
-        axes[0].plot(x, self.q_estimation[1], lw=1, color="blue", ls=":", label="fitted_Q(R)")
+        axes[0].plot(x, self.q_estimation[0], lw=2, color="red", ls=":", label="fitted_Q(L)")
+        axes[0].plot(x, self.q_estimation[1], lw=2, color="blue", ls=":", label="fitted_Q(R)")
         
         # Add choice kernel, if used
         if self.agent_kwargs['choice_kernel'] != "none":
-            axes[0].plot(x, self.choice_kernel[L, :], label="choice_kernel(L)", color="purple", lw=0.5)
-            axes[0].plot(x, self.choice_kernel[R, :], label="choice_kernel(R)", color="cyan", lw=0.5)
+            axes[0].plot(x, self.choice_kernel[L, :], label="choice_kernel(L)", color="purple", ls=":", lw=2)
+            axes[0].plot(x, self.choice_kernel[R, :], label="choice_kernel(R)", color="cyan", ls=":", lw=2)
 
         # -- Plot fitted choice_prob
         axes[0].plot(

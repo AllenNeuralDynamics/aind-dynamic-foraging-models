@@ -179,7 +179,7 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
                 choice_kernel = None
                 choice_kernel_relative_weight = None
             else:
-                choice_kernel = self.choice_kernel[:, self.trial - 1]
+                choice_kernel = self.choice_kernel[:, self.trial]
                 choice_kernel_relative_weight = self.params.choice_kernel_relative_weight
             
             choice, choice_prob = act_softmax(

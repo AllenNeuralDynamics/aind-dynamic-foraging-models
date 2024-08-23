@@ -12,7 +12,7 @@ from aind_behavior_gym.dynamic_foraging.agent import DynamicForagingAgentBase
 from aind_behavior_gym.dynamic_foraging.task import DynamicForagingTaskBase, L, R
 from aind_dynamic_foraging_basic_analysis import plot_foraging_session
 
-from .act_functions import act_softmax
+from .act_functions import act_softmax, act_epsilon_greedy
 from .agent_q_learning_params import generate_pydantic_q_learning_params
 from .learn_functions import learn_choice_kernel, learn_RWlike
 
@@ -194,16 +194,16 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
 
     def act(self, _):
         """Action selection"""
+        # Handle choice kernel
+        if self.agent_kwargs["choice_kernel"] == "none":
+            choice_kernel = None
+            choice_kernel_relative_weight = None
+        else:
+            choice_kernel = self.choice_kernel[:, self.trial]
+            choice_kernel_relative_weight = self.params.choice_kernel_relative_weight
 
+        # Action selection
         if self.agent_kwargs["action_selection"] == "softmax":
-            # Handle choice kernel
-            if self.agent_kwargs["choice_kernel"] == "none":
-                choice_kernel = None
-                choice_kernel_relative_weight = None
-            else:
-                choice_kernel = self.choice_kernel[:, self.trial]
-                choice_kernel_relative_weight = self.params.choice_kernel_relative_weight
-
             choice, choice_prob = act_softmax(
                 q_estimation_t=self.q_estimation[:, self.trial],
                 softmax_inverse_temperature=self.params.softmax_inverse_temperature,
@@ -214,7 +214,15 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
                 rng=self.rng,
             )
         elif self.agent_kwargs["action_selection"] == "epsilon-greedy":
-            raise NotImplementedError("Epsilon-greedy is not implemented yet.")
+            choice, choice_prob = act_epsilon_greedy(
+                q_estimation_t=self.q_estimation[:, self.trial],
+                epsilon=self.params.epsilon,
+                bias_terms=np.array([self.params.biasL, 0]),
+                # -- Choice kernel --
+                choice_kernel=choice_kernel,
+                choice_kernel_relative_weight=choice_kernel_relative_weight,
+                rng=self.rng,
+            )
 
         return choice, choice_prob
 
@@ -241,7 +249,7 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
             forget_rates=forget_rates,
         )
 
-        # Update choice kernel
+        # Update choice kernel, if used
         if self.agent_kwargs["choice_kernel"] != "none":
             self.choice_kernel[:, self.trial] = learn_choice_kernel(
                 choice=choice,
@@ -666,7 +674,6 @@ def negLL(choice_prob, fit_choice_history, fit_reward_history, fit_trial_set=Non
         fit_choice_history.astype(int), range(len(fit_choice_history))
     ]  # Get the actual likelihood for each trial
 
-    # TODO: check this!
     # Deal with numerical precision (in rare cases, likelihood can be < 0 or > 1)
     likelihood_each_trial[(likelihood_each_trial <= 0) & (likelihood_each_trial > -1e-5)] = (
         1e-16  # To avoid infinity, which makes the number of zero likelihoods informative!
@@ -676,5 +683,5 @@ def negLL(choice_prob, fit_choice_history, fit_reward_history, fit_trial_set=Non
     # Return total likelihoods
     if fit_trial_set is None:  # Use all trials
         return -np.sum(np.log(likelihood_each_trial))
-    else:
+    else:  # Use subset of trials in cross-validation
         return -np.sum(np.log(likelihood_each_trial[fit_trial_set]))

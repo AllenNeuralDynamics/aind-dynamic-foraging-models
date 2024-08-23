@@ -4,9 +4,9 @@ import numpy as np
 
 
 def act_softmax(
-    q_estimation_t,
-    softmax_inverse_temperature=1,
-    bias_terms=0,
+    q_estimation_t: np.array,
+    softmax_inverse_temperature: float,
+    bias_terms: np.array,
     choice_kernel_relative_weight=None,
     choice_kernel=None,
     rng=None,
@@ -52,6 +52,45 @@ def act_softmax(
     )
     choice = choose_ps(choice_prob, rng=rng)
     return choice, choice_prob
+
+def act_epsilon_greedy(
+    q_estimation_t: np.array,
+    epsilon: float,
+    bias_terms: float,
+    choice_kernal=None,
+    choice_kernel_relative_weight=None,
+    rng=None,
+    ):
+    """Action selection by epsilon-greedy method.
+    
+    Steps:
+    1. Compute adjusted Q values by adding bias terms and choice kernel
+          Q' = Q + bias + choice_kernel_relative_weight * choice_kernel
+    2. The espilon-greedy method is quivalent to choice probabilities:
+          If Q'_L != Q'_R
+             choice_prob [(argmax(Q')] = 1 - epsilon / 2   
+             choice_prob [(argmin(Q'))] = epsilon / 2
+          else
+             choice_prob [:] = 0.5
+
+    Parameters
+    ----------
+    q_estimation_t : np.array
+        Current Q-values
+    epsilon : float
+        Probability of exploration
+    bias_terms : float
+        Bias terms
+    choice_kernal : _type_, optional
+        If not None, it will be added to Q-values, by default None
+    choice_kernel_relative_weight : _type_, optional
+        If not None, it controls the relative weight of choice kernel, by default None
+    rng : _type_, optional
+        _description_, by default None
+    """
+    rng = rng or np.random.default_rng()
+    
+    
 
 
 def softmax(x, inverse_temperature=1, bias=0, rng=None):

@@ -130,7 +130,7 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
         self,
         task: DynamicForagingTaskBase,
     ):
-        """Generative simulation of a task.
+        """Generative simulation of a task, or "open-loop" simulation
 
         Override the base class method to include choice_prob caching etc.
         """
@@ -166,8 +166,9 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
             # correlating with physiology recordings
             self.learn(_, choice, reward, _, task_done)
 
-    def predictive_perform(self, fit_choice_history, fit_reward_history):
+    def perform_closed_loop(self, fit_choice_history, fit_reward_history):
         """Simulates the agent over a fixed choice and reward history using its params.
+        Also called "teacher forcing" or "closed-loop" simulation.
 
         Unlike .perform() ("generative" simulation), this is called "predictive" simulation,
         which does not need a task and is used for model fitting.
@@ -387,7 +388,7 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
         # -- Rerun the predictive simulation with the fitted params--
         # To fill in the latent variables like q_estimation and choice_prob
         self.set_params(fitting_result.params)
-        self.predictive_perform(fit_choice_history, fit_reward_history)
+        self.perform_closed_loop(fit_choice_history, fit_reward_history)
         # Compute prediction accuracy
         predictive_choice = np.argmax(self.choice_prob[:, :-1], axis=0)  # Exclude the last update
         fitting_result.prediction_accuracy = (
@@ -441,7 +442,7 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
             # -- Compute the prediction accuracy of testing set --
             # Run PREDICTIVE simulation using temp_agent with the fitted parms of this fold
             tmp_agent = self.__class__(params=fitting_result_this_fold.params, **self.agent_kwargs)
-            tmp_agent.predictive_perform(fit_choice_history, fit_reward_history)
+            tmp_agent.perform_closed_loop(fit_choice_history, fit_reward_history)
 
             # Compute prediction accuracy
             predictive_choice_prob_this_fold = np.argmax(
@@ -501,7 +502,7 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
 
         # -- Run **PREDICTIVE** simulation --
         # (clamp the history and do only one forward step on each trial)
-        agent.predictive_perform(fit_choice_history, fit_reward_history)
+        agent.perform_closed_loop(fit_choice_history, fit_reward_history)
 
         # Note that, again, we have an extra update after the last trial,
         # which is not used for fitting
@@ -628,7 +629,7 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
         self.set_params(self.fitting_result.params)
         fit_choice_history = self.fitting_result.fit_settings["fit_choice_history"]
         fit_reward_history = self.fitting_result.fit_settings["fit_reward_history"]
-        self.predictive_perform(fit_choice_history, fit_reward_history)
+        self.perform_closed_loop(fit_choice_history, fit_reward_history)
 
         # -- Plot the target choice and reward history
         # Note that the p_reward could be agnostic to the model fitting.

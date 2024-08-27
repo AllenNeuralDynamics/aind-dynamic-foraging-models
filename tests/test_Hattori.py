@@ -50,7 +50,7 @@ class TestHattori(unittest.TestCase):
 
         # --    2.1 check predictive_perform --
         # It should recover the ground truth choice_prob because the params are exactly the same
-        forager.predictive_perform(choice_history, reward_history)
+        forager.perform_closed_loop(choice_history, reward_history)
         np.testing.assert_array_almost_equal(forager.choice_prob, ground_truth_choice_prob)
 
         # --    2.2 model fitting with cross-validation --

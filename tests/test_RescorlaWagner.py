@@ -129,7 +129,7 @@ class TestRescorlaWagner(unittest.TestCase):
         )
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=4)
         fig_fitting.savefig("tests/results/test_Rescorla-Wagner_fitted.png")
-        
+
         if sys.version_info[:2] == (3, 9) and n_trials == 100:
             """For unknown reasons the DE's rng will change behavior across python versions"""
             np.testing.assert_array_almost_equal(

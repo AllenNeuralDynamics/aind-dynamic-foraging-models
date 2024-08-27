@@ -13,7 +13,7 @@ def act_softmax(
 ):
     """Given q values and softmax_inverse_temperature, return the choice and choice probability.
     If chocie_kernel is not None, it will sum it into the softmax function like this
-    
+
     exp(softmax_inverse_temperature * (Q + choice_kernel_relative_weight * choice_kernel) + bias)
 
     Parameters
@@ -55,6 +55,7 @@ def act_softmax(
     choice = choose_ps(choice_prob, rng=rng)
     return choice, choice_prob
 
+
 def act_epsilon_greedy(
     q_estimation_t: np.array,
     epsilon: float,
@@ -62,19 +63,19 @@ def act_epsilon_greedy(
     choice_kernel=None,
     choice_kernel_relative_weight=None,
     rng=None,
-    ):
+):
     """Action selection by epsilon-greedy method.
-    
+
     Steps:
     1. Compute adjusted Q values by adding bias terms and choice kernel
           Q' = Q + bias + choice_kernel_relative_weight * choice_kernel
     2. The espilon-greedy method is quivalent to choice probabilities:
           If Q'_L != Q'_R (for simplicity, we assume only two choices)
-             choice_prob [(argmax(Q')] = 1 - epsilon / 2   
+             choice_prob [(argmax(Q')] = 1 - epsilon / 2
              choice_prob [(argmin(Q'))] = epsilon / 2
           else
              choice_prob [:] = 0.5
-             
+
     Parameters
     ----------
     q_estimation_t : np.array
@@ -91,12 +92,12 @@ def act_epsilon_greedy(
         _description_, by default None
     """
     rng = rng or np.random.default_rng()
-    
+
     # Compute adjusted Q value
     adjusted_Q = q_estimation_t + bias_terms
     if choice_kernel is not None:
         adjusted_Q += choice_kernel_relative_weight * choice_kernel
-    
+
     # Compute choice probabilities
     if adjusted_Q[0] == adjusted_Q[1]:
         choice_prob = np.array([0.5, 0.5])
@@ -104,7 +105,7 @@ def act_epsilon_greedy(
         argmax_Q = np.argmax(adjusted_Q)
         choice_prob = np.array([epsilon / 2, epsilon / 2])
         choice_prob[argmax_Q] = 1 - epsilon / 2
-    
+
     # Choose action
     choice = choose_ps(choice_prob, rng=rng)
     return choice, choice_prob

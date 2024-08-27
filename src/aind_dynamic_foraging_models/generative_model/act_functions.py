@@ -59,7 +59,7 @@ def act_epsilon_greedy(
     q_estimation_t: np.array,
     epsilon: float,
     bias_terms: np.array,
-    choice_kernal=None,
+    choice_kernel=None,
     choice_kernel_relative_weight=None,
     rng=None,
     ):
@@ -83,7 +83,7 @@ def act_epsilon_greedy(
         Probability of exploration
     bias_terms : np.array
         Bias terms
-    choice_kernal : None or np.array, optional
+    choice_kernel : None or np.array, optional
         If not None, it will be added to Q-values, by default None
     choice_kernel_relative_weight : _type_, optional
         If not None, it controls the relative weight of choice kernel, by default None
@@ -94,8 +94,8 @@ def act_epsilon_greedy(
     
     # Compute adjusted Q value
     adjusted_Q = q_estimation_t + bias_terms
-    if choice_kernal is not None:
-        adjusted_Q += choice_kernel_relative_weight * choice_kernal
+    if choice_kernel is not None:
+        adjusted_Q += choice_kernel_relative_weight * choice_kernel
     
     # Compute choice probabilities
     if adjusted_Q[0] == adjusted_Q[1]:

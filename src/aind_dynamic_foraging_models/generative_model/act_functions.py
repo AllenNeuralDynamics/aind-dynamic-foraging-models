@@ -53,7 +53,7 @@ def act_softmax(
         adjusted_Q += softmax_inverse_temperature * choice_kernel_relative_weight * choice_kernel
 
     # -- Compute choice probabilities --
-    choice_prob = softmax(adjusted_Q)
+    choice_prob = softmax(adjusted_Q, rng=rng)
 
     # -- Choose action --
     choice = choose_ps(choice_prob, rng=rng)

@@ -13,7 +13,7 @@ def act_softmax(
 ):
     """Given q values and softmax_inverse_temperature, return the choice and choice probability.
     If chocie_kernel is not None, it will sum it into the softmax function like this
-    
+
     Steps:
     1. Compute adjusted Q values by adding bias terms and choice kernel
        Q' = softmax_inverse_temperature * (Q + choice_kernel_relative_weight * choice_kernel) + bias
@@ -42,7 +42,7 @@ def act_softmax(
     _type_
         _description_
     """
-    
+
     # -- Compute adjusted Q value --
     # Note that the bias term is outside the temperature term to make it comparable across
     # different softmax_inverse_temperatures.
@@ -51,10 +51,10 @@ def act_softmax(
     adjusted_Q = softmax_inverse_temperature * q_estimation_t + bias_terms
     if choice_kernel is not None:
         adjusted_Q += softmax_inverse_temperature * choice_kernel_relative_weight * choice_kernel
-        
+
     # -- Compute choice probabilities --
     choice_prob = softmax(adjusted_Q)
-    
+
     # -- Choose action --
     choice = choose_ps(choice_prob, rng=rng)
     return choice, choice_prob
@@ -133,7 +133,7 @@ def softmax(x, rng=None):
     rng = rng or np.random.default_rng()
 
     if np.max(x) > 700:  # To prevent explosion of EXP
-        argmax_x = np.argmax(rng.permutation(x)) # Randomly choose one of the max values
+        argmax_x = np.argmax(rng.permutation(x))  # Randomly choose one of the max values
         greedy = np.zeros(len(x))
         greedy[argmax_x] = 1
         return greedy

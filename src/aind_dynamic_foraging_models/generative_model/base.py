@@ -34,7 +34,8 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         Parameters
         ----------
         agent_kwargs : dict, optional
-            The kwargs that define the agent type, by default {}
+            The hyperparameters that define the agent type, by default {}
+            For example, number_of_learning_rate, number_of_forget_rate, etc.
         params : dict, optional
             The kwargs that define the agent's parameters, by default {}
         **kwargs : dict

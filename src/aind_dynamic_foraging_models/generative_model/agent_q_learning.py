@@ -8,10 +8,10 @@ from typing import Literal, Optional
 
 import numpy as np
 import scipy.optimize as optimize
-from aind_behavior_gym.dynamic_foraging.agent import DynamicForagingAgentBase
 from aind_behavior_gym.dynamic_foraging.task import DynamicForagingTaskBase, L, R
 from aind_dynamic_foraging_basic_analysis import plot_foraging_session
 
+from .base import DynamicForagingAgentMLEBase
 from .act_functions import act_softmax, act_epsilon_greedy
 from .agent_q_learning_params import generate_pydantic_q_learning_params
 from .learn_functions import learn_choice_kernel, learn_RWlike
@@ -25,7 +25,7 @@ console_handler.setFormatter(
 logger.addHandler(console_handler)
 
 
-class ForagerSimpleQ(DynamicForagingAgentBase):
+class ForagerSimpleQ(DynamicForagingAgentMLEBase):
     """
     Base class for the familiy of simple Q-learning models.
 
@@ -63,35 +63,25 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
         **kwargs,
     ):
         """Init"""
-        super().__init__(**kwargs)  # Set self.rng etc.
-
-        # Dynamically generate Pydantic models for parameters and fitting bounds
-        self.ParamModel, self.ParamFitBoundModel = generate_pydantic_q_learning_params(
-            number_of_learning_rate=number_of_learning_rate,
-            number_of_forget_rate=number_of_forget_rate,
-            choice_kernel=choice_kernel,
-            action_selection=action_selection,
-        )
+        # -- Pack the agent_kwargs --
         self.agent_kwargs = dict(
             number_of_learning_rate=number_of_learning_rate,
             number_of_forget_rate=number_of_forget_rate,
             choice_kernel=choice_kernel,
             action_selection=action_selection,
         )  # Note that the class and self.agent_kwargs fully define the agent
+        
+        # -- Initialize the model parameters --
+        super().__init__(agent_kwargs=self.agent_kwargs, params=params, **kwargs)
 
-        # Set and validate the model parameters. Use default parameters if some are not provided
-        self.params = self.ParamModel(**params)
-
-        # Add model fitting related attributes
-        self.fitting_result = None
-        self.fitting_result_cross_validation = None
-
-        # Some switches
+        # -- Some agent-family-specific variables --
         self.fit_choice_kernel = False
-
-        # Some initializations
-        self.n_actions = 2
-        self.task = None
+        
+    def _get_params_model(self, agent_kwargs):
+        """Implement the base class method to dynamically generate Pydantic models 
+        for parameters and fitting bounds for simple Q learning.
+        """
+        return generate_pydantic_q_learning_params(**agent_kwargs)
 
     def reset(self):
         """Reset the agent"""

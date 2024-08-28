@@ -29,7 +29,17 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         params: dict = {},
         **kwargs,
     ):
-        """Init"""
+        """Init
+        
+        Parameters
+        ----------
+        agent_kwargs : dict, optional
+            The kwargs that define the agent type, by default {}
+        params : dict, optional
+            The kwargs that define the agent's parameters, by default {}
+        **kwargs : dict
+            Other kwargs that are passed to the base class, like rng's seed, by default {}
+        """
         super().__init__(**kwargs)  # Set self.rng etc.
 
         # Get pydantic model for the parameters and bounds

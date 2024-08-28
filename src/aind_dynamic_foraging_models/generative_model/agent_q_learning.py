@@ -13,31 +13,7 @@ from .params.agent_q_learning_params import generate_pydantic_q_learning_params
 
 
 class ForagerSimpleQ(DynamicForagingAgentMLEBase):
-    """
-    The familiy of simple Q-learning models.
-
-    Parameters
-    ----------
-    number_of_learning_rate : Literal[1, 2], optional
-        Number of learning rates, by default 2
-        If 1, only one learn_rate will be included in the model.
-        If 2, learn_rate_rew and learn_rate_unrew will be included in the model.
-    number_of_forget_rate : Literal[0, 1], optional
-        Number of forget_rates, by default 1.
-        If 0, forget_rate_unchosen will not be included in the model.
-        If 1, forget_rate_unchosen will be included in the model.
-    choice_kernel : Literal["none", "one_step", "full"], optional
-        Choice kernel type, by default "none"
-        If "none", no choice kernel will be included in the model.
-        If "one_step", choice_step_size will be set to 1.0, i.e., only the previous choice
-            affects the choice kernel. (Bari2019)
-        If "full", both choice_step_size and choice_kernel_relative_weight will be included
-    action_selection : Literal["softmax", "epsilon-greedy"], optional
-        Action selection type, by default "softmax"
-    params: dict, optional
-        Initial parameters of the model, by default {}.
-        See the generated Pydantic model in agent_q_learning_params.py for the full
-        list of parameters.
+    """The familiy of simple Q-learning models.
     """
 
     def __init__(
@@ -49,7 +25,31 @@ class ForagerSimpleQ(DynamicForagingAgentMLEBase):
         params: dict = {},
         **kwargs,
     ):
-        """Init"""
+        """Init
+        
+        Parameters
+        ----------
+        number_of_learning_rate : Literal[1, 2], optional
+            Number of learning rates, by default 2
+            If 1, only one learn_rate will be included in the model.
+            If 2, learn_rate_rew and learn_rate_unrew will be included in the model.
+        number_of_forget_rate : Literal[0, 1], optional
+            Number of forget_rates, by default 1.
+            If 0, forget_rate_unchosen will not be included in the model.
+            If 1, forget_rate_unchosen will be included in the model.
+        choice_kernel : Literal["none", "one_step", "full"], optional
+            Choice kernel type, by default "none"
+            If "none", no choice kernel will be included in the model.
+            If "one_step", choice_step_size will be set to 1.0, i.e., only the previous choice
+                affects the choice kernel. (Bari2019)
+            If "full", both choice_step_size and choice_kernel_relative_weight will be included
+        action_selection : Literal["softmax", "epsilon-greedy"], optional
+            Action selection type, by default "softmax"
+        params: dict, optional
+            Initial parameters of the model, by default {}.
+            See the generated Pydantic model in agent_q_learning_params.py for the full
+            list of parameters.
+        """
         # -- Pack the agent_kwargs --
         self.agent_kwargs = dict(
             number_of_learning_rate=number_of_learning_rate,

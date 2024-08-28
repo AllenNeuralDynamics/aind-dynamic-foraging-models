@@ -8,6 +8,10 @@ from aind_dynamic_foraging_models.generative_model.params.agent_q_learning_param
     generate_pydantic_q_learning_params,
 )
 
+from aind_dynamic_foraging_models.generative_model.params.agent_loss_counting_params import (
+    generate_pydantic_loss_counting_params
+)
+
 
 class TestParamsSimpleQ(unittest.TestCase):
     """Test generating Pydantic models for Q-learning agent parameters"""
@@ -84,6 +88,29 @@ class TestParamsSimpleQ(unittest.TestCase):
         with self.assertRaises(ValidationError):
             FittingBoundsModel(learn_rate=(1.1, 1.0))
 
+class TestParamsLossCounting(unittest.TestCase):
+    """Test generating Pydantic models for loss counting agent parameters"""
 
+    def test_generate_models_LossCounting(self):
+        """Test generating pydantic models for loss counting agent"""
+        # Create Pydantic models
+        ParamsModel, FittingBoundsModel = generate_pydantic_loss_counting_params()
+        expected_fields = ["loss_count_threshold_mean", "loss_count_threshold_std"]
+
+        self.check_fields(ParamsModel, FittingBoundsModel, expected_fields)
+        self.check_validation(ParamsModel, FittingBoundsModel)
+
+    def check_fields(self, ParamsModel, FittingBoundsModel, expected_fields):
+        """Check fields of Pydantic models"""
+        self.assertEqual(set(ParamsModel.model_fields.keys()), set(expected_fields))
+        self.assertEqual(set(FittingBoundsModel.model_fields.keys()), set(expected_fields))
+
+    def check_validation(self, ParamsModel, FittingBoundsModel):
+        """Check validation of Pydantic models"""
+        with self.assertRaises(ValidationError):
+            ParamsModel(loss_count_threshold_mean=-0.1)
+        with self.assertRaises(ValidationError):
+            FittingBoundsModel(loss_count_threshold_std=(1.0, 0.9))
+            
 if __name__ == "__main__":
     unittest.main(verbosity=2)

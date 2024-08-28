@@ -12,7 +12,7 @@ from aind_behavior_gym.dynamic_foraging.agent import DynamicForagingAgentBase
 from aind_behavior_gym.dynamic_foraging.task import DynamicForagingTaskBase, L, R
 from aind_dynamic_foraging_basic_analysis import plot_foraging_session
 
-from .act_functions import act_softmax
+from .act_functions import act_softmax, act_epsilon_greedy
 from .agent_q_learning_params import generate_pydantic_q_learning_params
 from .learn_functions import learn_choice_kernel, learn_RWlike
 
@@ -130,7 +130,7 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
         self,
         task: DynamicForagingTaskBase,
     ):
-        """Generative simulation of a task.
+        """Generative simulation of a task, or "open-loop" simulation
 
         Override the base class method to include choice_prob caching etc.
         """
@@ -166,8 +166,9 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
             # correlating with physiology recordings
             self.learn(_, choice, reward, _, task_done)
 
-    def predictive_perform(self, fit_choice_history, fit_reward_history):
+    def perform_closed_loop(self, fit_choice_history, fit_reward_history):
         """Simulates the agent over a fixed choice and reward history using its params.
+        Also called "teacher forcing" or "closed-loop" simulation.
 
         Unlike .perform() ("generative" simulation), this is called "predictive" simulation,
         which does not need a task and is used for model fitting.
@@ -194,16 +195,16 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
 
     def act(self, _):
         """Action selection"""
+        # Handle choice kernel
+        if self.agent_kwargs["choice_kernel"] == "none":
+            choice_kernel = None
+            choice_kernel_relative_weight = None
+        else:
+            choice_kernel = self.choice_kernel[:, self.trial]
+            choice_kernel_relative_weight = self.params.choice_kernel_relative_weight
 
+        # Action selection
         if self.agent_kwargs["action_selection"] == "softmax":
-            # Handle choice kernel
-            if self.agent_kwargs["choice_kernel"] == "none":
-                choice_kernel = None
-                choice_kernel_relative_weight = None
-            else:
-                choice_kernel = self.choice_kernel[:, self.trial]
-                choice_kernel_relative_weight = self.params.choice_kernel_relative_weight
-
             choice, choice_prob = act_softmax(
                 q_estimation_t=self.q_estimation[:, self.trial],
                 softmax_inverse_temperature=self.params.softmax_inverse_temperature,
@@ -214,7 +215,15 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
                 rng=self.rng,
             )
         elif self.agent_kwargs["action_selection"] == "epsilon-greedy":
-            raise NotImplementedError("Epsilon-greedy is not implemented yet.")
+            choice, choice_prob = act_epsilon_greedy(
+                q_estimation_t=self.q_estimation[:, self.trial],
+                epsilon=self.params.epsilon,
+                bias_terms=np.array([self.params.biasL, 0]),
+                # -- Choice kernel --
+                choice_kernel=choice_kernel,
+                choice_kernel_relative_weight=choice_kernel_relative_weight,
+                rng=self.rng,
+            )
 
         return choice, choice_prob
 
@@ -241,7 +250,7 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
             forget_rates=forget_rates,
         )
 
-        # Update choice kernel
+        # Update choice kernel, if used
         if self.agent_kwargs["choice_kernel"] != "none":
             self.choice_kernel[:, self.trial] = learn_choice_kernel(
                 choice=choice,
@@ -379,7 +388,7 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
         # -- Rerun the predictive simulation with the fitted params--
         # To fill in the latent variables like q_estimation and choice_prob
         self.set_params(fitting_result.params)
-        self.predictive_perform(fit_choice_history, fit_reward_history)
+        self.perform_closed_loop(fit_choice_history, fit_reward_history)
         # Compute prediction accuracy
         predictive_choice = np.argmax(self.choice_prob[:, :-1], axis=0)  # Exclude the last update
         fitting_result.prediction_accuracy = (
@@ -433,7 +442,7 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
             # -- Compute the prediction accuracy of testing set --
             # Run PREDICTIVE simulation using temp_agent with the fitted parms of this fold
             tmp_agent = self.__class__(params=fitting_result_this_fold.params, **self.agent_kwargs)
-            tmp_agent.predictive_perform(fit_choice_history, fit_reward_history)
+            tmp_agent.perform_closed_loop(fit_choice_history, fit_reward_history)
 
             # Compute prediction accuracy
             predictive_choice_prob_this_fold = np.argmax(
@@ -493,7 +502,7 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
 
         # -- Run **PREDICTIVE** simulation --
         # (clamp the history and do only one forward step on each trial)
-        agent.predictive_perform(fit_choice_history, fit_reward_history)
+        agent.perform_closed_loop(fit_choice_history, fit_reward_history)
 
         # Note that, again, we have an extra update after the last trial,
         # which is not used for fitting
@@ -620,7 +629,7 @@ class ForagerSimpleQ(DynamicForagingAgentBase):
         self.set_params(self.fitting_result.params)
         fit_choice_history = self.fitting_result.fit_settings["fit_choice_history"]
         fit_reward_history = self.fitting_result.fit_settings["fit_reward_history"]
-        self.predictive_perform(fit_choice_history, fit_reward_history)
+        self.perform_closed_loop(fit_choice_history, fit_reward_history)
 
         # -- Plot the target choice and reward history
         # Note that the p_reward could be agnostic to the model fitting.
@@ -666,7 +675,6 @@ def negLL(choice_prob, fit_choice_history, fit_reward_history, fit_trial_set=Non
         fit_choice_history.astype(int), range(len(fit_choice_history))
     ]  # Get the actual likelihood for each trial
 
-    # TODO: check this!
     # Deal with numerical precision (in rare cases, likelihood can be < 0 or > 1)
     likelihood_each_trial[(likelihood_each_trial <= 0) & (likelihood_each_trial > -1e-5)] = (
         1e-16  # To avoid infinity, which makes the number of zero likelihoods informative!
@@ -676,5 +684,5 @@ def negLL(choice_prob, fit_choice_history, fit_reward_history, fit_trial_set=Non
     # Return total likelihoods
     if fit_trial_set is None:  # Use all trials
         return -np.sum(np.log(likelihood_each_trial))
-    else:
+    else:  # Use subset of trials in cross-validation
         return -np.sum(np.log(likelihood_each_trial[fit_trial_set]))

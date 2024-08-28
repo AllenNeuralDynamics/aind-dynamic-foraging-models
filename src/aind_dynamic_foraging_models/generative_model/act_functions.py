@@ -4,15 +4,17 @@ import numpy as np
 
 
 def act_softmax(
-    q_estimation_t,
-    softmax_inverse_temperature=1,
-    bias_terms=0,
+    q_estimation_t: np.array,
+    softmax_inverse_temperature: float,
+    bias_terms: np.array,
     choice_kernel_relative_weight=None,
     choice_kernel=None,
     rng=None,
 ):
     """Given q values and softmax_inverse_temperature, return the choice and choice probability.
-    If chocie_kernel is not None, it will sum it into the softmax function
+    If chocie_kernel is not None, it will sum it into the softmax function like this
+
+    exp(softmax_inverse_temperature * (Q + choice_kernel_relative_weight * choice_kernel) + bias)
 
     Parameters
     ----------
@@ -20,7 +22,7 @@ def act_softmax(
         array of q values, by default 0
     softmax_inverse_temperature : int, optional
         inverse temperature of softmax function, by default 0
-    bias_terms : int, optional
+    bias_terms : np.array, optional
         _description_, by default 0
     choice_kernel_relative_weight : _type_, optional
         relative strength of choice kernel relative to Q in decision, by default None.
@@ -50,6 +52,61 @@ def act_softmax(
     choice_prob = softmax(
         q_estimation_t, inverse_temperature=softmax_inverse_temperature, bias=bias_terms, rng=rng
     )
+    choice = choose_ps(choice_prob, rng=rng)
+    return choice, choice_prob
+
+
+def act_epsilon_greedy(
+    q_estimation_t: np.array,
+    epsilon: float,
+    bias_terms: np.array,
+    choice_kernel=None,
+    choice_kernel_relative_weight=None,
+    rng=None,
+):
+    """Action selection by epsilon-greedy method.
+
+    Steps:
+    1. Compute adjusted Q values by adding bias terms and choice kernel
+          Q' = Q + bias + choice_kernel_relative_weight * choice_kernel
+    2. The espilon-greedy method is quivalent to choice probabilities:
+          If Q'_L != Q'_R (for simplicity, we assume only two choices)
+             choice_prob [(argmax(Q')] = 1 - epsilon / 2
+             choice_prob [(argmin(Q'))] = epsilon / 2
+          else
+             choice_prob [:] = 0.5
+
+    Parameters
+    ----------
+    q_estimation_t : np.array
+        Current Q-values
+    epsilon : float
+        Probability of exploration
+    bias_terms : np.array
+        Bias terms
+    choice_kernel : None or np.array, optional
+        If not None, it will be added to Q-values, by default None
+    choice_kernel_relative_weight : _type_, optional
+        If not None, it controls the relative weight of choice kernel, by default None
+    rng : _type_, optional
+        _description_, by default None
+    """
+    rng = rng or np.random.default_rng()
+
+    # Compute adjusted Q value
+    adjusted_Q = q_estimation_t + bias_terms
+    if choice_kernel is not None:
+        adjusted_Q += choice_kernel_relative_weight * choice_kernel
+
+    # Compute choice probabilities
+    if adjusted_Q[0] == adjusted_Q[1]:
+        choice_prob = np.array([0.5, 0.5])
+    else:
+        argmax_Q = np.argmax(adjusted_Q)
+        choice_prob = np.array([epsilon / 2, epsilon / 2])
+        choice_prob[argmax_Q] = 1 - epsilon / 2
+
+    # Choose action
     choice = choose_ps(choice_prob, rng=rng)
     return choice, choice_prob
 

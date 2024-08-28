@@ -13,8 +13,12 @@ def act_softmax(
 ):
     """Given q values and softmax_inverse_temperature, return the choice and choice probability.
     If chocie_kernel is not None, it will sum it into the softmax function like this
-
-    exp(softmax_inverse_temperature * (Q + choice_kernel_relative_weight * choice_kernel) + bias)
+    
+    Steps:
+    1. Compute adjusted Q values by adding bias terms and choice kernel
+       Q' = softmax_inverse_temperature * (Q + choice_kernel_relative_weight * choice_kernel) + bias
+    2. Compute choice probabilities by softmax function
+       choice_prob ~ exp(Q') / sum(exp(Q'))
 
     Parameters
     ----------
@@ -38,20 +42,20 @@ def act_softmax(
     _type_
         _description_
     """
+    
+    # -- Compute adjusted Q value --
+    # Note that the bias term is outside the temperature term to make it comparable across
+    # different softmax_inverse_temperatures.
+    # Also, I switched to inverse_temperature from temperature to make
+    # the fittings more numerically stable.
+    adjusted_Q = softmax_inverse_temperature * q_estimation_t + bias_terms
     if choice_kernel is not None:
-        q_estimation_t = np.vstack(
-            [q_estimation_t, choice_kernel]
-        ).transpose()  # the first dimension is the choice and the second is usual
-        # valu in position 0 and kernel in position 1
-        softmax_inverse_temperature = np.array(
-            [
-                softmax_inverse_temperature,
-                softmax_inverse_temperature * choice_kernel_relative_weight,
-            ]
-        )[np.newaxis, :]
-    choice_prob = softmax(
-        q_estimation_t, inverse_temperature=softmax_inverse_temperature, bias=bias_terms, rng=rng
-    )
+        adjusted_Q += softmax_inverse_temperature * choice_kernel_relative_weight * choice_kernel + np.array([0.1, 0])
+        
+    # -- Compute choice probabilities --
+    choice_prob = softmax(adjusted_Q)
+    
+    # -- Choose action --
     choice = choose_ps(choice_prob, rng=rng)
     return choice, choice_prob
 
@@ -93,12 +97,12 @@ def act_epsilon_greedy(
     """
     rng = rng or np.random.default_rng()
 
-    # Compute adjusted Q value
+    # -- Compute adjusted Q value --
     adjusted_Q = q_estimation_t + bias_terms
     if choice_kernel is not None:
         adjusted_Q += choice_kernel_relative_weight * choice_kernel
 
-    # Compute choice probabilities
+    # -- Compute choice probabilities --
     if adjusted_Q[0] == adjusted_Q[1]:
         choice_prob = np.array([0.5, 0.5])
     else:
@@ -106,23 +110,18 @@ def act_epsilon_greedy(
         choice_prob = np.array([epsilon / 2, epsilon / 2])
         choice_prob[argmax_Q] = 1 - epsilon / 2
 
-    # Choose action
+    # -- Choose action --
     choice = choose_ps(choice_prob, rng=rng)
     return choice, choice_prob
 
 
-def softmax(x, inverse_temperature=1, bias=0, rng=None):
-    """I switched to inverse_temperature from temperature to make
-    the fittings more numerically stable.
+def softmax(x, rng=None):
+    """
 
     Parameters
     ----------
     x : _type_
         _description_
-    inverse_temperature : int, optional
-        _description_, by default 1
-    bias : int, optional
-        _description_, by default 0
     rng : _type_, optional
         _description_, by default None
 
@@ -131,25 +130,15 @@ def softmax(x, inverse_temperature=1, bias=0, rng=None):
     _type_
         _description_
     """
-    # Put the bias outside /sigma to make it comparable across
-    # different softmax_inverse_temperatures.
     rng = rng or np.random.default_rng()
 
-    if len(x.shape) == 1:
-        X = x * inverse_temperature + bias  # Backward compatibility
-    else:
-        X = (
-            np.sum(x * inverse_temperature, axis=1) + bias
-        )  # Allow more than one kernels (e.g., choice kernel)
-
-    max_temp = np.max(X)
-
-    if max_temp > 700:  # To prevent explosion of EXP
+    if np.max(x) > 700:  # To prevent explosion of EXP
+        argmax_x = np.argmax(rng.permutation(x)) # Randomly choose one of the max values
         greedy = np.zeros(len(x))
-        greedy[rng.choice(np.where(X == np.max(X))[0])] = 1
+        greedy[argmax_x] = 1
         return greedy
     else:  # Normal softmax
-        return np.exp(X) / np.sum(np.exp(X))  # Accept np.
+        return np.exp(x) / np.sum(np.exp(x))
 
 
 def choose_ps(ps, rng=None):

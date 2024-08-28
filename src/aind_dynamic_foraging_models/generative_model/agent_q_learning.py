@@ -1,15 +1,14 @@
 """Maximum likelihood fitting of foraging models
 """
 
-
 # %%
 from typing import Literal
 
 import numpy as np
 
-from .base import DynamicForagingAgentMLEBase
-from .act_functions import act_softmax, act_epsilon_greedy
+from .act_functions import act_epsilon_greedy, act_softmax
 from .agent_q_learning_params import generate_pydantic_q_learning_params
+from .base import DynamicForagingAgentMLEBase
 from .learn_functions import learn_choice_kernel, learn_RWlike
 
 
@@ -58,15 +57,15 @@ class ForagerSimpleQ(DynamicForagingAgentMLEBase):
             choice_kernel=choice_kernel,
             action_selection=action_selection,
         )  # Note that the class and self.agent_kwargs fully define the agent
-        
+
         # -- Initialize the model parameters --
         super().__init__(agent_kwargs=self.agent_kwargs, params=params, **kwargs)
 
         # -- Some agent-family-specific variables --
         self.fit_choice_kernel = False
-        
+
     def _get_params_model(self, agent_kwargs):
-        """Implement the base class method to dynamically generate Pydantic models 
+        """Implement the base class method to dynamically generate Pydantic models
         for parameters and fitting bounds for simple Q learning.
         """
         return generate_pydantic_q_learning_params(**agent_kwargs)
@@ -75,7 +74,7 @@ class ForagerSimpleQ(DynamicForagingAgentMLEBase):
         """Reset the agent"""
         # --- Call the base class reset ---
         super()._reset()
-        
+
         # --- Agent family specific variables ---
         # Latent variables have n_trials + 1 length to capture the update
         # after the last trial (HH20210726)
@@ -85,7 +84,6 @@ class ForagerSimpleQ(DynamicForagingAgentMLEBase):
         # Always initialize choice_kernel with nan, even if choice_kernel = "none"
         self.choice_kernel = np.full([self.n_actions, self.n_trials + 1], np.nan)
         self.choice_kernel[:, 0] = 0  # Initial choice kernel as 0
-
 
     def act(self, _):
         """Action selection"""

@@ -1,15 +1,15 @@
 """Base class for DynamicForagingAgent with MLE fitting
 """
-from typing import Type, Tuple, Optional
-from pydantic import BaseModel
+
 import logging
+from typing import Optional, Tuple, Type
 
 import numpy as np
 import scipy.optimize as optimize
-
-from aind_dynamic_foraging_basic_analysis import plot_foraging_session
-from aind_behavior_gym.dynamic_foraging.task import DynamicForagingTaskBase, L, R
 from aind_behavior_gym.dynamic_foraging.agent import DynamicForagingAgentBase
+from aind_behavior_gym.dynamic_foraging.task import DynamicForagingTaskBase, L, R
+from aind_dynamic_foraging_basic_analysis import plot_foraging_session
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -21,8 +21,7 @@ logger.addHandler(console_handler)
 
 
 class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
-    """Base class of "DynamicForagingAgentBase" + "MLE fitting"
-    """
+    """Base class of "DynamicForagingAgentBase" + "MLE fitting" """
 
     def __init__(
         self,
@@ -50,12 +49,12 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
 
     def _get_params_model(self, agent_kwargs, params) -> Tuple[Type[BaseModel], Type[BaseModel]]:
         """Dynamically generate the Pydantic model for parameters and fitting bounds.
-        
+
         This should be overridden by the subclass!!
         It should return ParamModel and ParamFitBoundModel here.
         """
         raise NotImplementedError("This should be overridden by the subclass!!")
-    
+
     def set_params(self, params):
         """Update the model parameters and validate"""
         # This is safer than model_copy(update) because it will NOT validate the input params
@@ -67,7 +66,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
     def get_params(self):
         """Get the model parameters in a dictionary format"""
         return self.params.model_dump()
-    
+
     def get_choice_history(self):
         """Return the history of actions in format that is compatible with other library such as
         aind_dynamic_foraging_basic_analysis
@@ -148,7 +147,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             # will not be used to make the next action (because task is *done*) but may be used for
             # correlating with physiology recordings
             self.learn(_, choice, reward, _, task_done)
-            
+
     def perform_closed_loop(self, fit_choice_history, fit_reward_history):
         """Simulates the agent over a fixed choice and reward history using its params.
         Also called "teacher forcing" or "closed-loop" simulation.
@@ -585,7 +584,8 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=4)
 
         return fig, axes
-    
+
+
 # -- Helper function --
 def negLL(choice_prob, fit_choice_history, fit_reward_history, fit_trial_set=None):
     """Compute total negLL of the trials in fit_trial_set given the data."""

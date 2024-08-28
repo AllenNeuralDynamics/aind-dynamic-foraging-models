@@ -1,8 +1,8 @@
 """Testing Bari2019 model"""
 
 import multiprocessing as mp
-import unittest
 import sys
+import unittest
 
 import numpy as np
 from aind_behavior_gym.dynamic_foraging.task import CoupledBlockTask

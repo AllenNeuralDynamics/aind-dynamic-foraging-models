@@ -7,9 +7,9 @@ from typing import Literal
 import numpy as np
 
 from .act_functions import act_epsilon_greedy, act_softmax
-from .params.agent_q_learning_params import generate_pydantic_q_learning_params
 from .base import DynamicForagingAgentMLEBase
 from .learn_functions import learn_choice_kernel, learn_RWlike
+from .params.agent_q_learning_params import generate_pydantic_q_learning_params
 
 
 class ForagerSimpleQ(DynamicForagingAgentMLEBase):

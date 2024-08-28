@@ -50,7 +50,7 @@ def act_softmax(
     # the fittings more numerically stable.
     adjusted_Q = softmax_inverse_temperature * q_estimation_t + bias_terms
     if choice_kernel is not None:
-        adjusted_Q += softmax_inverse_temperature * choice_kernel_relative_weight * choice_kernel + np.array([0.1, 0])
+        adjusted_Q += softmax_inverse_temperature * choice_kernel_relative_weight * choice_kernel
         
     # -- Compute choice probabilities --
     choice_prob = softmax(adjusted_Q)

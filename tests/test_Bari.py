@@ -1,13 +1,13 @@
 """Testing Bari2019 model"""
 
 import multiprocessing as mp
-import unittest
 import sys
+import unittest
 
 import numpy as np
 from aind_behavior_gym.dynamic_foraging.task import CoupledBlockTask
 
-from aind_dynamic_foraging_models.generative_model.agent_q_learning import ForagerSimpleQ
+from aind_dynamic_foraging_models.generative_model import ForagerSimpleQ
 
 
 # Start a new test case

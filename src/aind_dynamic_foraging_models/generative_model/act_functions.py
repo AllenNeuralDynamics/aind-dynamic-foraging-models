@@ -4,7 +4,7 @@ import numpy as np
 
 
 def act_softmax(
-    q_estimation_t: np.array,
+    q_value_t: np.array,
     softmax_inverse_temperature: float,
     bias_terms: np.array,
     choice_kernel_relative_weight=None,
@@ -22,7 +22,7 @@ def act_softmax(
 
     Parameters
     ----------
-    q_estimation_t : list or np.array
+    q_value_t : list or np.array
         array of q values, by default 0
     softmax_inverse_temperature : int, optional
         inverse temperature of softmax function, by default 0
@@ -48,7 +48,7 @@ def act_softmax(
     # different softmax_inverse_temperatures.
     # Also, I switched to inverse_temperature from temperature to make
     # the fittings more numerically stable.
-    adjusted_Q = softmax_inverse_temperature * q_estimation_t + bias_terms
+    adjusted_Q = softmax_inverse_temperature * q_value_t + bias_terms
     if choice_kernel is not None:
         adjusted_Q += softmax_inverse_temperature * choice_kernel_relative_weight * choice_kernel
 
@@ -61,7 +61,7 @@ def act_softmax(
 
 
 def act_epsilon_greedy(
-    q_estimation_t: np.array,
+    q_value_t: np.array,
     epsilon: float,
     bias_terms: np.array,
     choice_kernel=None,
@@ -82,7 +82,7 @@ def act_epsilon_greedy(
 
     Parameters
     ----------
-    q_estimation_t : np.array
+    q_value_t : np.array
         Current Q-values
     epsilon : float
         Probability of exploration
@@ -98,7 +98,7 @@ def act_epsilon_greedy(
     rng = rng or np.random.default_rng()
 
     # -- Compute adjusted Q value --
-    adjusted_Q = q_estimation_t + bias_terms
+    adjusted_Q = q_value_t + bias_terms
     if choice_kernel is not None:
         adjusted_Q += choice_kernel_relative_weight * choice_kernel
 

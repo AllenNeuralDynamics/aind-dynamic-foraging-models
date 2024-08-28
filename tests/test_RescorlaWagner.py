@@ -39,7 +39,7 @@ class TestRescorlaWagner(unittest.TestCase):
         forager.perform(task)
         ground_truth_params = forager.params.model_dump()
         ground_truth_choice_prob = forager.choice_prob
-        ground_truth_q_estimation = forager.q_estimation
+        ground_truth_q_value = forager.q_value
         ground_truth_choice_kernel = forager.choice_kernel
 
         # --    1.1 test figure --
@@ -106,10 +106,10 @@ class TestRescorlaWagner(unittest.TestCase):
         # Add groundtruth
         x = np.arange(forager.n_trials + 1) + 1  # When plotting, we start from 1
         axes[0].plot(
-            x, ground_truth_q_estimation[0], lw=1, color="red", ls="-", label="actual_Q(L)"
+            x, ground_truth_q_value[0], lw=1, color="red", ls="-", label="actual_Q(L)"
         )
         axes[0].plot(
-            x, ground_truth_q_estimation[1], lw=1, color="blue", ls="-", label="actual_Q(R)"
+            x, ground_truth_q_value[1], lw=1, color="blue", ls="-", label="actual_Q(R)"
         )
         axes[0].plot(
             x,

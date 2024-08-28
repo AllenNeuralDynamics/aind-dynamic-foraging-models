@@ -78,8 +78,8 @@ class ForagerSimpleQ(DynamicForagingAgentMLEBase):
         # --- Agent family specific variables ---
         # Latent variables have n_trials + 1 length to capture the update
         # after the last trial (HH20210726)
-        self.q_estimation = np.full([self.n_actions, self.n_trials + 1], np.nan)
-        self.q_estimation[:, 0] = 0  # Initial Q values as 0
+        self.q_value = np.full([self.n_actions, self.n_trials + 1], np.nan)
+        self.q_value[:, 0] = 0  # Initial Q values as 0
 
         # Always initialize choice_kernel with nan, even if choice_kernel = "none"
         self.choice_kernel = np.full([self.n_actions, self.n_trials + 1], np.nan)
@@ -98,7 +98,7 @@ class ForagerSimpleQ(DynamicForagingAgentMLEBase):
         # Action selection
         if self.agent_kwargs["action_selection"] == "softmax":
             choice, choice_prob = act_softmax(
-                q_estimation_t=self.q_estimation[:, self.trial],
+                q_value_t=self.q_value[:, self.trial],
                 softmax_inverse_temperature=self.params.softmax_inverse_temperature,
                 bias_terms=np.array([self.params.biasL, 0]),
                 # -- Choice kernel --
@@ -108,7 +108,7 @@ class ForagerSimpleQ(DynamicForagingAgentMLEBase):
             )
         elif self.agent_kwargs["action_selection"] == "epsilon-greedy":
             choice, choice_prob = act_epsilon_greedy(
-                q_estimation_t=self.q_estimation[:, self.trial],
+                q_value_t=self.q_value[:, self.trial],
                 epsilon=self.params.epsilon,
                 bias_terms=np.array([self.params.biasL, 0]),
                 # -- Choice kernel --
@@ -134,10 +134,10 @@ class ForagerSimpleQ(DynamicForagingAgentMLEBase):
             forget_rates = [self.params.forget_rate_unchosen, 0]
 
         # Update Q values
-        self.q_estimation[:, self.trial] = learn_RWlike(
+        self.q_value[:, self.trial] = learn_RWlike(
             choice=choice,
             reward=reward,
-            q_estimation_tminus1=self.q_estimation[:, self.trial - 1],
+            q_value_tminus1=self.q_value[:, self.trial - 1],
             learn_rates=learn_rates,
             forget_rates=forget_rates,
         )

@@ -305,7 +305,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         self.fitting_result = fitting_result
 
         # -- Rerun the predictive simulation with the fitted params--
-        # To fill in the latent variables like q_estimation and choice_prob
+        # To fill in the latent variables like q_value and choice_prob
         self.set_params(fitting_result.params)
         self.perform_closed_loop(fit_choice_history, fit_reward_history)
         # Compute prediction accuracy
@@ -518,8 +518,8 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         x = np.arange(self.n_trials + 1) + 1  # When plotting, we start from 1
 
         # Add Q value
-        axes[0].plot(x, self.q_estimation[L, :], label="Q(L)", color="red", lw=0.5)
-        axes[0].plot(x, self.q_estimation[R, :], label="Q(R)", color="blue", lw=0.5)
+        axes[0].plot(x, self.q_value[L, :], label="Q(L)", color="red", lw=0.5)
+        axes[0].plot(x, self.q_value[R, :], label="Q(R)", color="blue", lw=0.5)
 
         # Add choice kernel, if used
         if self.agent_kwargs["choice_kernel"] != "none":
@@ -560,8 +560,8 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
 
         # -- Plot fitted Q values
         x = np.arange(self.n_trials + 1) + 1  # When plotting, we start from 1
-        axes[0].plot(x, self.q_estimation[0], lw=2, color="red", ls=":", label="fitted_Q(L)")
-        axes[0].plot(x, self.q_estimation[1], lw=2, color="blue", ls=":", label="fitted_Q(R)")
+        axes[0].plot(x, self.q_value[0], lw=2, color="red", ls=":", label="fitted_Q(L)")
+        axes[0].plot(x, self.q_value[1], lw=2, color="blue", ls=":", label="fitted_Q(R)")
 
         # Add choice kernel, if used
         if self.agent_kwargs["choice_kernel"] != "none":

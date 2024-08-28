@@ -83,38 +83,20 @@ class ForagerSimpleQ(DynamicForagingAgentMLEBase):
         """
         return generate_pydantic_q_learning_params(**agent_kwargs)
 
-    def reset(self):
+    def _reset(self):
         """Reset the agent"""
-        self.trial = 0
-
+        # --- Call the base class reset ---
+        super()._reset()
+        
+        # --- Agent family specific variables ---
         # Latent variables have n_trials + 1 length to capture the update
         # after the last trial (HH20210726)
         self.q_estimation = np.full([self.n_actions, self.n_trials + 1], np.nan)
         self.q_estimation[:, 0] = 0  # Initial Q values as 0
 
-        self.choice_prob = np.full([self.n_actions, self.n_trials + 1], np.nan)
-        self.choice_prob[:, 0] = 1 / self.n_actions  # To be strict (actually no use)
-
         # Always initialize choice_kernel with nan, even if choice_kernel = "none"
         self.choice_kernel = np.full([self.n_actions, self.n_trials + 1], np.nan)
         self.choice_kernel[:, 0] = 0  # Initial choice kernel as 0
-
-        # Choice and reward history have n_trials length
-        self.choice_history = np.full(self.n_trials, fill_value=-1, dtype=int)  # Choice history
-        # Reward history, separated for each port (Corrado Newsome 2005)
-        self.reward_history = np.zeros(self.n_trials)
-
-    def set_params(self, params):
-        """Update the model parameters and validate"""
-        # This is safer than model_copy(update) because it will NOT validate the input params
-        _params = self.params.model_dump()
-        _params.update(params)
-        self.params = self.ParamModel(**_params)
-        return self.get_params()
-
-    def get_params(self):
-        """Get the model parameters in a dictionary format"""
-        return self.params.model_dump()
 
     def perform(
         self,
@@ -128,7 +110,7 @@ class ForagerSimpleQ(DynamicForagingAgentMLEBase):
         self.n_trials = task.num_trials
 
         # --- Main task loop ---
-        self.reset()  # Reset agent
+        self._reset()  # Reset agent
         _, _ = self.task.reset()  # Reset task and get the initial observation
         task_done = False
         while not task_done:
@@ -164,7 +146,7 @@ class ForagerSimpleQ(DynamicForagingAgentMLEBase):
         which does not need a task and is used for model fitting.
         """
         self.n_trials = len(fit_choice_history)
-        self.reset()
+        self._reset()
 
         while self.trial <= self.n_trials - 1:
             # -- Compute and cache choice_prob (key to model fitting)

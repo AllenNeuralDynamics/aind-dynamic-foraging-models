@@ -209,10 +209,10 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         self,
         fit_choice_history,
         fit_reward_history,
-        fit_bounds_override: dict = {},
-        clamp_params: dict = {},
+        fit_bounds_override: Optional[dict] = {},
+        clamp_params: Optional[dict] = {},
         k_fold_cross_validation: Optional[int] = None,
-        DE_kwargs: dict = {"workers": 1},
+        DE_kwargs: Optional[dict] = {"workers": 1},
     ):
         """Fit the model to the data using differential evolution.
 
@@ -396,7 +396,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         return fitting_result, fitting_result_cross_validation
 
     @classmethod
-    def cost_func_for_DE(
+    def _cost_func_for_DE(
         cls,
         current_values,  # the current fitting values of params in fit_names (passed by DE)
         # ---- Below are the arguments passed by args. The order must be the same! ----
@@ -462,7 +462,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
 
         # --- Heavy lifting here!! ---
         fitting_result = optimize.differential_evolution(
-            func=cls.cost_func_for_DE,
+            func=cls._cost_func_for_DE,
             bounds=optimize.Bounds(lower_bounds, upper_bounds),
             args=(
                 agent_kwargs,  # Other kwargs to pass to the model

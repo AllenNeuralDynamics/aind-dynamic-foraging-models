@@ -519,8 +519,14 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
 
         return fitting_result
 
-    def plot_session(self):
-        """Plot session after .perform(task)"""
+    def plot_session(self, if_plot_latent=True):
+        """Plot session after .perform(task)
+        
+        Parameters
+        ----------
+        if_plot_latent : bool, optional
+            Whether to plot latent variables, by default True
+        """
         fig, axes = plot_foraging_session(
             choice_history=self.task.get_choice_history(),
             reward_history=self.task.get_reward_history(),
@@ -528,7 +534,8 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         )
 
         # Add Q value
-        self.plot_latent_variables(axes[0], if_fitted=False)
+        if if_plot_latent:
+            self.plot_latent_variables(axes[0], if_fitted=False)
         
         # -- Plot choice_prob
         axes[0].plot(
@@ -541,12 +548,17 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=3)
         return fig, axes
 
-    def plot_fitted_session(self):
+    def plot_fitted_session(self, if_plot_latent=True):
         """Plot session after .fit()
 
         1. choice and reward history will be the history used for fitting
         2. laten variables q_estimate and choice_prob will be plotted
         3. p_reward will be missing (since it is not used for fitting)
+        
+        Parameters
+        ----------
+        if_plot_latent : bool, optional
+            Whether to plot latent variables, by default True
         """
         if self.fitting_result is None:
             print("No fitting result found. Please fit the model first.")
@@ -567,7 +579,8 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         )
 
         # -- Plot fitted Q values
-        self.plot_latent_variables(axes[0], if_fitted=True)
+        if if_plot_latent:
+            self.plot_latent_variables(axes[0], if_fitted=True)
 
         # -- Plot fitted choice_prob
         axes[0].plot(

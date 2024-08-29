@@ -36,7 +36,7 @@ class TestHattori(unittest.TestCase):
         ground_truth_q_value = forager.q_value
 
         # --    1.1 test figure --
-        fig, axes = forager.plot_session()
+        fig, axes = forager.plot_session(if_plot_latent=True)
         fig.savefig("tests/results/test_Hattori.png")
         self.assertIsNotNone(fig)
 
@@ -96,7 +96,7 @@ class TestHattori(unittest.TestCase):
         )
 
         # Plot fitted latent variables
-        fig_fitting, axes = forager.plot_fitted_session()
+        fig_fitting, axes = forager.plot_fitted_session(if_plot_latent=True)
         # Add groundtruth
         axes[0].plot(ground_truth_q_value[0], lw=1, color="red", ls="-", label="actual_Q(L)")
         axes[0].plot(ground_truth_q_value[1], lw=1, color="blue", ls="-", label="actual_Q(R)")

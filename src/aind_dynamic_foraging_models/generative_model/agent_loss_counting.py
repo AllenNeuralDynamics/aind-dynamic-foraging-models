@@ -125,11 +125,12 @@ class ForagerLossCounting(DynamicForagingAgentMLEBase):
             style = dict(lw=0.5)
             prefix = ""
                 
+        x = np.arange(self.n_trials + 1) + 1  # When plotting, we start from 1
+
         if not if_fitted:
             # Only plot loss count if not fitted
             ax_loss_count = ax.twinx()
 
-            x = np.arange(self.n_trials + 1) + 1  # When plotting, we start from 1
             ax_loss_count.plot(x, self.loss_count, label=f"loss_count", color="blue", **style)
             ax_loss_count.set(ylabel="Loss count")
             ax_loss_count.legend(loc="upper right", fontsize=6)

@@ -43,7 +43,7 @@ class TestRescorlaWagner(unittest.TestCase):
         ground_truth_choice_kernel = forager.choice_kernel
 
         # --    1.1 test figure --
-        fig, axes = forager.plot_session()
+        fig, axes = forager.plot_session(if_plot_latent=True)
         fig.savefig("tests/results/test_RescorlaWagner.png")
         self.assertIsNotNone(fig)
 
@@ -102,7 +102,7 @@ class TestRescorlaWagner(unittest.TestCase):
         )
 
         # Plot fitted latent variables
-        fig_fitting, axes = forager.plot_fitted_session()
+        fig_fitting, axes = forager.plot_fitted_session(if_plot_latent=True)
         # Add groundtruth
         x = np.arange(forager.n_trials + 1) + 1  # When plotting, we start from 1
         axes[0].plot(

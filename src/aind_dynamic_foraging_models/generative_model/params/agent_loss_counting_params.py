@@ -45,4 +45,11 @@ def generate_pydantic_loss_counting_params(
     )
     fitting_bounds["loss_count_threshold_std"] = (0.0, 10.0)
 
+    # -- Always add a bias term --
+    params_fields["biasL"] = (
+        float,
+        Field(default=0.0, ge=-1.0, le=1.0, description="Bias term for loss counting"),
+    )  # Bias term for loss counting directly added to the choice probabilities
+    fitting_bounds["biasL"] = (-1.0, 1.0)
+
     return create_pydantic_models_dynamic(params_fields, fitting_bounds)

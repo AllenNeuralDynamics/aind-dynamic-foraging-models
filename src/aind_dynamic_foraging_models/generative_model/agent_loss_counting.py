@@ -65,6 +65,7 @@ class ForagerLossCounting(DynamicForagingAgentMLEBase):
             loss_count=self.loss_count[self.trial],
             loss_count_threshold_mean=self.params.loss_count_threshold_mean,
             loss_count_threshold_std=self.params.loss_count_threshold_std,
+            bias_terms=np.array([self.params.biasL, 0]),
             rng=self.rng,
         )
         return choice, choice_prob

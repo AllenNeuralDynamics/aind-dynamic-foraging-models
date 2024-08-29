@@ -4,6 +4,8 @@ import numpy as np
 from scipy.stats import norm
 from typing import Optional
 
+from aind_behavior_gym.dynamic_foraging.task import L, R
+
 def act_softmax(
     q_value_t: np.array,
     softmax_inverse_temperature: float,
@@ -121,6 +123,7 @@ def act_loss_counting(
     loss_count: int,
     loss_count_threshold_mean: float,
     loss_count_threshold_std: float,
+    bias_terms: np.array,
     rng=None,
 ):
     """Action selection by loss counting method.
@@ -135,6 +138,8 @@ def act_loss_counting(
         Mean of the loss count threshold
     loss_count_threshold_std : float
         Standard deviation of the loss count threshold
+    bias_terms: np.array
+        Bias terms loss count
     """
     rng = rng or np.random.default_rng()
 
@@ -156,6 +161,16 @@ def act_loss_counting(
     )
     choice_prob = np.array([prob_switch, prob_switch])  # Assuming only two choices
     choice_prob[int(previous_choice)] = 1 - prob_switch
+    
+    # -- Add bias --
+    # For a fair comparison with other models that have bias terms.
+    # However, bias terms of different families are not directly comparable.
+    # Here, the bias term is added to the choice probability directly, whereas in other models,
+    # the bias term is added to the Q-values.
+    choice_prob[L] += bias_terms[L]
+    choice_prob[L] = np.clip(choice_prob[L], 0, 1)
+    choice_prob[R] = 1 - choice_prob[L]
+    
     return choose_ps(choice_prob, rng=rng), choice_prob
 
 

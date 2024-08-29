@@ -107,12 +107,8 @@ class TestBari(unittest.TestCase):
         fig_fitting, axes = forager.plot_fitted_session(if_plot_latent=True)
         # Add groundtruth
         x = np.arange(forager.n_trials + 1) + 1  # When plotting, we start from 1
-        axes[0].plot(
-            x, ground_truth_q_value[0], lw=1, color="red", ls="-", label="actual_Q(L)"
-        )
-        axes[0].plot(
-            x, ground_truth_q_value[1], lw=1, color="blue", ls="-", label="actual_Q(R)"
-        )
+        axes[0].plot(x, ground_truth_q_value[0], lw=1, color="red", ls="-", label="actual_Q(L)")
+        axes[0].plot(x, ground_truth_q_value[1], lw=1, color="blue", ls="-", label="actual_Q(R)")
         axes[0].plot(
             x,
             ground_truth_choice_kernel[0],

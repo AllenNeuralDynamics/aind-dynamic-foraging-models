@@ -20,7 +20,7 @@ class TestLossCounting(unittest.TestCase):
         forager = ForagerLossCounting(
             choice_kernel="full",  # No choice kernel
             params=dict(
-                loss_count_threshold_mean=5.0, 
+                loss_count_threshold_mean=5.0,
                 loss_count_threshold_std=2.0,
                 biasL=-0.2,
                 choice_kernel_step_size=1.0,
@@ -36,7 +36,6 @@ class TestLossCounting(unittest.TestCase):
         forager.perform(task)
         ground_truth_params = forager.params.model_dump()
         ground_truth_choice_prob = forager.choice_prob
-        ground_truth_loss_count = forager.loss_count
 
         # --    1.1 test figure --
         fig, axes = forager.plot_session(if_plot_latent=True)
@@ -60,7 +59,7 @@ class TestLossCounting(unittest.TestCase):
         forager = ForagerLossCounting(
             choice_kernel="full",  # No choice kernel
             seed=42,
-            )   # To fit a model, just create a new forager
+        )  # To fit a model, just create a new forager
         forager.fit(
             choice_history,
             reward_history,
@@ -99,9 +98,12 @@ class TestLossCounting(unittest.TestCase):
         # Add groundtruth
         x = np.arange(forager.n_trials) + 1  # When plotting, we start from 1
         axes[0].plot(
-            x, 
+            x,
             ground_truth_choice_prob[1] / ground_truth_choice_prob.sum(axis=0),
-            lw=1, color="green", ls="-", label="actual_choice_probability(R/(R+L))"
+            lw=1,
+            color="green",
+            ls="-",
+            label="actual_choice_probability(R/(R+L))",
         )
 
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=4)
@@ -110,7 +112,7 @@ class TestLossCounting(unittest.TestCase):
         if sys.version_info[:2] == (3, 9) and n_trials == 100:
             """For unknown reasons the DE's rng will change behavior across python versions"""
             np.testing.assert_array_almost_equal(
-                fitting_result.x,  [3.9196, 1.3266, -0.1700, 0.4781, 0.3401], decimal=2
+                fitting_result.x, [3.9196, 1.3266, -0.1700, 0.4781, 0.3401], decimal=2
             )
             print("Fitting result tested")
         else:

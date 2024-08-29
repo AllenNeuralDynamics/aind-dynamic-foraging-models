@@ -1,10 +1,11 @@
 """Functions for action selection in generative models"""
 
-import numpy as np
-from scipy.stats import norm
 from typing import Optional
 
+import numpy as np
 from aind_behavior_gym.dynamic_foraging.task import L, R
+from scipy.stats import norm
+
 
 def act_softmax(
     q_value_t: np.array,
@@ -163,8 +164,7 @@ def act_loss_counting(
         loss_count,
         loss_count_threshold_mean
         - 1e-10,  # To make sure this is equivalent to ">=" if the threshold is an integer
-        loss_count_threshold_std
-        + 1e-16,  # To make sure this cdf trick works for std=0
+        loss_count_threshold_std + 1e-16,  # To make sure this cdf trick works for std=0
     )
     choice_prob = np.array([prob_switch, prob_switch])  # Assuming only two choices
     choice_prob[int(previous_choice)] = 1 - prob_switch
@@ -188,7 +188,7 @@ def act_loss_counting(
     # Here, the bias term is added to the choice probability directly, whereas in other models,
     # the bias term is added to the Q-values.
     choice_prob[L] += bias_terms[L]
-    
+
     # -- Re-normalize choice probability --
     choice_prob[L] = np.clip(choice_prob[L], 0, 1)
     choice_prob[R] = 1 - choice_prob[L]
@@ -197,6 +197,7 @@ def act_loss_counting(
 
 
 # --- Helper functions ---
+
 
 def softmax(x, rng=None):
     """

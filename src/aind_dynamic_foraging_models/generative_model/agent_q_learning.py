@@ -5,7 +5,6 @@
 from typing import Literal
 
 import numpy as np
-
 from aind_behavior_gym.dynamic_foraging.task import L, R
 
 from .act_functions import act_epsilon_greedy, act_softmax
@@ -15,8 +14,7 @@ from .params.agent_q_learning_params import generate_pydantic_q_learning_params
 
 
 class ForagerSimpleQ(DynamicForagingAgentMLEBase):
-    """The familiy of simple Q-learning models.
-    """
+    """The familiy of simple Q-learning models."""
 
     def __init__(
         self,
@@ -28,7 +26,7 @@ class ForagerSimpleQ(DynamicForagingAgentMLEBase):
         **kwargs,
     ):
         """Init
-        
+
         Parameters
         ----------
         number_of_learning_rate : Literal[1, 2], optional
@@ -42,9 +40,10 @@ class ForagerSimpleQ(DynamicForagingAgentMLEBase):
         choice_kernel : Literal["none", "one_step", "full"], optional
             Choice kernel type, by default "none"
             If "none", no choice kernel will be included in the model.
-            If "one_step", choice_kernel_step_size will be set to 1.0, i.e., only the previous choice
+            If "one_step", choice_kernel_step_size will be set to 1.0, i.e., only the last choice
                 affects the choice kernel. (Bari2019)
-            If "full", both choice_kernel_step_size and choice_kernel_relative_weight will be included
+            If "full", both choice_kernel_step_size and choice_kernel_relative_weight
+            will be included during fitting
         action_selection : Literal["softmax", "epsilon-greedy"], optional
             Action selection type, by default "softmax"
         params: dict, optional
@@ -123,7 +122,7 @@ class ForagerSimpleQ(DynamicForagingAgentMLEBase):
 
     def learn(self, _observation, choice, reward, _next_observation, done):
         """Update Q values
-        
+
         Note that self.trial already increased by 1 before learn() in the base class
         """
 

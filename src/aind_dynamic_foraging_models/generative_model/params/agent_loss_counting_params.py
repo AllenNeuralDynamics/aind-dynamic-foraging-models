@@ -1,17 +1,17 @@
 """Generate pydantic models for Loss Count agent parameters."""
 
 # %%
-from typing import Any, Dict, List, Literal, Tuple, Type
+from typing import Literal, Tuple, Type
 
-from pydantic import BaseModel, ConfigDict, Field, create_model, model_validator
+from pydantic import BaseModel, Field
 
-from .base import create_pydantic_models_dynamic
 from .agent_q_learning_params import _add_choice_kernel_fields
+from .base import create_pydantic_models_dynamic
 
 
 def generate_pydantic_loss_counting_params(
     choice_kernel: Literal["none", "one_step", "full"] = "none",
-    ) -> Tuple[Type[BaseModel], Type[BaseModel]]:
+) -> Tuple[Type[BaseModel], Type[BaseModel]]:
     """Generate Pydantic models for Loss-counting agent parameters.
 
     All default values are hard-coded in this function. But when instantiating the model,

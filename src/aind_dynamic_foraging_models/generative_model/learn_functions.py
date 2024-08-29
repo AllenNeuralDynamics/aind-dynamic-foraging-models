@@ -74,7 +74,7 @@ def learn_choice_kernel(choice, choice_kernel_tminus1, choice_kernel_step_size):
 
 def learn_loss_counting(choice, reward, just_switched, loss_count_tminus1) -> int:
     """Update loss counting
-    
+
     Returns the new loss count
     """
     if reward:

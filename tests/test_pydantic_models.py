@@ -4,12 +4,11 @@ import unittest
 
 from pydantic import ValidationError
 
+from aind_dynamic_foraging_models.generative_model.params.agent_loss_counting_params import (
+    generate_pydantic_loss_counting_params,
+)
 from aind_dynamic_foraging_models.generative_model.params.agent_q_learning_params import (
     generate_pydantic_q_learning_params,
-)
-
-from aind_dynamic_foraging_models.generative_model.params.agent_loss_counting_params import (
-    generate_pydantic_loss_counting_params
 )
 
 
@@ -88,6 +87,7 @@ class TestParamsSimpleQ(unittest.TestCase):
         with self.assertRaises(ValidationError):
             FittingBoundsModel(learn_rate=(1.1, 1.0))
 
+
 class TestParamsLossCounting(unittest.TestCase):
     """Test generating Pydantic models for loss counting agent parameters"""
 
@@ -111,6 +111,7 @@ class TestParamsLossCounting(unittest.TestCase):
             ParamsModel(loss_count_threshold_mean=-0.1)
         with self.assertRaises(ValidationError):
             FittingBoundsModel(loss_count_threshold_std=(1.0, 0.9))
-            
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

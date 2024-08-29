@@ -1,7 +1,8 @@
 """Functions for action selection in generative models"""
 
 import numpy as np
-
+from scipy.stats import norm
+from typing import Optional
 
 def act_softmax(
     q_value_t: np.array,
@@ -114,6 +115,51 @@ def act_epsilon_greedy(
     choice = choose_ps(choice_prob, rng=rng)
     return choice, choice_prob
 
+
+def act_loss_counting(
+    previous_choice: Optional[int],
+    loss_count: int,
+    loss_count_threshold_mean: float,
+    loss_count_threshold_std: float,
+    rng=None,
+):
+    """Action selection by loss counting method.
+
+    Parameters
+    ----------
+    previous_choice : int
+        Last choice
+    loss_count : int
+        Current loss count
+    loss_count_threshold_mean : float
+        Mean of the loss count threshold
+    loss_count_threshold_std : float
+        Standard deviation of the loss count threshold
+    """
+    rng = rng or np.random.default_rng()
+
+    # -- Return random if this is the first trial --
+    if previous_choice is None:
+        choice_prob = np.array([0.5, 0.5])
+        return choose_ps(choice_prob, rng=rng), choice_prob
+
+    # -- Compute probability of switching --
+    # This cdf trick is equivalent to:
+    #   1) sample a threshold from the normal distribution
+    #   2) compare the threshold with the loss count
+    prob_switch = norm.cdf(
+        loss_count,
+        loss_count_threshold_mean
+        - 1e-10,  # To make sure this is equivalent to ">=" if the threshold is an integer
+        loss_count_threshold_std
+        + 1e-16,  # To make sure this cdf trick works for std=0
+    )
+    choice_prob = np.array([prob_switch, prob_switch])  # Assuming only two choices
+    choice_prob[int(previous_choice)] = 1 - prob_switch
+    return choose_ps(choice_prob, rng=rng), choice_prob
+
+
+# --- Helper functions ---
 
 def softmax(x, rng=None):
     """

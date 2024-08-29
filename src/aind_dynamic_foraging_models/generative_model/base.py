@@ -128,6 +128,10 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         """Generative simulation of a task, or "open-loop" simulation
 
         Override the base class method to include choice_prob caching etc.
+        
+        In each trial loop (note when time ticks):
+                              agent.act()     task.step()    agent.learn()
+            latent variable [t]  -->  choice [t]  --> reward [t] ---->  update latent variable [t+1]
         """
         self.task = task
         self.n_trials = task.num_trials
@@ -530,6 +534,15 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
 
         # Add Q value
         self.plot_latent_variables(axes[0], if_fitted=False)
+        
+        # -- Plot choice_prob
+        axes[0].plot(
+            np.arange(self.n_trials + 1) + 1,
+            self.choice_prob[1] / self.choice_prob.sum(axis=0),
+            lw=0.5,
+            color="green",
+            label="choice_prob(R/R+L)",
+        )
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=3)
         return fig, axes
 

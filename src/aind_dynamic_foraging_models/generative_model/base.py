@@ -5,11 +5,13 @@ import logging
 from typing import Optional, Tuple, Type
 
 import numpy as np
+from pydantic import BaseModel
 import scipy.optimize as optimize
 from aind_behavior_gym.dynamic_foraging.agent import DynamicForagingAgentBase
 from aind_behavior_gym.dynamic_foraging.task import DynamicForagingTaskBase
 from aind_dynamic_foraging_basic_analysis import plot_foraging_session
-from pydantic import BaseModel
+from .params import ParamsSymbols
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -78,6 +80,40 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         """Get the model parameters in a dictionary format"""
         return self.params.model_dump()
 
+    def get_params_str(self, if_latex=True, if_value=True, decimal=3):
+        """Get string of the model parameters
+        
+        Parameters
+        -----------
+        if_latex: bool, optional
+            if True, return the latex format of the parameters, by default True
+        if_value: bool, optional
+            if True, return the value of the parameters, by default True
+        decimal: int, optional
+
+        """
+        # Sort the parameters by the order of ParamsSymbols
+        params_default_order = list(ParamsSymbols.__members__.keys())
+        params_list = sorted(
+            self.get_params().items(), 
+            key=lambda x: params_default_order.index(x[0])
+        )
+        
+        # Get fixed parameters if any
+        if self.fitting_result is not None:
+            fixed_params = self.fitting_result.fit_settings["clamp_params"].keys()
+        else:
+            fixed_params = []
+            
+        ps = []
+        for p in params_list:
+            name_str = ParamsSymbols[p[0]] if if_latex else p[0]
+            value_str = f"={p[1]: .{decimal}f}" if if_value else ""
+            fix_str = " (fixed)" if p[0] in fixed_params else ""
+            ps.append(f"{name_str}{value_str}{fix_str}")
+        
+        return ", ".join(ps)
+        
     def get_choice_history(self):
         """Return the history of actions in format that is compatible with other library such as
         aind_dynamic_foraging_basic_analysis
@@ -544,6 +580,13 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             label="choice_prob(R/R+L)",
         )
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=3)
+        
+        #　Add the model parameters
+        params_str = self.get_params_str()
+        fig.suptitle(params_str, fontsize=10, 
+                     horizontalalignment = 'left', 
+                     x=fig.subplotpars.left)
+
         return fig, axes
 
     def plot_fitted_session(self, if_plot_latent=True):
@@ -590,6 +633,12 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             label="fitted_choice_prob(R/R+L)",
         )
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=4)
+
+        #　Add the model parameters
+        params_str = self.get_params_str()
+        fig.suptitle(params_str, fontsize=10, 
+                     horizontalalignment = 'left', 
+                     x=fig.subplotpars.left)
 
         return fig, axes
 

@@ -110,6 +110,8 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         """Reset the agent"""
         self.trial = 0
 
+        # Latent variables have n_trials + 1 length to capture the update
+        # after the last trial (HH20210726)
         # MLE agent must have choice_prob
         self.choice_prob = np.full([self.n_actions, self.n_trials + 1], np.nan)
         self.choice_prob[:, 0] = 1 / self.n_actions  # To be strict (actually no use)
@@ -526,21 +528,8 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             p_reward=self.task.get_p_reward(),
         )
 
-        x = np.arange(self.n_trials + 1) + 1  # When plotting, we start from 1
-
         # Add Q value
-        axes[0].plot(x, self.q_value[L, :], label="Q(L)", color="red", lw=0.5)
-        axes[0].plot(x, self.q_value[R, :], label="Q(R)", color="blue", lw=0.5)
-
-        # Add choice kernel, if used
-        if self.agent_kwargs["choice_kernel"] != "none":
-            axes[0].plot(
-                x, self.choice_kernel[L, :], label="choice_kernel(L)", color="purple", lw=0.5
-            )
-            axes[0].plot(
-                x, self.choice_kernel[R, :], label="choice_kernel(R)", color="cyan", lw=0.5
-            )
-
+        self.plot_latent_variables(axes[0], if_fitted=False)
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=3)
         return fig, axes
 
@@ -570,22 +559,11 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         )
 
         # -- Plot fitted Q values
-        x = np.arange(self.n_trials + 1) + 1  # When plotting, we start from 1
-        axes[0].plot(x, self.q_value[0], lw=2, color="red", ls=":", label="fitted_Q(L)")
-        axes[0].plot(x, self.q_value[1], lw=2, color="blue", ls=":", label="fitted_Q(R)")
-
-        # Add choice kernel, if used
-        if self.agent_kwargs["choice_kernel"] != "none":
-            axes[0].plot(
-                x, self.choice_kernel[L, :], label="choice_kernel(L)", color="purple", ls=":", lw=2
-            )
-            axes[0].plot(
-                x, self.choice_kernel[R, :], label="choice_kernel(R)", color="cyan", ls=":", lw=2
-            )
+        self.plot_latent_variables(axes[0], if_fitted=True)
 
         # -- Plot fitted choice_prob
         axes[0].plot(
-            x,
+            np.arange(self.n_trials + 1) + 1,
             self.choice_prob[1] / self.choice_prob.sum(axis=0),
             lw=2,
             color="green",
@@ -595,6 +573,13 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=4)
 
         return fig, axes
+    
+    def plot_latent_variables(self, ax, if_fitted=False):
+        """Add agent-specific latent variables to the plot
+        
+        if_fitted: whether the latent variables are from the fitted model (styling purpose)
+        """
+        pass
 
 
 # -- Helper function --

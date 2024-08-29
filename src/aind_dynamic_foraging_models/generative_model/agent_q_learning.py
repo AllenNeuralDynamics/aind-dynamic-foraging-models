@@ -6,6 +6,8 @@ from typing import Literal
 
 import numpy as np
 
+from aind_behavior_gym.dynamic_foraging.task import L, R
+
 from .act_functions import act_epsilon_greedy, act_softmax
 from .base import DynamicForagingAgentMLEBase
 from .learn_functions import learn_choice_kernel, learn_RWlike
@@ -120,7 +122,10 @@ class ForagerSimpleQ(DynamicForagingAgentMLEBase):
         return choice, choice_prob
 
     def learn(self, _observation, choice, reward, _next_observation, done):
-        """Update Q values"""
+        """Update Q values
+        
+        Note that self.trial already increased by 1 before learn() in the base class
+        """
 
         # Handle params
         if self.agent_kwargs["number_of_learning_rate"] == 1:
@@ -148,4 +153,34 @@ class ForagerSimpleQ(DynamicForagingAgentMLEBase):
                 choice=choice,
                 choice_kernel_tminus1=self.choice_kernel[:, self.trial - 1],
                 choice_step_size=self.params.choice_step_size,
+            )
+
+    def plot_latent_variables(self, ax, if_fitted=False):
+        """Plot Q values"""
+        if if_fitted:
+            style = dict(lw=2, ls=":")
+            prefix = "fitted_"
+        else:
+            style = dict(lw=0.5)
+            prefix = ""
+
+        x = np.arange(self.n_trials + 1) + 1  # When plotting, we start from 1
+        ax.plot(x, self.q_value[L, :], label=f"{prefix}Q(L)", color="red", **style)
+        ax.plot(x, self.q_value[R, :], label=f"{prefix}Q(R)", color="blue", **style)
+
+        # Add choice kernel, if used
+        if self.agent_kwargs["choice_kernel"] != "none":
+            ax.plot(
+                x,
+                self.choice_kernel[L, :],
+                label=f"{prefix}choice_kernel(L)",
+                color="purple",
+                **style,
+            )
+            ax.plot(
+                x,
+                self.choice_kernel[R, :],
+                label=f"{prefix}choice_kernel(R)",
+                color="cyan",
+                **style,
             )

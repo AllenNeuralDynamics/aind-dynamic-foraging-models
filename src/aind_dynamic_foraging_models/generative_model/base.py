@@ -110,10 +110,8 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         """Reset the agent"""
         self.trial = 0
 
-        # Latent variables have n_trials + 1 length to capture the update
-        # after the last trial (HH20210726)
         # MLE agent must have choice_prob
-        self.choice_prob = np.full([self.n_actions, self.n_trials + 1], np.nan)
+        self.choice_prob = np.full([self.n_actions, self.n_trials], np.nan)
         self.choice_prob[:, 0] = 1 / self.n_actions  # To be strict (actually no use)
 
         # Choice and reward history have n_trials length
@@ -326,7 +324,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         self.set_params(fitting_result.params)
         self.perform_closed_loop(fit_choice_history, fit_reward_history)
         # Compute prediction accuracy
-        predictive_choice = np.argmax(self.choice_prob[:, :-1], axis=0)  # Exclude the last update
+        predictive_choice = np.argmax(self.choice_prob, axis=0)
         fitting_result.prediction_accuracy = (
             np.sum(predictive_choice == fit_choice_history) / fitting_result.n_trials
         )
@@ -382,8 +380,8 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
 
             # Compute prediction accuracy
             predictive_choice_prob_this_fold = np.argmax(
-                tmp_agent.choice_prob[:, :-1], axis=0
-            )  # Exclude the last update
+                tmp_agent.choice_prob, axis=0
+            )
 
             correct_predicted = predictive_choice_prob_this_fold == fit_choice_history
             prediction_accuracy_fit.append(
@@ -439,10 +437,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         # -- Run **PREDICTIVE** simulation --
         # (clamp the history and do only one forward step on each trial)
         agent.perform_closed_loop(fit_choice_history, fit_reward_history)
-
-        # Note that, again, we have an extra update after the last trial,
-        # which is not used for fitting
-        choice_prob = agent.choice_prob[:, :-1]
+        choice_prob = agent.choice_prob
 
         return negLL(
             choice_prob, fit_choice_history, fit_reward_history, fit_trial_set
@@ -537,7 +532,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         
         # -- Plot choice_prob
         axes[0].plot(
-            np.arange(self.n_trials + 1) + 1,
+            np.arange(self.n_trials) + 1,
             self.choice_prob[1] / self.choice_prob.sum(axis=0),
             lw=0.5,
             color="green",
@@ -576,7 +571,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
 
         # -- Plot fitted choice_prob
         axes[0].plot(
-            np.arange(self.n_trials + 1) + 1,
+            np.arange(self.n_trials) + 1,
             self.choice_prob[1] / self.choice_prob.sum(axis=0),
             lw=2,
             color="green",

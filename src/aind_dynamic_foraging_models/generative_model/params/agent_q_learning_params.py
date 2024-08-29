@@ -31,9 +31,9 @@ def generate_pydantic_q_learning_params(
     choice_kernel : Literal["none", "one_step", "full"], optional
         Choice kernel type, by default "none"
         If "none", no choice kernel will be included in the model.
-        If "one_step", choice_step_size will be set to 1.0, i.e., only the previous choice
+        If "one_step", choice_kernel_step_size will be set to 1.0, i.e., only the previous choice
             affects the choice kernel. (Bari2019)
-        If "full", both choice_step_size and choice_kernel_relative_weight will be included
+        If "full", both choice_kernel_step_size and choice_kernel_relative_weight will be included
     action_selection : Literal["softmax", "epsilon-greedy"], optional
         Action selection type, by default "softmax"
     """
@@ -115,15 +115,15 @@ def _add_choice_kernel_fields(params_fields, fitting_bounds, choice_kernel):
     fitting_bounds["choice_kernel_relative_weight"] = (0.0, 1.0)
 
     if choice_kernel == "full":
-        params_fields["choice_step_size"] = (
+        params_fields["choice_kernel_step_size"] = (
             float,
             Field(default=0.1, ge=0.0, le=1.0, description="Step size for choice kernel"),
         )
-        fitting_bounds["choice_step_size"] = (0.0, 1.0)
+        fitting_bounds["choice_kernel_step_size"] = (0.0, 1.0)
     elif choice_kernel == "one_step":
         # If choice kernel is one-step (only the previous choice affects the choice kernel like
-        # in Bari2019), set choice_step_size to 1.0
-        params_fields["choice_step_size"] = (
+        # in Bari2019), set choice_kernel_step_size to 1.0
+        params_fields["choice_kernel_step_size"] = (
             float,
             Field(
                 default=1.0,
@@ -132,7 +132,7 @@ def _add_choice_kernel_fields(params_fields, fitting_bounds, choice_kernel):
                 description="Step size for choice kernel == 1 (one-step choice kernel)",
             ),
         )
-        fitting_bounds["choice_step_size"] = (1.0, 1.0)
+        fitting_bounds["choice_kernel_step_size"] = (1.0, 1.0)
 
 
 def _add_action_selection_fields(params_fields, fitting_bounds, action_selection):

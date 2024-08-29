@@ -42,7 +42,7 @@ class TestParamsSimpleQ(unittest.TestCase):
         expected_fields = [
             "learn_rate",
             "forget_rate_unchosen",
-            "choice_step_size",
+            "choice_kernel_step_size",
             "choice_kernel_relative_weight",
             "softmax_inverse_temperature",
             "biasL",
@@ -51,10 +51,10 @@ class TestParamsSimpleQ(unittest.TestCase):
         self.check_fields(ParamsModel, FittingBoundsModel, expected_fields)
         self.check_validation(ParamsModel, FittingBoundsModel)
 
-        # Make sure choice_step_size is fixed to 1.0
-        self.assertEqual(ParamsModel.model_fields["choice_step_size"].default, 1.0)
+        # Make sure choice_kernel_step_size is fixed to 1.0
+        self.assertEqual(ParamsModel.model_fields["choice_kernel_step_size"].default, 1.0)
         with self.assertRaises(ValidationError):
-            ParamsModel(choice_step_size=0.5)
+            ParamsModel(choice_kernel_step_size=0.5)
 
     def test_generate_models_Hattori2019(self):
         """Test generating pydantic models for Hattori2019 agent"""

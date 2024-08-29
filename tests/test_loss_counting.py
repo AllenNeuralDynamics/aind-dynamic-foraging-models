@@ -17,16 +17,19 @@ class TestLossCounting(unittest.TestCase):
     def test_LossCounting(self):
         """Test LossCounting model (biased win-stay-lose-shift)"""
         # -- Create task and forager --
-        forager = ForagerLossCounting(seed=42)
-        forager.set_params(
-            dict(
+        forager = ForagerLossCounting(
+            choice_kernel="full",  # No choice kernel
+            params=dict(
                 loss_count_threshold_mean=1.0,  # Win-stay-lose-shift
                 loss_count_threshold_std=0.0,
                 biasL=-0.2,
-            )
+                choice_kernel_step_size=0.1,
+                choice_kernel_relative_weight=0.1,
+            ),
+            seed=42,
         )
 
-        n_trials = 100
+        n_trials = 500
         task = CoupledBlockTask(reward_baiting=True, num_trials=n_trials, seed=42)
 
         # -- 1. Generative run --
@@ -53,9 +56,11 @@ class TestLossCounting(unittest.TestCase):
         forager.perform_closed_loop(choice_history, reward_history)
         np.testing.assert_array_almost_equal(forager.choice_prob, ground_truth_choice_prob)
 
-    
         # --    2.2 model fitting with cross-validation --
-        forager = ForagerLossCounting(seed=42)   # To fit a model, just create a new forager
+        forager = ForagerLossCounting(
+            choice_kernel="full",  # No choice kernel
+            seed=42,
+            )   # To fit a model, just create a new forager
         forager.fit(
             choice_history,
             reward_history,

@@ -44,7 +44,7 @@ def learn_RWlike(choice, reward, q_value_tminus1, forget_rates, learn_rates):
     return q_value_t
 
 
-def learn_choice_kernel(choice, choice_kernel_tminus1, choice_step_size):
+def learn_choice_kernel(choice, choice_kernel_tminus1, choice_kernel_step_size):
     """Learning function for choice kernel.
 
     Parameters
@@ -69,7 +69,7 @@ def learn_choice_kernel(choice, choice_kernel_tminus1, choice_step_size):
     # Update choice kernel (see Model 5 of Wilson and Collins, 2019)
     # Note that if chocie_step_size = 1, degenerates to Bari 2019
     # (choice kernel = the last choice only)
-    return choice_kernel_tminus1 + choice_step_size * (choice_vector - choice_kernel_tminus1)
+    return choice_kernel_tminus1 + choice_kernel_step_size * (choice_vector - choice_kernel_tminus1)
 
 
 def learn_loss_counting(choice, reward, just_switched, loss_count_tminus1) -> int:

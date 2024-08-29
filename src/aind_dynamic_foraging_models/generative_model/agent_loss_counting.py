@@ -34,9 +34,9 @@ class ForagerLossCounting(DynamicForagingAgentMLEBase):
         choice_kernel : Literal["none", "one_step", "full"], optional
             Choice kernel type, by default "none"
             If "none", no choice kernel will be included in the model.
-            If "one_step", choice_step_size will be set to 1.0, i.e., only the previous choice
+            If "one_step", choice_kernel_step_size will be set to 1.0, i.e., only the previous choice
                 affects the choice kernel. (Bari2019)
-            If "full", both choice_step_size and choice_kernel_relative_weight will be included
+            If "full", both choice_kernel_step_size and choice_kernel_relative_weight will be included
         params: dict, optional
             Initial parameters of the model, by default {}.
             In the loss counting model, the only two parameters are:
@@ -113,7 +113,7 @@ class ForagerLossCounting(DynamicForagingAgentMLEBase):
             self.choice_kernel[:, self.trial] = learn_choice_kernel(
                 choice=choice,
                 choice_kernel_tminus1=self.choice_kernel[:, self.trial - 1],
-                choice_step_size=self.params.choice_step_size,
+                choice_kernel_step_size=self.params.choice_kernel_step_size,
             )
 
     def plot_latent_variables(self, ax, if_fitted=False):

@@ -124,6 +124,8 @@ def act_loss_counting(
     loss_count_threshold_mean: float,
     loss_count_threshold_std: float,
     bias_terms: np.array,
+    choice_kernel=None,
+    choice_kernel_relative_weight=None,
     rng=None,
 ):
     """Action selection by loss counting method.
@@ -140,6 +142,11 @@ def act_loss_counting(
         Standard deviation of the loss count threshold
     bias_terms: np.array
         Bias terms loss count
+    choice_kernel : None or np.array, optional
+        If not None, it will be added to Q-values, by default None
+    choice_kernel_relative_weight : _type_, optional
+        If not None, it controls the relative weight of choice kernel, by default None
+    rng : _type_, optional
     """
     rng = rng or np.random.default_rng()
 
@@ -161,16 +168,31 @@ def act_loss_counting(
     )
     choice_prob = np.array([prob_switch, prob_switch])  # Assuming only two choices
     choice_prob[int(previous_choice)] = 1 - prob_switch
-    
-    # -- Add bias --
+
+    # -- Add choice kernel --
+    # For a fair comparison with other models that have choice kernel.
+    # However, choice kernel of different families are not directly comparable.
+    # Here, I first compute a normalized choice probability for choice kernel alone using softmax
+    # with inverse temperature 1.0, compute a bias introduced by the choice kernel, and then add
+    # it to the original choice probability.
+    if choice_kernel is not None:
+        choice_prob_choice_kernel = softmax(choice_kernel, rng=rng)
+        bias_L_from_choice_kernel = (
+            choice_prob_choice_kernel[L] - 0.5
+        ) * choice_kernel_relative_weight  # A biasL term introduced by the choice kernel
+        choice_prob[L] += bias_L_from_choice_kernel
+
+    # -- Add global bias --
     # For a fair comparison with other models that have bias terms.
     # However, bias terms of different families are not directly comparable.
     # Here, the bias term is added to the choice probability directly, whereas in other models,
     # the bias term is added to the Q-values.
     choice_prob[L] += bias_terms[L]
+    
+    # -- Re-normalize choice probability --
     choice_prob[L] = np.clip(choice_prob[L], 0, 1)
     choice_prob[R] = 1 - choice_prob[L]
-    
+
     return choose_ps(choice_prob, rng=rng), choice_prob
 
 

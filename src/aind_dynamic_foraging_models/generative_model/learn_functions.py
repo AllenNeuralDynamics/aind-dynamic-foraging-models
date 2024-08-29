@@ -70,3 +70,18 @@ def learn_choice_kernel(choice, choice_kernel_tminus1, choice_step_size):
     # Note that if chocie_step_size = 1, degenerates to Bari 2019
     # (choice kernel = the last choice only)
     return choice_kernel_tminus1 + choice_step_size * (choice_vector - choice_kernel_tminus1)
+
+
+def learn_loss_counting(choice, reward, just_switched, loss_count_tminus1) -> int:
+    """Update loss counting
+    
+    Returns the new loss count
+    """
+    if reward:
+        return 0
+
+    # If not reward
+    if just_switched:
+        return 1
+    else:
+        return loss_count_tminus1 + 1

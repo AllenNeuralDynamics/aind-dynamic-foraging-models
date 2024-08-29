@@ -6,9 +6,11 @@ from typing import Any, Dict, List, Literal, Tuple, Type
 from pydantic import BaseModel, ConfigDict, Field, create_model, model_validator
 
 from .base import create_pydantic_models_dynamic
+from .agent_q_learning_params import _add_choice_kernel_fields
 
 
 def generate_pydantic_loss_counting_params(
+    choice_kernel: Literal["none", "one_step", "full"] = "none",
     ) -> Tuple[Type[BaseModel], Type[BaseModel]]:
     """Generate Pydantic models for Loss-counting agent parameters.
 
@@ -17,7 +19,12 @@ def generate_pydantic_loss_counting_params(
 
     Parameters
     ----------
-    No hyperparameters are needed for the loss counting model
+    choice_kernel : Literal["none", "one_step", "full"], optional
+        Choice kernel type, by default "none"
+        If "none", no choice kernel will be included in the model.
+        If "one_step", choice_step_size will be set to 1.0, i.e., only the previous choice
+            affects the choice kernel. (Bari2019)
+        If "full", both choice_step_size and choice_kernel_relative_weight will be included
     """
 
     # ====== Define common fields and constraints ======
@@ -51,5 +58,8 @@ def generate_pydantic_loss_counting_params(
         Field(default=0.0, ge=-1.0, le=1.0, description="Bias term for loss counting"),
     )  # Bias term for loss counting directly added to the choice probabilities
     fitting_bounds["biasL"] = (-1.0, 1.0)
+
+    # -- Add choice kernel fields --
+    _add_choice_kernel_fields(params_fields, fitting_bounds, choice_kernel)
 
     return create_pydantic_models_dynamic(params_fields, fitting_bounds)

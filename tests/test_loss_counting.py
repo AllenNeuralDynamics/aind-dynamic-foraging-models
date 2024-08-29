@@ -15,13 +15,14 @@ class TestLossCounting(unittest.TestCase):
     """Testing LossCounting model"""
 
     def test_LossCounting(self):
-        """Test LossCounting model"""
+        """Test LossCounting model (biased win-stay-lose-shift)"""
         # -- Create task and forager --
         forager = ForagerLossCounting(seed=42)
         forager.set_params(
             dict(
                 loss_count_threshold_mean=1.0,  # Win-stay-lose-shift
                 loss_count_threshold_std=0.0,
+                biasL=-0.2,
             )
         )
 
@@ -104,7 +105,7 @@ class TestLossCounting(unittest.TestCase):
         if sys.version_info[:2] == (3, 9) and n_trials == 100:
             """For unknown reasons the DE's rng will change behavior across python versions"""
             np.testing.assert_array_almost_equal(
-                fitting_result.x, [0.8568, 0.0079], decimal=2
+                fitting_result.x, [0.5074, 0.3762, -0.0952], decimal=2
             )
             print("Fitting result tested")
         else:

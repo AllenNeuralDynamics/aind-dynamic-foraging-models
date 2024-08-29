@@ -95,7 +95,7 @@ class TestParamsLossCounting(unittest.TestCase):
         """Test generating pydantic models for loss counting agent"""
         # Create Pydantic models
         ParamsModel, FittingBoundsModel = generate_pydantic_loss_counting_params()
-        expected_fields = ["loss_count_threshold_mean", "loss_count_threshold_std"]
+        expected_fields = ["loss_count_threshold_mean", "loss_count_threshold_std", "biasL"]
 
         self.check_fields(ParamsModel, FittingBoundsModel, expected_fields)
         self.check_validation(ParamsModel, FittingBoundsModel)

@@ -7,7 +7,7 @@ from typing import Optional, Tuple, Type
 import numpy as np
 import scipy.optimize as optimize
 from aind_behavior_gym.dynamic_foraging.agent import DynamicForagingAgentBase
-from aind_behavior_gym.dynamic_foraging.task import DynamicForagingTaskBase, L, R
+from aind_behavior_gym.dynamic_foraging.task import DynamicForagingTaskBase
 from aind_dynamic_foraging_basic_analysis import plot_foraging_session
 from pydantic import BaseModel
 
@@ -29,7 +29,18 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         params: dict = {},
         **kwargs,
     ):
-        """Init"""
+        """Init
+
+        Parameters
+        ----------
+        agent_kwargs : dict, optional
+            The hyperparameters that define the agent type, by default {}
+            For example, number_of_learning_rate, number_of_forget_rate, etc.
+        params : dict, optional
+            The kwargs that define the agent's parameters, by default {}
+        **kwargs : dict
+            Other kwargs that are passed to the base class, like rng's seed, by default {}
+        """
         super().__init__(**kwargs)  # Set self.rng etc.
 
         # Get pydantic model for the parameters and bounds
@@ -100,7 +111,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         self.trial = 0
 
         # MLE agent must have choice_prob
-        self.choice_prob = np.full([self.n_actions, self.n_trials + 1], np.nan)
+        self.choice_prob = np.full([self.n_actions, self.n_trials], np.nan)
         self.choice_prob[:, 0] = 1 / self.n_actions  # To be strict (actually no use)
 
         # Choice and reward history have n_trials length
@@ -115,6 +126,10 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         """Generative simulation of a task, or "open-loop" simulation
 
         Override the base class method to include choice_prob caching etc.
+
+        In each trial loop (note when time ticks):
+                              agent.act()     task.step()    agent.learn()
+            latent variable [t]  -->  choice [t]  --> reward [t] ---->  update latent variable [t+1]
         """
         self.task = task
         self.n_trials = task.num_trials
@@ -209,10 +224,10 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         self,
         fit_choice_history,
         fit_reward_history,
-        fit_bounds_override: dict = {},
-        clamp_params: dict = {},
+        fit_bounds_override: Optional[dict] = {},
+        clamp_params: Optional[dict] = {},
         k_fold_cross_validation: Optional[int] = None,
-        DE_kwargs: dict = {"workers": 1},
+        DE_kwargs: Optional[dict] = {"workers": 1},
     ):
         """Fit the model to the data using differential evolution.
 
@@ -305,11 +320,11 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         self.fitting_result = fitting_result
 
         # -- Rerun the predictive simulation with the fitted params--
-        # To fill in the latent variables like q_estimation and choice_prob
+        # To fill in the latent variables like q_value and choice_prob
         self.set_params(fitting_result.params)
         self.perform_closed_loop(fit_choice_history, fit_reward_history)
         # Compute prediction accuracy
-        predictive_choice = np.argmax(self.choice_prob[:, :-1], axis=0)  # Exclude the last update
+        predictive_choice = np.argmax(self.choice_prob, axis=0)
         fitting_result.prediction_accuracy = (
             np.sum(predictive_choice == fit_choice_history) / fitting_result.n_trials
         )
@@ -364,9 +379,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             tmp_agent.perform_closed_loop(fit_choice_history, fit_reward_history)
 
             # Compute prediction accuracy
-            predictive_choice_prob_this_fold = np.argmax(
-                tmp_agent.choice_prob[:, :-1], axis=0
-            )  # Exclude the last update
+            predictive_choice_prob_this_fold = np.argmax(tmp_agent.choice_prob, axis=0)
 
             correct_predicted = predictive_choice_prob_this_fold == fit_choice_history
             prediction_accuracy_fit.append(
@@ -396,7 +409,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         return fitting_result, fitting_result_cross_validation
 
     @classmethod
-    def cost_func_for_DE(
+    def _cost_func_for_DE(
         cls,
         current_values,  # the current fitting values of params in fit_names (passed by DE)
         # ---- Below are the arguments passed by args. The order must be the same! ----
@@ -422,10 +435,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         # -- Run **PREDICTIVE** simulation --
         # (clamp the history and do only one forward step on each trial)
         agent.perform_closed_loop(fit_choice_history, fit_reward_history)
-
-        # Note that, again, we have an extra update after the last trial,
-        # which is not used for fitting
-        choice_prob = agent.choice_prob[:, :-1]
+        choice_prob = agent.choice_prob
 
         return negLL(
             choice_prob, fit_choice_history, fit_reward_history, fit_trial_set
@@ -462,7 +472,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
 
         # --- Heavy lifting here!! ---
         fitting_result = optimize.differential_evolution(
-            func=cls.cost_func_for_DE,
+            func=cls._cost_func_for_DE,
             bounds=optimize.Bounds(lower_bounds, upper_bounds),
             args=(
                 agent_kwargs,  # Other kwargs to pass to the model
@@ -507,38 +517,46 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
 
         return fitting_result
 
-    def plot_session(self):
-        """Plot session after .perform(task)"""
+    def plot_session(self, if_plot_latent=True):
+        """Plot session after .perform(task)
+
+        Parameters
+        ----------
+        if_plot_latent : bool, optional
+            Whether to plot latent variables, by default True
+        """
         fig, axes = plot_foraging_session(
             choice_history=self.task.get_choice_history(),
             reward_history=self.task.get_reward_history(),
             p_reward=self.task.get_p_reward(),
         )
 
-        x = np.arange(self.n_trials + 1) + 1  # When plotting, we start from 1
-
         # Add Q value
-        axes[0].plot(x, self.q_estimation[L, :], label="Q(L)", color="red", lw=0.5)
-        axes[0].plot(x, self.q_estimation[R, :], label="Q(R)", color="blue", lw=0.5)
+        if if_plot_latent:
+            self.plot_latent_variables(axes[0], if_fitted=False)
 
-        # Add choice kernel, if used
-        if self.agent_kwargs["choice_kernel"] != "none":
-            axes[0].plot(
-                x, self.choice_kernel[L, :], label="choice_kernel(L)", color="purple", lw=0.5
-            )
-            axes[0].plot(
-                x, self.choice_kernel[R, :], label="choice_kernel(R)", color="cyan", lw=0.5
-            )
-
+        # -- Plot choice_prob
+        axes[0].plot(
+            np.arange(self.n_trials) + 1,
+            self.choice_prob[1] / self.choice_prob.sum(axis=0),
+            lw=0.5,
+            color="green",
+            label="choice_prob(R/R+L)",
+        )
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=3)
         return fig, axes
 
-    def plot_fitted_session(self):
+    def plot_fitted_session(self, if_plot_latent=True):
         """Plot session after .fit()
 
         1. choice and reward history will be the history used for fitting
         2. laten variables q_estimate and choice_prob will be plotted
         3. p_reward will be missing (since it is not used for fitting)
+
+        Parameters
+        ----------
+        if_plot_latent : bool, optional
+            Whether to plot latent variables, by default True
         """
         if self.fitting_result is None:
             print("No fitting result found. Please fit the model first.")
@@ -559,22 +577,12 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         )
 
         # -- Plot fitted Q values
-        x = np.arange(self.n_trials + 1) + 1  # When plotting, we start from 1
-        axes[0].plot(x, self.q_estimation[0], lw=2, color="red", ls=":", label="fitted_Q(L)")
-        axes[0].plot(x, self.q_estimation[1], lw=2, color="blue", ls=":", label="fitted_Q(R)")
-
-        # Add choice kernel, if used
-        if self.agent_kwargs["choice_kernel"] != "none":
-            axes[0].plot(
-                x, self.choice_kernel[L, :], label="choice_kernel(L)", color="purple", ls=":", lw=2
-            )
-            axes[0].plot(
-                x, self.choice_kernel[R, :], label="choice_kernel(R)", color="cyan", ls=":", lw=2
-            )
+        if if_plot_latent:
+            self.plot_latent_variables(axes[0], if_fitted=True)
 
         # -- Plot fitted choice_prob
         axes[0].plot(
-            x,
+            np.arange(self.n_trials) + 1,
             self.choice_prob[1] / self.choice_prob.sum(axis=0),
             lw=2,
             color="green",
@@ -584,6 +592,13 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=4)
 
         return fig, axes
+
+    def plot_latent_variables(self, ax, if_fitted=False):
+        """Add agent-specific latent variables to the plot
+
+        if_fitted: whether the latent variables are from the fitted model (styling purpose)
+        """
+        pass
 
 
 # -- Helper function --

@@ -4,10 +4,10 @@ import unittest
 
 from pydantic import ValidationError
 
-from aind_dynamic_foraging_models.generative_model.params.agent_loss_counting_params import (
+from aind_dynamic_foraging_models.generative_model.params.forager_loss_counting_params import (
     generate_pydantic_loss_counting_params,
 )
-from aind_dynamic_foraging_models.generative_model.params.agent_q_learning_params import (
+from aind_dynamic_foraging_models.generative_model.params.forager_q_learning_params import (
     generate_pydantic_q_learning_params,
 )
 

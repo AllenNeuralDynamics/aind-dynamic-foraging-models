@@ -5,7 +5,7 @@ from typing import Literal, Tuple, Type
 
 from pydantic import BaseModel, Field
 
-from .agent_q_learning_params import _add_choice_kernel_fields
+from .forager_q_learning_params import _add_choice_kernel_fields
 from .base import create_pydantic_models_dynamic
 
 

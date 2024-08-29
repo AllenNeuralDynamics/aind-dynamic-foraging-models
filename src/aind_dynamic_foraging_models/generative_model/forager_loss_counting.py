@@ -10,7 +10,7 @@ from aind_behavior_gym.dynamic_foraging.task import L, R
 from .act_functions import act_loss_counting
 from .base import DynamicForagingAgentMLEBase
 from .learn_functions import learn_choice_kernel, learn_loss_counting
-from .params.agent_loss_counting_params import generate_pydantic_loss_counting_params
+from .params.forager_loss_counting_params import generate_pydantic_loss_counting_params
 
 
 class ForagerLossCounting(DynamicForagingAgentMLEBase):

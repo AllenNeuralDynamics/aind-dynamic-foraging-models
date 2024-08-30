@@ -18,7 +18,7 @@ class ForagerLossCounting(DynamicForagingAgentMLEBase):
 
     def __init__(
         self,
-        choice_kernel: Literal["none", "one_step", "full"],
+        choice_kernel: Literal["none", "one_step", "full"] = "none",
         params: dict = {},
         **kwargs,
     ):

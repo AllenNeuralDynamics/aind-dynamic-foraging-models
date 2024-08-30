@@ -14,7 +14,7 @@ class ParamsSymbols(str, Enum):
     learn_rate_unrew = R'$\alpha_{unr}$'
     forget_rate_unchosen = R'$\delta$'
     choice_kernel_step_size = R'$\alpha_{ck}$'
-    choice_kernel_relative_weight = R'$\w_{ck}$'
+    choice_kernel_relative_weight = R'$w_{ck}$'
     biasL = R'$b_L$'
     softmax_inverse_temperature = R'$\beta$'
     epsilon = R'$\epsilon$'

@@ -78,7 +78,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
           }  # Parameters that are frozen by construction
         self.params_list_free = list(set(self.params_list_all) - set(self.params_list_frozen))
 
-    def set_params(self, params):
+    def set_params(self, **params):
         """Update the model parameters and validate"""
         # This is safer than model_copy(update) because it will NOT validate the input params
         _params = self.params.model_dump()
@@ -384,7 +384,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
 
         # -- Rerun the predictive simulation with the fitted params--
         # To fill in the latent variables like q_value and choice_prob
-        self.set_params(fitting_result.params)
+        self.set_params(**fitting_result.params)
         self.perform_closed_loop(fit_choice_history, fit_reward_history)
         # Compute prediction accuracy
         predictive_choice = np.argmax(self.choice_prob, axis=0)
@@ -633,7 +633,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             return
 
         # -- Retrieve fitting results and perform the predictive simiulation
-        self.set_params(self.fitting_result.params)
+        self.set_params(**self.fitting_result.params)
         fit_choice_history = self.fitting_result.fit_settings["fit_choice_history"]
         fit_reward_history = self.fitting_result.fit_settings["fit_reward_history"]
         self.perform_closed_loop(fit_choice_history, fit_reward_history)

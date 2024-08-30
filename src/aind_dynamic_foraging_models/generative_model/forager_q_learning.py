@@ -10,10 +10,10 @@ from aind_behavior_gym.dynamic_foraging.task import L, R
 from .act_functions import act_epsilon_greedy, act_softmax
 from .base import DynamicForagingAgentMLEBase
 from .learn_functions import learn_choice_kernel, learn_RWlike
-from .params.agent_q_learning_params import generate_pydantic_q_learning_params
+from .params.forager_q_learning_params import generate_pydantic_q_learning_params
 
 
-class ForagerSimpleQ(DynamicForagingAgentMLEBase):
+class ForagerQLearning(DynamicForagingAgentMLEBase):
     """The familiy of simple Q-learning models."""
 
     def __init__(
@@ -48,7 +48,7 @@ class ForagerSimpleQ(DynamicForagingAgentMLEBase):
             Action selection type, by default "softmax"
         params: dict, optional
             Initial parameters of the model, by default {}.
-            See the generated Pydantic model in agent_q_learning_params.py for the full
+            See the generated Pydantic model in forager_q_learning_params.py for the full
             list of parameters.
         """
         # -- Pack the agent_kwargs --

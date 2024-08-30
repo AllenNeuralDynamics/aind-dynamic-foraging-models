@@ -6,7 +6,7 @@ import unittest
 import numpy as np
 from aind_behavior_gym.dynamic_foraging.task import CoupledBlockTask
 
-from aind_dynamic_foraging_models.generative_model import ForagerSimpleQ
+from aind_dynamic_foraging_models.generative_model import ForagerCollection
 
 
 # Start a new test case
@@ -16,16 +16,10 @@ class TestHattori(unittest.TestCase):
     def test_Hattori(self):
         """Test Hattori model"""
         # -- Create task and forager --
-        forager = ForagerSimpleQ(
-            number_of_learning_rate=2,
-            number_of_forget_rate=1,
-            choice_kernel="none",
-            action_selection="softmax",
-            params=dict(
-                softmax_inverse_temperature=5,
-                biasL=0,
-            ),
-            seed=42,
+        forager = ForagerCollection().get_preset_forager("Hattori2019", seed=42)
+        forager.set_params(
+            softmax_inverse_temperature=5,
+            biasL=0,
         )
         task = CoupledBlockTask(reward_baiting=True, num_trials=100, seed=42)
 
@@ -54,12 +48,8 @@ class TestHattori(unittest.TestCase):
         np.testing.assert_array_almost_equal(forager.choice_prob, ground_truth_choice_prob)
 
         # --    2.2 model fitting with cross-validation --
-        forager = ForagerSimpleQ(
-            number_of_learning_rate=2,
-            number_of_forget_rate=1,
-            choice_kernel="none",
-            action_selection="softmax",
-        )  # To fit a model, just create a new forager
+        # To fit a model, just create a new forager
+        forager = ForagerCollection().get_preset_forager("Hattori2019", seed=42)
         forager.fit(
             choice_history,
             reward_history,

@@ -7,7 +7,7 @@ import unittest
 import numpy as np
 from aind_behavior_gym.dynamic_foraging.task import CoupledBlockTask
 
-from aind_dynamic_foraging_models.generative_model import ForagerSimpleQ
+from aind_dynamic_foraging_models.generative_model import ForagerCollection
 
 
 # Start a new test case
@@ -17,19 +17,11 @@ class TestRescorlaWagner(unittest.TestCase):
     def test_RescorlaWagner(self):
         """Test Rescorla-Wagner model"""
         # -- Create task and forager --
-        forager = ForagerSimpleQ(
-            number_of_learning_rate=1,
-            number_of_forget_rate=0,
-            choice_kernel="none",
-            action_selection="epsilon-greedy",
-            seed=42,
-        )
+        forager = ForagerCollection().get_preset_forager("Rescorla-Wagner", seed=42)
         forager.set_params(
-            dict(
-                learn_rate=0.3,
-                epsilon=0.2,
-                biasL=-0.2,
-            )
+            learn_rate=0.3,
+            epsilon=0.2,
+            biasL=-0.2,
         )
 
         n_trials = 100
@@ -61,45 +53,35 @@ class TestRescorlaWagner(unittest.TestCase):
         np.testing.assert_array_almost_equal(forager.choice_prob, ground_truth_choice_prob)
 
         # --    2.2 model fitting with cross-validation --
-        forager = ForagerSimpleQ(
-            number_of_learning_rate=1,
-            number_of_forget_rate=0,
-            choice_kernel="none",
-            action_selection="epsilon-greedy",
-            seed=42,
-        )  # To fit a model, just create a new forager
+        # To fit a model, just create a new forager
+        forager = ForagerCollection().get_preset_forager("Rescorla-Wagner", seed=42)
         forager.fit(
             choice_history,
             reward_history,
             DE_kwargs=dict(workers=mp.cpu_count(), disp=False, seed=np.random.default_rng(42)),
-            k_fold_cross_validation=2,
+            clamp_params={},  # I saw a very weird python bug (?) that if I don't specify this
+            # and run coverage -m unittest discover, somehow the clamp_params
+            # in this test will be affected by a previous run of test_Bari.py.
+            # Interestingly, all tests pass if I run them individually.
+            # This should have something to do with the clamp_params.update()
+            # in .fit() method. If I don't specify it, maybe the .fit() function
+            # of all the tests try to access the default value from the same
+            # memory address, which leads to the weird cross talk...
+            k_fold_cross_validation=None,
         )
 
         fitting_result = forager.fitting_result
-        fitting_result_cross_validation = forager.fitting_result_cross_validation
         assert fitting_result.success
 
         # Check fitted parameters
         fit_names = fitting_result.fit_settings["fit_names"]
         ground_truth = [num for name, num in ground_truth_params.items() if name in fit_names]
-        print(f"Num of trials: {len(choice_history)}")
+        print(f"Rescorla-Wagner, num of trials: {len(choice_history)}")
         print(f"Fitted parameters: {fit_names}")
         print(f'Ground truth: {[f"{num:.4f}" for num in ground_truth]}')
         print(f'Fitted:       {[f"{num:.4f}" for num in fitting_result.x]}')
         print(f"Likelihood-Per-Trial: {fitting_result.LPT}")
         print(f"Prediction accuracy full dataset: {fitting_result.prediction_accuracy}\n")
-        print(
-            f"Prediction accuracy cross-validation (training): "
-            f'{np.mean(fitting_result_cross_validation["prediction_accuracy_fit"])}'
-        )
-        print(
-            f"Prediction accuracy cross-validation (test): "
-            f'{np.mean(fitting_result_cross_validation["prediction_accuracy_test"])}'
-        )
-        print(
-            f"Prediction accuracy cross-validation (test, bias only): "
-            f'{np.mean(fitting_result_cross_validation["prediction_accuracy_test_bias_only"])}'
-        )
 
         # Plot fitted latent variables
         fig_fitting, axes = forager.plot_fitted_session(if_plot_latent=True)

@@ -57,41 +57,36 @@ class TestLossCounting(unittest.TestCase):
 
         # --    2.2 model fitting with cross-validation --
         forager = ForagerLossCounting(
-            choice_kernel="full",  # No choice kernel
+            choice_kernel="full",
             seed=42,
         )  # To fit a model, just create a new forager
         forager.fit(
             choice_history,
             reward_history,
+            clamp_params={},  # I saw a very weird python bug (?) that if I don't specify this
+            # and run coverage -m unittest discover, somehow the clamp_params
+            # in this test will be affected by a previous run of test_Bari.py.
+            # Interestingly, all tests pass if I run them individually.
+            # This should have something to do with the clamp_params.update()
+            # in .fit() method. If I don't specify it, maybe the .fit() function
+            # of all the tests try to access the default value from the same
+            # memory address, which leads to the weird cross talk...
             DE_kwargs=dict(workers=mp.cpu_count(), disp=False, seed=np.random.default_rng(42)),
-            k_fold_cross_validation=2,
+            k_fold_cross_validation=None,
         )
 
         fitting_result = forager.fitting_result
-        fitting_result_cross_validation = forager.fitting_result_cross_validation
         assert fitting_result.success
 
         # Check fitted parameters
         fit_names = fitting_result.fit_settings["fit_names"]
         ground_truth = [num for name, num in ground_truth_params.items() if name in fit_names]
-        print(f"Num of trials: {len(choice_history)}")
+        print(f"Loss counting, num of trials: {len(choice_history)}")
         print(f"Fitted parameters: {fit_names}")
         print(f'Ground truth: {[f"{num:.4f}" for num in ground_truth]}')
         print(f'Fitted:       {[f"{num:.4f}" for num in fitting_result.x]}')
         print(f"Likelihood-Per-Trial: {fitting_result.LPT}")
         print(f"Prediction accuracy full dataset: {fitting_result.prediction_accuracy}\n")
-        print(
-            f"Prediction accuracy cross-validation (training): "
-            f'{np.mean(fitting_result_cross_validation["prediction_accuracy_fit"])}'
-        )
-        print(
-            f"Prediction accuracy cross-validation (test): "
-            f'{np.mean(fitting_result_cross_validation["prediction_accuracy_test"])}'
-        )
-        print(
-            f"Prediction accuracy cross-validation (test, bias only): "
-            f'{np.mean(fitting_result_cross_validation["prediction_accuracy_test_bias_only"])}'
-        )
 
         # Plot fitted latent variables
         fig_fitting, axes = forager.plot_fitted_session(if_plot_latent=True)

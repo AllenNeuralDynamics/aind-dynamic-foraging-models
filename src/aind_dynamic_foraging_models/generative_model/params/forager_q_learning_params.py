@@ -131,6 +131,7 @@ def _add_choice_kernel_fields(params_fields, fitting_bounds, choice_kernel):
                 ge=1.0,
                 le=1.0,
                 description="Step size for choice kernel == 1 (one-step choice kernel)",
+                frozen=True,  # To indicate that this field is clamped by construction
             ),
         )
         fitting_bounds["choice_kernel_step_size"] = (1.0, 1.0)

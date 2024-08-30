@@ -77,7 +77,6 @@ class TestBari(unittest.TestCase):
         print(f"Likelihood-Per-Trial: {fitting_result.LPT}")
         print(f"Prediction accuracy full dataset: {fitting_result.prediction_accuracy}\n")
 
-
         # Plot fitted latent variables
         fig_fitting, axes = forager.plot_fitted_session(if_plot_latent=True)
         # Add groundtruth
@@ -111,6 +110,7 @@ class TestBari(unittest.TestCase):
             print("Fitting result tested")
         else:
             print("Not python 3.9. Fitting result not tested")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

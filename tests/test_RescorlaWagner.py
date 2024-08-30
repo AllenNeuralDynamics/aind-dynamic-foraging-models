@@ -60,13 +60,13 @@ class TestRescorlaWagner(unittest.TestCase):
             reward_history,
             DE_kwargs=dict(workers=mp.cpu_count(), disp=False, seed=np.random.default_rng(42)),
             clamp_params={},  # I saw a very weird python bug (?) that if I don't specify this
-                              # and run coverage -m unittest discover, somehow the clamp_params
-                              # in this test will be affected by a previous run of test_Bari.py.
-                              # Interestingly, all tests pass if I run them individually.
-                              # This should have something to do with the clamp_params.update()
-                              # in .fit() method. If I don't specify it, maybe the .fit() function
-                              # of all the tests try to access the default value from the same
-                              # memory address, which leads to the weird cross talk...
+            # and run coverage -m unittest discover, somehow the clamp_params
+            # in this test will be affected by a previous run of test_Bari.py.
+            # Interestingly, all tests pass if I run them individually.
+            # This should have something to do with the clamp_params.update()
+            # in .fit() method. If I don't specify it, maybe the .fit() function
+            # of all the tests try to access the default value from the same
+            # memory address, which leads to the weird cross talk...
             k_fold_cross_validation=None,
         )
 

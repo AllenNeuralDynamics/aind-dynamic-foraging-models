@@ -7,7 +7,7 @@ import unittest
 import numpy as np
 from aind_behavior_gym.dynamic_foraging.task import CoupledBlockTask
 
-from aind_dynamic_foraging_models.generative_model import ForagerQLearning
+from aind_dynamic_foraging_models.generative_model import ForagerCollection
 
 
 # Start a new test case
@@ -17,21 +17,14 @@ class TestBari(unittest.TestCase):
     def test_Bari(self):
         """Test Bari model"""
         # -- Create task and forager --
-        forager = ForagerQLearning(
-            number_of_learning_rate=1,
-            number_of_forget_rate=1,
-            choice_kernel="one_step",
-            action_selection="softmax",
-            seed=42,
-        )
+        forager_collection = ForagerCollection()
+        forager = forager_collection.get_preset_forager("Bari2019", seed=42)
         forager.set_params(
-            dict(
-                learn_rate=0.3,
-                forget_rate_unchosen=0.1,
-                choice_kernel_relative_weight=0.1,
-                softmax_inverse_temperature=10,
-                biasL=0,
-            )
+            learn_rate=0.3,
+            forget_rate_unchosen=0.1,
+            choice_kernel_relative_weight=0.1,
+            softmax_inverse_temperature=10,
+            biasL=0,
         )
 
         n_trials = 100
@@ -63,13 +56,8 @@ class TestBari(unittest.TestCase):
         np.testing.assert_array_almost_equal(forager.choice_prob, ground_truth_choice_prob)
 
         # --    2.2 model fitting with cross-validation --
-        forager = ForagerQLearning(
-            number_of_learning_rate=1,
-            number_of_forget_rate=1,
-            choice_kernel="one_step",
-            action_selection="softmax",
-            seed=42,
-        )  # To fit a model, just create a new forager
+        # To fit a model, just create a new forager
+        forager = forager_collection.get_preset_forager("Bari2019", seed=42)
         forager.fit(
             choice_history,
             reward_history,
@@ -131,7 +119,7 @@ class TestBari(unittest.TestCase):
         if sys.version_info[:2] == (3, 9) and n_trials == 100:
             """For unknown reasons the DE's rng will change behavior across python versions"""
             np.testing.assert_array_almost_equal(
-                fitting_result.x, [0.7810, 0.0000, 0.0127, 1.0000, -0.2543, 94.9749], decimal=2
+                fitting_result.x, [0.7727, 0.0000, 0.0139, -0.2480, 86.4626], decimal=2
             )
             print("Fitting result tested")
         else:

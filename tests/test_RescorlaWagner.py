@@ -7,7 +7,7 @@ import unittest
 import numpy as np
 from aind_behavior_gym.dynamic_foraging.task import CoupledBlockTask
 
-from aind_dynamic_foraging_models.generative_model import ForagerQLearning
+from aind_dynamic_foraging_models.generative_model import ForagerCollection
 
 
 # Start a new test case
@@ -17,19 +17,11 @@ class TestRescorlaWagner(unittest.TestCase):
     def test_RescorlaWagner(self):
         """Test Rescorla-Wagner model"""
         # -- Create task and forager --
-        forager = ForagerQLearning(
-            number_of_learning_rate=1,
-            number_of_forget_rate=0,
-            choice_kernel="none",
-            action_selection="epsilon-greedy",
-            seed=42,
-        )
+        forager = ForagerCollection().get_preset_forager("Rescorla-Wagner", seed=42)
         forager.set_params(
-            dict(
-                learn_rate=0.3,
-                epsilon=0.2,
-                biasL=-0.2,
-            )
+            learn_rate=0.3,
+            epsilon=0.2,
+            biasL=-0.2,
         )
 
         n_trials = 100
@@ -61,13 +53,8 @@ class TestRescorlaWagner(unittest.TestCase):
         np.testing.assert_array_almost_equal(forager.choice_prob, ground_truth_choice_prob)
 
         # --    2.2 model fitting with cross-validation --
-        forager = ForagerQLearning(
-            number_of_learning_rate=1,
-            number_of_forget_rate=0,
-            choice_kernel="none",
-            action_selection="epsilon-greedy",
-            seed=42,
-        )  # To fit a model, just create a new forager
+        # To fit a model, just create a new forager
+        forager = ForagerCollection().get_preset_forager("Rescorla-Wagner", seed=42)
         forager.fit(
             choice_history,
             reward_history,

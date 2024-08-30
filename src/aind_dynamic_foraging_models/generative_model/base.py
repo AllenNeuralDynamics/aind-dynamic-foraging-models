@@ -5,13 +5,13 @@ import logging
 from typing import Optional, Tuple, Type
 
 import numpy as np
-from pydantic import BaseModel
 import scipy.optimize as optimize
 from aind_behavior_gym.dynamic_foraging.agent import DynamicForagingAgentBase
 from aind_behavior_gym.dynamic_foraging.task import DynamicForagingTaskBase
 from aind_dynamic_foraging_basic_analysis import plot_foraging_session
-from .params import ParamsSymbols
+from pydantic import BaseModel
 
+from .params import ParamsSymbols
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -70,12 +70,13 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         raise NotImplementedError("This should be overridden by the subclass!!")
 
     def _get_params_list(self):
-        """Get the number of free parameters of the agent etc.
-        """
+        """Get the number of free parameters of the agent etc."""
         self.params_list_all = list(self.ParamModel.model_fields.keys())
         self.params_list_frozen = {
-            name: field.default for name, field in self.ParamModel.model_fields.items() if field.frozen
-          }  # Parameters that are frozen by construction
+            name: field.default
+            for name, field in self.ParamModel.model_fields.items()
+            if field.frozen
+        }  # Parameters that are frozen by construction
         self.params_list_free = list(set(self.params_list_all) - set(self.params_list_frozen))
 
     def set_params(self, **params):
@@ -92,7 +93,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
 
     def get_params_str(self, if_latex=True, if_value=True, decimal=3):
         """Get string of the model parameters
-        
+
         Parameters
         -----------
         if_latex: bool, optional
@@ -105,8 +106,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         # Sort the parameters by the order of ParamsSymbols
         params_default_order = list(ParamsSymbols.__members__.keys())
         params_list = sorted(
-            self.get_params().items(), 
-            key=lambda x: params_default_order.index(x[0])
+            self.get_params().items(), key=lambda x: params_default_order.index(x[0])
         )
 
         # Get fixed parameters if any
@@ -343,12 +343,14 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             if bounds[0] == bounds[1]:
                 clamp_params.update({name: bounds[0]})
                 _to_remove.append(name)
-                logger.warning(f"Parameter {name} is clamped to {bounds[0]} "
-                               f"because of collapsed bounds. "
-                               f"Please specify it in clamp_params instead.")
+                logger.warning(
+                    f"Parameter {name} is clamped to {bounds[0]} "
+                    f"because of collapsed bounds. "
+                    f"Please specify it in clamp_params instead."
+                )
         for name in _to_remove:
             fit_bounds.pop(name)
-                
+
         # Get the names of the parameters to fit
         fit_names = list(fit_bounds.keys())
         # Parse bounds
@@ -579,7 +581,6 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             choice_prob, fit_choice_history, fit_reward_history, fit_trial_set
         )  # Return total negative log likelihood of the fit_trial_set
 
-
     def plot_session(self, if_plot_latent=True):
         """Plot session after .perform(task)
 
@@ -610,9 +611,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
 
         # 　Add the model parameters
         params_str = self.get_params_str()
-        fig.suptitle(params_str, fontsize=10, 
-                     horizontalalignment = 'left', 
-                     x=fig.subplotpars.left)
+        fig.suptitle(params_str, fontsize=10, horizontalalignment="left", x=fig.subplotpars.left)
 
         return fig, axes
 
@@ -663,9 +662,9 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
 
         # 　Add the model parameters
         params_str = self.get_params_str()
-        fig.suptitle(f'fitted: {params_str}', fontsize=10, 
-                     horizontalalignment = 'left', 
-                     x=fig.subplotpars.left)
+        fig.suptitle(
+            f"fitted: {params_str}", fontsize=10, horizontalalignment="left", x=fig.subplotpars.left
+        )
 
         return fig, axes
 

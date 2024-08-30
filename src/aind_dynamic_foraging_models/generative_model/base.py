@@ -50,6 +50,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
 
         # Set and validate the model parameters. Use default parameters if some are not provided
         self.params = self.ParamModel(**params)
+        self._get_params_list()  # Get the number of free parameters of the agent etc.
 
         # Add model fitting related attributes
         self.fitting_result = None
@@ -67,6 +68,15 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         It should return ParamModel and ParamFitBoundModel here.
         """
         raise NotImplementedError("This should be overridden by the subclass!!")
+
+    def _get_params_list(self):
+        """Get the number of free parameters of the agent etc.
+        """
+        self.params_list_all = list(self.ParamModel.model_fields.keys())
+        self.params_list_frozen = {
+            name: field.default for name, field in self.ParamModel.model_fields.items() if field.frozen
+          }  # Parameters that are frozen by construction
+        self.params_list_free = list(set(self.params_list_all) - set(self.params_list_frozen))
 
     def set_params(self, params):
         """Update the model parameters and validate"""
@@ -98,22 +108,22 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             self.get_params().items(), 
             key=lambda x: params_default_order.index(x[0])
         )
-        
+
         # Get fixed parameters if any
         if self.fitting_result is not None:
             fixed_params = self.fitting_result.fit_settings["clamp_params"].keys()
         else:
             fixed_params = []
-            
+
         ps = []
         for p in params_list:
             name_str = ParamsSymbols[p[0]] if if_latex else p[0]
             value_str = f"={p[1]: .{decimal}f}" if if_value else ""
             fix_str = " (fixed)" if p[0] in fixed_params else ""
             ps.append(f"{name_str}{value_str}{fix_str}")
-        
+
         return ", ".join(ps)
-        
+
     def get_choice_history(self):
         """Return the history of actions in format that is compatible with other library such as
         aind_dynamic_foraging_basic_analysis
@@ -319,9 +329,24 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         # -- Get fit_names and fit_bounds --
         # Validate fit_bounds_override and fill in the missing bounds with default bounds
         fit_bounds = self.ParamFitBoundModel(**fit_bounds_override).model_dump()
+        # Add agent's frozen parameters (by construction) to clamp_params (user specified)
+        clamp_params.update(self.params_list_frozen)
         # Remove clamped parameters from fit_bounds
         for name in clamp_params.keys():
             fit_bounds.pop(name)
+        # In the remaining parameters, check whether there are still collapsed bounds
+        # If yes, clamp them to the collapsed value and remove them from fit_bounds
+        _to_remove = []
+        for name, bounds in fit_bounds.items():
+            if bounds[0] == bounds[1]:
+                clamp_params.update({name: bounds[0]})
+                _to_remove.append(name)
+                logger.warning(f"Parameter {name} is clamped to {bounds[0]} "
+                               f"because of collapsed bounds. "
+                               f"Please specify it in clamp_params instead.")
+        for name in _to_remove:
+            fit_bounds.pop(name)
+                
         # Get the names of the parameters to fit
         fit_names = list(fit_bounds.keys())
         # Parse bounds
@@ -340,7 +365,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
 
         # # ===== Fit using the whole dataset ======
         logger.info("Fitting the model using the whole dataset...")
-        fitting_result = self.__class__._optimize_DE(
+        fitting_result = self._optimize_DE(
             fit_choice_history=fit_choice_history,
             fit_reward_history=fit_reward_history,
             fit_names=fit_names,
@@ -396,7 +421,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             )
 
             # -- Fit data using fit_set_this --
-            fitting_result_this_fold = self.__class__._optimize_DE(
+            fitting_result_this_fold = self._optimize_DE(
                 agent_kwargs=self.agent_kwargs,  # the class AND agent_kwargs fully define the agent
                 fit_choice_history=fit_choice_history,
                 fit_reward_history=fit_reward_history,
@@ -444,6 +469,81 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         self.fitting_result_cross_validation = fitting_result_cross_validation
         return fitting_result, fitting_result_cross_validation
 
+    def _optimize_DE(
+        self,
+        agent_kwargs,
+        fit_choice_history,
+        fit_reward_history,
+        fit_names,
+        lower_bounds,
+        upper_bounds,
+        clamp_params,
+        fit_trial_set,
+        DE_kwargs,
+    ):
+        """A wrapper of DE fitting for the model. It returns fitting results."""
+        # --- Arguments for differential_evolution ---
+        kwargs = dict(
+            mutation=(0.5, 1),
+            recombination=0.7,
+            popsize=16,
+            strategy="best1bin",
+            disp=False,
+            workers=1,
+            updating="immediate",
+            callback=None,
+        )  # Default DE kwargs
+        kwargs.update(DE_kwargs)  # Update user specified kwargs
+        if kwargs["workers"] > 1:
+            kwargs["updating"] = "deferred"
+
+        # --- Heavy lifting here!! ---
+        fitting_result = optimize.differential_evolution(
+            func=self.__class__._cost_func_for_DE,
+            bounds=optimize.Bounds(lower_bounds, upper_bounds),
+            args=(
+                agent_kwargs,  # Other kwargs to pass to the model
+                fit_choice_history,
+                fit_reward_history,
+                fit_trial_set,  # subset of trials to fit; if empty, use all trials)
+                fit_names,  # Pass names so that negLL_func_for_de knows which parameters to fit
+                clamp_params,  # Clamped parameters
+            ),
+            **kwargs,
+        )
+
+        # --- Post-processing ---
+        fitting_result.fit_settings = dict(
+            fit_choice_history=fit_choice_history,
+            fit_reward_history=fit_reward_history,
+            fit_names=fit_names,
+            lower_bounds=lower_bounds,
+            upper_bounds=upper_bounds,
+            clamp_params=clamp_params,
+            agent_kwargs=agent_kwargs,
+        )
+        # Full parameter set
+        params = dict(zip(fit_names, fitting_result.x))
+        params.update(clamp_params)
+        fitting_result.params = params
+        fitting_result.k_model = len(fit_names)  # Number of free parameters of the model
+        fitting_result.n_trials = len(fit_choice_history)
+        fitting_result.log_likelihood = -fitting_result.fun
+
+        fitting_result.AIC = -2 * fitting_result.log_likelihood + 2 * fitting_result.k_model
+        fitting_result.BIC = -2 * fitting_result.log_likelihood + fitting_result.k_model * np.log(
+            fitting_result.n_trials
+        )
+
+        # Likelihood-Per-Trial. See Wilson 2019 (but their formula was wrong...)
+        fitting_result.LPT = np.exp(
+            fitting_result.log_likelihood / fitting_result.n_trials
+        )  # Raw LPT without penality
+        fitting_result.LPT_AIC = np.exp(-fitting_result.AIC / 2 / fitting_result.n_trials)
+        fitting_result.LPT_BIC = np.exp(-fitting_result.BIC / 2 / fitting_result.n_trials)
+
+        return fitting_result
+
     @classmethod
     def _cost_func_for_DE(
         cls,
@@ -477,81 +577,6 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             choice_prob, fit_choice_history, fit_reward_history, fit_trial_set
         )  # Return total negative log likelihood of the fit_trial_set
 
-    @classmethod
-    def _optimize_DE(
-        cls,
-        agent_kwargs,
-        fit_choice_history,
-        fit_reward_history,
-        fit_names,
-        lower_bounds,
-        upper_bounds,
-        clamp_params,
-        fit_trial_set,
-        DE_kwargs,
-    ):
-        """A wrapper of DE fitting for the model. It returns fitting results."""
-        # --- Arguments for differential_evolution ---
-        kwargs = dict(
-            mutation=(0.5, 1),
-            recombination=0.7,
-            popsize=16,
-            strategy="best1bin",
-            disp=False,
-            workers=1,
-            updating="immediate",
-            callback=None,
-        )  # Default DE kwargs
-        kwargs.update(DE_kwargs)  # Update user specified kwargs
-        if kwargs["workers"] > 1:
-            kwargs["updating"] = "deferred"
-
-        # --- Heavy lifting here!! ---
-        fitting_result = optimize.differential_evolution(
-            func=cls._cost_func_for_DE,
-            bounds=optimize.Bounds(lower_bounds, upper_bounds),
-            args=(
-                agent_kwargs,  # Other kwargs to pass to the model
-                fit_choice_history,
-                fit_reward_history,
-                fit_trial_set,  # subset of trials to fit; if empty, use all trials)
-                fit_names,  # Pass names so that negLL_func_for_de knows which parameters to fit
-                clamp_params,  # Clamped parameters
-            ),
-            **kwargs,
-        )
-
-        # --- Post-processing ---
-        fitting_result.fit_settings = dict(
-            fit_choice_history=fit_choice_history,
-            fit_reward_history=fit_reward_history,
-            fit_names=fit_names,
-            lower_bounds=lower_bounds,
-            upper_bounds=upper_bounds,
-            clamp_params=clamp_params,
-            agent_kwargs=agent_kwargs,
-        )
-        # Full parameter set
-        params = dict(zip(fit_names, fitting_result.x))
-        params.update(clamp_params)
-        fitting_result.params = params
-        fitting_result.k_model = len(fit_names)
-        fitting_result.n_trials = len(fit_choice_history)
-        fitting_result.log_likelihood = -fitting_result.fun
-
-        fitting_result.AIC = -2 * fitting_result.log_likelihood + 2 * fitting_result.k_model
-        fitting_result.BIC = -2 * fitting_result.log_likelihood + fitting_result.k_model * np.log(
-            fitting_result.n_trials
-        )
-
-        # Likelihood-Per-Trial. See Wilson 2019 (but their formula was wrong...)
-        fitting_result.LPT = np.exp(
-            fitting_result.log_likelihood / fitting_result.n_trials
-        )  # Raw LPT without penality
-        fitting_result.LPT_AIC = np.exp(-fitting_result.AIC / 2 / fitting_result.n_trials)
-        fitting_result.LPT_BIC = np.exp(-fitting_result.BIC / 2 / fitting_result.n_trials)
-
-        return fitting_result
 
     def plot_session(self, if_plot_latent=True):
         """Plot session after .perform(task)
@@ -580,8 +605,8 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             label="choice_prob(R/R+L)",
         )
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=3)
-        
-        #　Add the model parameters
+
+        # 　Add the model parameters
         params_str = self.get_params_str()
         fig.suptitle(params_str, fontsize=10, 
                      horizontalalignment = 'left', 
@@ -634,9 +659,9 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         )
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=4)
 
-        #　Add the model parameters
+        # 　Add the model parameters
         params_str = self.get_params_str()
-        fig.suptitle(params_str, fontsize=10, 
+        fig.suptitle(f'fitted: {params_str}', fontsize=10, 
                      horizontalalignment = 'left', 
                      x=fig.subplotpars.left)
 

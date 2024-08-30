@@ -111,9 +111,11 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
 
         # Get fixed parameters if any
         if self.fitting_result is not None:
+            # Effective fixed parameters (agent's frozen parameters + user specified clamp_params)
             fixed_params = self.fitting_result.fit_settings["clamp_params"].keys()
         else:
-            fixed_params = []
+            # Frozen parameters (by construction)
+            fixed_params = self.params_list_frozen.keys()
 
         ps = []
         for p in params_list:

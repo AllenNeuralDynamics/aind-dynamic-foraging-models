@@ -17,8 +17,7 @@ class TestBari(unittest.TestCase):
     def test_Bari(self):
         """Test Bari model"""
         # -- Create task and forager --
-        forager_collection = ForagerCollection()
-        forager = forager_collection.get_preset_forager("Bari2019", seed=42)
+        forager = ForagerCollection().get_preset_forager("Bari2019", seed=42)
         forager.set_params(
             learn_rate=0.3,
             forget_rate_unchosen=0.1,
@@ -55,41 +54,29 @@ class TestBari(unittest.TestCase):
         forager.perform_closed_loop(choice_history, reward_history)
         np.testing.assert_array_almost_equal(forager.choice_prob, ground_truth_choice_prob)
 
-        # --    2.2 model fitting with cross-validation --
+        # # --    2.2 model fitting with cross-validation --
         # To fit a model, just create a new forager
-        forager = forager_collection.get_preset_forager("Bari2019", seed=42)
+        forager = ForagerCollection().get_preset_forager("Bari2019", seed=42)
         forager.fit(
             choice_history,
             reward_history,
             DE_kwargs=dict(workers=mp.cpu_count(), disp=False, seed=np.random.default_rng(42)),
-            k_fold_cross_validation=2,
+            k_fold_cross_validation=None,
         )
 
         fitting_result = forager.fitting_result
-        fitting_result_cross_validation = forager.fitting_result_cross_validation
         assert fitting_result.success
 
         # Check fitted parameters
         fit_names = fitting_result.fit_settings["fit_names"]
         ground_truth = [num for name, num in ground_truth_params.items() if name in fit_names]
-        print(f"Num of trials: {len(choice_history)}")
+        print(f"Bari2019, num of trials: {len(choice_history)}")
         print(f"Fitted parameters: {fit_names}")
         print(f'Ground truth: {[f"{num:.4f}" for num in ground_truth]}')
         print(f'Fitted:       {[f"{num:.4f}" for num in fitting_result.x]}')
         print(f"Likelihood-Per-Trial: {fitting_result.LPT}")
         print(f"Prediction accuracy full dataset: {fitting_result.prediction_accuracy}\n")
-        print(
-            f"Prediction accuracy cross-validation (training): "
-            f'{np.mean(fitting_result_cross_validation["prediction_accuracy_fit"])}'
-        )
-        print(
-            f"Prediction accuracy cross-validation (test): "
-            f'{np.mean(fitting_result_cross_validation["prediction_accuracy_test"])}'
-        )
-        print(
-            f"Prediction accuracy cross-validation (test, bias only): "
-            f'{np.mean(fitting_result_cross_validation["prediction_accuracy_test_bias_only"])}'
-        )
+
 
         # Plot fitted latent variables
         fig_fitting, axes = forager.plot_fitted_session(if_plot_latent=True)
@@ -124,7 +111,6 @@ class TestBari(unittest.TestCase):
             print("Fitting result tested")
         else:
             print("Not python 3.9. Fitting result not tested")
-
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

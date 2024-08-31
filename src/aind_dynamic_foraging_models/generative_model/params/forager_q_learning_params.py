@@ -146,7 +146,7 @@ def _add_action_selection_fields(params_fields, fitting_bounds, action_selection
     if action_selection == "softmax":
         params_fields["softmax_inverse_temperature"] = (
             float,
-            Field(default=10, ge=0.0, description="Softmax temperature"),
+            Field(default=10.0, ge=0.0, description="Softmax temperature"),
         )
         fitting_bounds["softmax_inverse_temperature"] = (0.0, 100.0)
     elif action_selection == "epsilon-greedy":

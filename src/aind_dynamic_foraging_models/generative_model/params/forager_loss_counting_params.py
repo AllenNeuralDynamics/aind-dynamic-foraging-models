@@ -47,7 +47,7 @@ def generate_pydantic_loss_counting_params(
         Field(
             default=0.0,
             ge=0.0,
-            description="Mean of the loss count threshold",
+            description="Std of the loss count threshold",
         ),
     )
     fitting_bounds["loss_count_threshold_std"] = (0.0, 10.0)

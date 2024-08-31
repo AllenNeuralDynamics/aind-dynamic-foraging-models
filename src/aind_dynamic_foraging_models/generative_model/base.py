@@ -595,18 +595,18 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             p_reward=self.task.get_p_reward(),
         )
 
-        # Add Q value
         if if_plot_latent:
+            # Plot latent variables
             self.plot_latent_variables(axes[0], if_fitted=False)
-
-        # -- Plot choice_prob
-        axes[0].plot(
-            np.arange(self.n_trials) + 1,
-            self.choice_prob[1] / self.choice_prob.sum(axis=0),
-            lw=0.5,
-            color="green",
-            label="choice_prob(R/R+L)",
-        )
+            # Plot choice_prob
+            axes[0].plot(
+                np.arange(self.n_trials) + 1,
+                self.choice_prob[1] / self.choice_prob.sum(axis=0),
+                lw=0.5,
+                color="green",
+                label="choice_prob(R/R+L)",
+            )
+            
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=3)
 
         # 　Add the model parameters
@@ -645,19 +645,20 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             p_reward=np.full((2, len(fit_choice_history)), np.nan),  # Dummy p_reward
         )
 
-        # -- Plot fitted Q values
+        # -- Plot fitted latent variables and choice_prob --
         if if_plot_latent:
+            # Plot latent variables
             self.plot_latent_variables(axes[0], if_fitted=True)
-
-        # -- Plot fitted choice_prob
-        axes[0].plot(
-            np.arange(self.n_trials) + 1,
-            self.choice_prob[1] / self.choice_prob.sum(axis=0),
-            lw=2,
-            color="green",
-            ls=":",
-            label="fitted_choice_prob(R/R+L)",
-        )
+            # Plot fitted choice_prob
+            axes[0].plot(
+                np.arange(self.n_trials) + 1,
+                self.choice_prob[1] / self.choice_prob.sum(axis=0),
+                lw=2,
+                color="green",
+                ls=":",
+                label="fitted_choice_prob(R/R+L)",
+            )
+            
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=4)
 
         # 　Add the model parameters

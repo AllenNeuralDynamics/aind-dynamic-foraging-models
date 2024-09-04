@@ -120,7 +120,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         ps = []
         for p in params_list:
             name_str = ParamsSymbols[p[0]] if if_latex else p[0]
-            value_str = f"={p[1]: .{decimal}f}" if if_value else ""
+            value_str = f" = {p[1]:.{decimal}f}" if if_value else ""
             fix_str = " (fixed)" if p[0] in fixed_params else ""
             ps.append(f"{name_str}{value_str}{fix_str}")
 

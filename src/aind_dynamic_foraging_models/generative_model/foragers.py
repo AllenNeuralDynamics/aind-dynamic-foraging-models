@@ -50,6 +50,28 @@ class ForagerCollection:
 
     def __init__(self):
         self.presets = list(self.FORAGER_PRESETS.keys())
+        self.available_foragers = [f for f in dir(generative_model) 
+                                   if f.startswith("Forager")
+                                   and f != "ForagerCollection"]
+        
+    def get_forager(self, agent_class, agent_kwargs={}, **kwargs):
+        """Get a forager.
+
+        Parameters
+        ----------
+        agent_class : str
+            The class name of the forager.
+        agent_kwargs : dict
+            The keyword arguments to pass to the forager.
+        **kwargs : dict
+            Other keyword arguments to pass to the forager (like the rng seed).
+        """
+        agent_class = getattr(generative_model, agent_class, None)
+        if agent_class is None:
+            raise ValueError(f"{agent_class} is not found in the generative_model. "
+                             f"Available agents are: {self.available_foragers}")
+        return agent_class(**agent_kwargs, **kwargs)
+    
 
     def get_preset_forager(self, alias, **kwargs):
         """Get a preset forager.
@@ -61,15 +83,17 @@ class ForagerCollection:
         **kwargs : dict
             Other keyword arguments to pass to the forager (like the rng seed).
         """
-        assert alias in self.FORAGER_PRESETS.keys(), f"{alias} is not found in the preset foragers."
+        assert alias in self.FORAGER_PRESETS.keys(), \
+            f"{alias} is not found in the preset foragers."\
+            f" Available presets are: {self.presets}"
 
         agent = self.FORAGER_PRESETS[alias]
-        agent_class = getattr(generative_model, agent["agent_class"])
-        return agent_class(**agent["agent_kwargs"], **kwargs)
+        return self.get_forager(agent["agent_class"], agent["agent_kwargs"], **kwargs)
 
 
 if __name__ == "__main__":
     foragers = ForagerCollection()
     forager = foragers.get_preset_forager("Bari2019")
     print(foragers.presets)
-    print(forager)
+    print(forager.params)
+

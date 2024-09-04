@@ -10,7 +10,7 @@ from .forager_q_learning_params import _add_choice_kernel_fields
 
 
 def generate_pydantic_loss_counting_params(
-    win_stay_lose_shift: bool = False,
+    win_stay_lose_switch: bool = False,
     choice_kernel: Literal["none", "one_step", "full"] = "none",
 ) -> Tuple[Type[BaseModel], Type[BaseModel]]:
     """Generate Pydantic models for Loss-counting agent parameters.
@@ -20,7 +20,7 @@ def generate_pydantic_loss_counting_params(
 
     Parameters
     ----------
-    win_stay_lose_shift : bool, optional
+    win_stay_lose_switch : bool, optional
         If True, the agent will be a win-stay-lose-shift agent
         (loss_count_threshold_mean and loss_count_threshold_std are fixed at 1 and 0),
         by default False
@@ -37,7 +37,31 @@ def generate_pydantic_loss_counting_params(
     fitting_bounds = {}
 
     # -- Loss counting model parameters --
-    if not win_stay_lose_shift:
+    if win_stay_lose_switch:
+        params_fields["loss_count_threshold_mean"] = (
+            float,
+            Field(
+                default=1.0,
+                ge=1.0,
+                le=1.0,
+                frozen=True,  # To indicate that this field is clamped by construction
+                description="Mean of the loss count threshold",
+            ),
+        )
+        fitting_bounds["loss_count_threshold_mean"] = (1.0, 1.0)
+
+        params_fields["loss_count_threshold_std"] = (
+            float,
+            Field(
+                default=0.0,
+                ge=0.0,
+                le=0.0,
+                frozen=True,  # To indicate that this field is clamped by construction
+                description="Std of the loss count threshold",
+            ),
+        )
+        fitting_bounds["loss_count_threshold_std"] = (0.0, 0.0)
+    else:
         params_fields["loss_count_threshold_mean"] = (
             float,
             Field(
@@ -57,28 +81,6 @@ def generate_pydantic_loss_counting_params(
             ),
         )
         fitting_bounds["loss_count_threshold_std"] = (0.0, 10.0)
-    else:
-        params_fields["loss_count_threshold_mean"] = (
-            float,
-            Field(
-                default=1.0,
-                ge=1.0,
-                le=1.0,
-                description="Mean of the loss count threshold",
-            ),
-        )
-        fitting_bounds["loss_count_threshold_mean"] = (1.0, 1.0)
-
-        params_fields["loss_count_threshold_std"] = (
-            float,
-            Field(
-                default=0.0,
-                ge=0.0,
-                le=0.0,
-                description="Std of the loss count threshold",
-            ),
-        )
-        fitting_bounds["loss_count_threshold_std"] = (0.0, 0.0)
 
     # -- Always add a bias term --
     params_fields["biasL"] = (

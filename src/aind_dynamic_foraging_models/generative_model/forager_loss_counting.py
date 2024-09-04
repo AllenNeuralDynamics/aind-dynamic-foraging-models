@@ -18,7 +18,7 @@ class ForagerLossCounting(DynamicForagingAgentMLEBase):
 
     def __init__(
         self,
-        win_stay_lose_shift: bool = False,
+        win_stay_lose_switch: bool = False,
         choice_kernel: Literal["none", "one_step", "full"] = "none",
         params: dict = {},
         **kwargs,
@@ -32,7 +32,7 @@ class ForagerLossCounting(DynamicForagingAgentMLEBase):
 
         Parameters
         ----------
-        win_stay_lose_shift: bool, optional
+        win_stay_lose_switch: bool, optional
             If True, the agent will be a win-stay-lose-shift agent 
             (loss_count_threshold_mean and loss_count_threshold_std are fixed at 1 and 0), 
             by default False
@@ -51,6 +51,7 @@ class ForagerLossCounting(DynamicForagingAgentMLEBase):
         """
         # -- Pack the agent_kwargs --
         self.agent_kwargs = dict(
+            win_stay_lose_switch=win_stay_lose_switch,
             choice_kernel=choice_kernel,
         )
 

@@ -4,12 +4,7 @@
 
 import inspect
 import itertools
-from typing import get_type_hints
-
-try:
-    from typing import _LiteralGenericAlias
-except ImportError:  # <= Python 3.8
-    from typing_extensions import _LiteralGenericAlias
+from typing import get_type_hints, get_origin, Literal
 
 import pandas as pd
 
@@ -193,7 +188,7 @@ class ForagerCollection:
 
         agent_args_options = {}
         for arg, type_hint in type_hints.items():
-            if isinstance(type_hint, _LiteralGenericAlias):  # Check if the type hint is a Literal
+            if get_origin(type_hint) is Literal:  # Check if the type hint is a Literal
                 # Get options
                 literal_values = type_hint.__args__
                 default_value = signature.parameters[arg].default

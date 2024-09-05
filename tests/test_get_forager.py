@@ -29,6 +29,7 @@ class TestGetForager(unittest.TestCase):
         print(f"\nAvailable forager classes: {forager_collection.FORAGER_CLASSES}")
         forager_df = forager_collection.get_all_foragers()
         print(forager_df)
+        self.assertEqual(len(forager_df), 30)
 
 
 if __name__ == "__main__":

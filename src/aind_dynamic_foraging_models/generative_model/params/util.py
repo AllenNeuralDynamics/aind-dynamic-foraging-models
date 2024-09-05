@@ -1,4 +1,5 @@
 from typing import Any, Dict, List, Tuple
+
 import numpy as np
 from pydantic import ConfigDict, Field, create_model, model_validator
 
@@ -55,10 +56,10 @@ def create_pydantic_models_dynamic(
 
 
 def get_params_options(
-    params_model, 
+    params_model,
     default_range=[-np.inf, np.inf],
     para_range_override={},
-    ) -> dict:
+) -> dict:
     """Get options for the params fields.
 
     Useful for the Streamlit app.
@@ -81,9 +82,9 @@ def get_params_options(
             action_selection="softmax",
         )
     >>> params_options = get_params_options(ParamsModel)
-    {'learn_rate': {'para_range': [0.0, 1.0], 
-                    'para_default': 0.5, 
-                    'para_symbol': <ParamsSymbols.learn_rate: '$\\alpha$'>, 
+    {'learn_rate': {'para_range': [0.0, 1.0],
+                    'para_default': 0.5,
+                    'para_symbol': <ParamsSymbols.learn_rate: '$\\alpha$'>,
                     'para_desc': 'Learning rate'}, ...
     }
 

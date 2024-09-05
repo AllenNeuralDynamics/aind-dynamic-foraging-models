@@ -2,6 +2,7 @@
 
 from enum import Enum
 
+
 class ParamsSymbols(str, Enum):
     """Symbols for the parameters.
 

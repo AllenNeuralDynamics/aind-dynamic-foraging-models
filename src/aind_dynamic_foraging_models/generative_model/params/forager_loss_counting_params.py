@@ -5,8 +5,8 @@ from typing import Literal, Tuple, Type
 
 from pydantic import BaseModel, Field
 
-from .util import create_pydantic_models_dynamic
 from .forager_q_learning_params import _add_choice_kernel_fields
+from .util import create_pydantic_models_dynamic
 
 
 def generate_pydantic_loss_counting_params(

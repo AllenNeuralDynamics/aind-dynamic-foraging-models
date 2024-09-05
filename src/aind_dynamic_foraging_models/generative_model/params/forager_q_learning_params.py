@@ -118,8 +118,12 @@ def _add_choice_kernel_fields(params_fields, fitting_bounds, choice_kernel):
     if choice_kernel == "full":
         params_fields["choice_kernel_step_size"] = (
             float,
-            Field(default=0.1, ge=0.0, le=1.0, 
-                  description="Step size for choice kernel (1.0 means only previous choice)"),
+            Field(
+                default=0.1,
+                ge=0.0,
+                le=1.0,
+                description="Step size for choice kernel (1.0 means only previous choice)",
+            ),
         )
         fitting_bounds["choice_kernel_step_size"] = (0.0, 1.0)
     elif choice_kernel == "one_step":

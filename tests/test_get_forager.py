@@ -1,14 +1,15 @@
 """Test get forager
 """
 
-import unittest
 import itertools
+import unittest
 
 from aind_dynamic_foraging_models.generative_model import ForagerCollection
 
+
 class TestGetForager(unittest.TestCase):
     """Test get forager.
-    
+
     See other test frunctions for how to simulate a task and perform model fitting.
     See also https://foraging-behavior-browser.allenneuraldynamics-test.org/RL_model_playground
     """
@@ -62,9 +63,11 @@ class TestGetForager(unittest.TestCase):
                 else:
                     preset_name = ""
 
-                print(f"Model {n}: {agent_class} ["
+                print(
+                    f"Model {n}: {agent_class} ["
                     f"{forager.get_params_str(if_latex=False, if_value=False)}]"
-                    f" {preset_name}")
+                    f" {preset_name}"
+                )
                 foragers.append(forager)
 
 

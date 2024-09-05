@@ -52,9 +52,9 @@ class ForagerCollection:
     def __init__(self):
         """Init"""
         self.presets = list(self.FORAGER_PRESETS.keys())
-        self.available_agent_class = [f for f in dir(generative_model) 
-                                   if f.startswith("Forager")
-                                   and f != "ForagerCollection"]
+        self.available_agent_class = [
+            f for f in dir(generative_model) if f.startswith("Forager") and f != "ForagerCollection"
+        ]
 
     def get_forager(self, agent_class, agent_kwargs={}, **kwargs):
         """Get a forager by agent_class and agent_kwargs
@@ -70,8 +70,10 @@ class ForagerCollection:
         """
         agent_class = getattr(generative_model, agent_class, None)
         if agent_class is None:
-            raise ValueError(f"{agent_class} is not found in the generative_model. "
-                             f"Available agents are: {self.available_agent_class}")
+            raise ValueError(
+                f"{agent_class} is not found in the generative_model. "
+                f"Available agents are: {self.available_agent_class}"
+            )
         return agent_class(**agent_kwargs, **kwargs)
 
     def get_preset_forager(self, alias, **kwargs):
@@ -84,33 +86,38 @@ class ForagerCollection:
         **kwargs : dict
             Other keyword arguments to pass to the forager (like the rng seed).
         """
-        assert alias in self.FORAGER_PRESETS.keys(), \
-            f"{alias} is not found in the preset foragers."\
+        assert alias in self.FORAGER_PRESETS.keys(), (
+            f"{alias} is not found in the preset foragers."
             f" Available presets are: {self.presets}"
+        )
 
         agent = self.FORAGER_PRESETS[alias]
         return self.get_forager(agent["agent_class"], agent["agent_kwargs"], **kwargs)
 
     def is_preset(self, agent_class, agent_kwargs):
         """Check if an given agent is a preset forager.
-        
+
         Parameters
         ----------
         agent_class : str
             The class name of the forager to query
         agent_kwargs : dict
             The keyword arguments of the forager to query
-        
+
         Returns
         -------
         str or None
             The alias of the preset forager if it exists, otherwise None
         """
         for preset_name, preset_specs in self.FORAGER_PRESETS.items():
-            if preset_specs["agent_class"] == agent_class and preset_specs["agent_kwargs"] == agent_kwargs:
+            if (
+                preset_specs["agent_class"] == agent_class
+                and preset_specs["agent_kwargs"] == agent_kwargs
+            ):
                 return preset_name
         else:
             return None
+
 
 if __name__ == "__main__":
     foragers = ForagerCollection()

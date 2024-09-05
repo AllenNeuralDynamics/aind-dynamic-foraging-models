@@ -606,7 +606,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
                 color="green",
                 label="choice_prob(R/R+L)",
             )
-            
+
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=3)
 
         # 　Add the model parameters
@@ -658,7 +658,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
                 ls=":",
                 label="fitted_choice_prob(R/R+L)",
             )
-            
+
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=4)
 
         # 　Add the model parameters

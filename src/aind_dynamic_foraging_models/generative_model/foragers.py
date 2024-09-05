@@ -131,8 +131,14 @@ class ForagerCollection:
         else:
             return None
         
-    def get_all_foragers(self) -> pd.DataFrame:
-        """Return all available foragers in a dataframe."""
+    def get_all_foragers(self, **kwargs) -> pd.DataFrame:
+        """Return all available foragers in a dataframe.
+        
+        Parameters
+        ----------
+        **kwargs : dict
+            Other keyword arguments to pass to the forager (like the rng seed).
+        """
         all_foragers = []
         
         # Loop over all agent classes
@@ -147,13 +153,14 @@ class ForagerCollection:
             # Loop over all agent_kwargs_combinations
             for specs in agent_kwargs_combinations:
                 agent_kwargs = dict(zip(agent_kwargs_options.keys(), specs))
-                forager = self.get_forager(agent_class_name, agent_kwargs)
+                forager = self.get_forager(agent_class_name, agent_kwargs, **kwargs)
                 preset_name = self.is_preset(agent_class_name, agent_kwargs)
                 
                 all_foragers.append(
                     dict(
                         agent_class_name=agent_class_name,
-                        **agent_kwargs,
+                        agent_kwargs=agent_kwargs,
+                        **agent_kwargs,  # Also unpack agent_kwargs
                         preset_name=preset_name,
                         n_free_params=len(forager.params_list_free),
                         params=forager.get_params_str(if_latex=True, if_value=False),

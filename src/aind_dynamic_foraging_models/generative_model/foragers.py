@@ -170,7 +170,8 @@ class ForagerCollection:
 
         return pd.DataFrame(all_foragers)
 
-    def _get_agent_kwargs_options(self, agent_class) -> dict:
+    @staticmethod
+    def _get_agent_kwargs_options(agent_class) -> dict:
         """Given an agent class, return the agent's agent_kwargs that are of type Literal.
 
         This requires the agent class to have type hints as Literal in the __init__ method.

@@ -2,11 +2,22 @@
 
 """
 
+import inspect
+import itertools
+from typing import _LiteralGenericAlias, get_type_hints
+
+import pandas as pd
+
 from aind_dynamic_foraging_models import generative_model
 
 
 class ForagerCollection:
     """A class to create foragers."""
+    
+    FORAGER_CLASSES = [
+        "ForagerQLearning", 
+        "ForagerLossCounting",
+    ]
 
     FORAGER_PRESETS = {
         "Bari2019": dict(
@@ -52,28 +63,30 @@ class ForagerCollection:
     def __init__(self):
         """Init"""
         self.presets = list(self.FORAGER_PRESETS.keys())
-        self.available_agent_class = [
-            f for f in dir(generative_model) if f.startswith("Forager") and f != "ForagerCollection"
-        ]
+        
+    def get_agent_class(self, agent_class_name):
+        """Get an agent class by agent_class_name"""
+        agent_class = getattr(generative_model, agent_class_name, None)
+        if agent_class is None:
+            raise ValueError(
+                f"{agent_class} is not found in the generative_model. "
+                f"Available agents are: {self.available_agent_class}"
+            )
+        return agent_class
 
-    def get_forager(self, agent_class, agent_kwargs={}, **kwargs):
-        """Get a forager by agent_class and agent_kwargs
+    def get_forager(self, agent_class_name, agent_kwargs={}, **kwargs):
+        """Get a forager by agent_class_name and agent_kwargs
 
         Parameters
         ----------
-        agent_class : str
+        agent_class_name : str
             The class name of the forager.
         agent_kwargs : dict
             The keyword arguments to pass to the forager.
         **kwargs : dict
             Other keyword arguments to pass to the forager (like the rng seed).
         """
-        agent_class = getattr(generative_model, agent_class, None)
-        if agent_class is None:
-            raise ValueError(
-                f"{agent_class} is not found in the generative_model. "
-                f"Available agents are: {self.available_agent_class}"
-            )
+        agent_class = self.get_agent_class(agent_class_name)
         return agent_class(**agent_kwargs, **kwargs)
 
     def get_preset_forager(self, alias, **kwargs):
@@ -117,10 +130,72 @@ class ForagerCollection:
                 return preset_name
         else:
             return None
+        
+    def get_all_foragers(self) -> pd.DataFrame:
+        """Return all available foragers in a dataframe."""
+        all_foragers = []
+        
+        # Loop over all agent classes
+        for agent_class_name in self.FORAGER_CLASSES:
+            agent_class = self.get_agent_class(agent_class_name)
+            agent_kwargs_options = {
+                key: value["options"]
+                for key, value in self._get_agent_kwargs_options(agent_class).items()
+            }
+            agent_kwargs_combinations = itertools.product(*agent_kwargs_options.values())
+            
+            # Loop over all agent_kwargs_combinations
+            for specs in agent_kwargs_combinations:
+                agent_kwargs = dict(zip(agent_kwargs_options.keys(), specs))
+                forager = self.get_forager(agent_class_name, agent_kwargs)
+                preset_name = self.is_preset(agent_class_name, agent_kwargs)
+                
+                all_foragers.append(
+                    dict(
+                        agent_class_name=agent_class_name,
+                        **agent_kwargs,
+                        preset_name=preset_name,
+                        n_free_params=len(forager.params_list_free),
+                        params=forager.get_params_str(if_latex=True, if_value=False),
+                        forager=forager,
+                    )
+                )
+        
+        return pd.DataFrame(all_foragers)
+            
+    
+    def _get_agent_kwargs_options(self, agent_class) -> dict:
+        """Given an agent class, return the agent's agent_kwargs that are of type Literal.
+        
+        This requires the agent class to have type hints as Literal in the __init__ method.
+        
+        Example:
+        >>> _get_agent_kwargs_options("ForagerQLearning")
+        {'number_of_learning_rate': {'options': (1, 2), 'default': 2},
+         'number_of_forget_rate': {'options': (0, 1), 'default': 1},
+         'choice_kernel': {'options': ('none', 'one_step', 'full'), 'default': 'none'},
+         'action_selection': {'options': ('softmax', 'epsilon-greedy'), 'default': 'softmax'}}
+        """
+        type_hints = get_type_hints(agent_class.__init__)
+        signature = inspect.signature(agent_class.__init__)
+
+        agent_args_options = {}
+        for arg, type_hint in type_hints.items():
+            if isinstance(type_hint, _LiteralGenericAlias):  # Check if the type hint is a Literal
+                # Get options
+                literal_values = type_hint.__args__
+                default_value = signature.parameters[arg].default
+                
+                agent_args_options[arg] = {'options': literal_values, 'default': default_value}
+        return agent_args_options
 
 
 if __name__ == "__main__":
-    foragers = ForagerCollection()
-    forager = foragers.get_preset_forager("Bari2019")
-    print(foragers.presets)
+    forager_collection = ForagerCollection()
+    forager = forager_collection.get_preset_forager("Bari2019")
+    print(forager_collection.presets)
     print(forager.params)
+
+    df = forager_collection.get_all_foragers()
+    forager = df.iloc[0].forager
+    forager.params

@@ -4,7 +4,11 @@
 
 import inspect
 import itertools
-from typing_extensions import _LiteralGenericAlias, get_type_hints
+from typing import get_type_hints
+try:
+    from typing import _LiteralGenericAlias
+except:  # <= python 3.8
+    from typing_extensions import _LiteralGenericAlias
 
 import pandas as pd
 

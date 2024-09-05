@@ -18,10 +18,10 @@ class ForagerQLearning(DynamicForagingAgentMLEBase):
 
     def __init__(
         self,
-        number_of_learning_rate: Literal[1, 2],
-        number_of_forget_rate: Literal[0, 1],
-        choice_kernel: Literal["none", "one_step", "full"],
-        action_selection: Literal["softmax", "epsilon-greedy"],
+        number_of_learning_rate: Literal[1, 2] = 2,
+        number_of_forget_rate: Literal[0, 1] = 1,
+        choice_kernel: Literal["none", "one_step", "full"] = "none",
+        action_selection: Literal["softmax", "epsilon-greedy"] = "softmax",
         params: dict = {},
         **kwargs,
     ):

@@ -1,7 +1,6 @@
 """Test get forager
 """
 
-import itertools
 import unittest
 
 from aind_dynamic_foraging_models.generative_model import ForagerCollection

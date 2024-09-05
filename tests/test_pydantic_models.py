@@ -10,6 +10,8 @@ from aind_dynamic_foraging_models.generative_model.params.forager_loss_counting_
 from aind_dynamic_foraging_models.generative_model.params.forager_q_learning_params import (
     generate_pydantic_q_learning_params,
 )
+from aind_dynamic_foraging_models.generative_model.params.util import get_params_options
+
 
 
 class TestParamsSimpleQ(unittest.TestCase):
@@ -28,7 +30,7 @@ class TestParamsSimpleQ(unittest.TestCase):
 
         self.check_fields(ParamsModel, FittingBoundsModel, expected_fields)
         self.check_validation(ParamsModel, FittingBoundsModel)
-
+        
     def test_generate_models_Bari2019(self):
         """Test generating pydantic models for Bari2019 agent"""
         # Create Pydantic models
@@ -54,6 +56,11 @@ class TestParamsSimpleQ(unittest.TestCase):
         self.assertEqual(ParamsModel.model_fields["choice_kernel_step_size"].default, 1.0)
         with self.assertRaises(ValidationError):
             ParamsModel(choice_kernel_step_size=0.5)
+            
+        # Show params options
+        params_options = get_params_options(ParamsModel)
+        print("\n", params_options)
+
 
     def test_generate_models_Hattori2019(self):
         """Test generating pydantic models for Hattori2019 agent"""

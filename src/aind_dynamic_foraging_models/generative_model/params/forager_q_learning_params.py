@@ -5,7 +5,7 @@ from typing import Literal, Tuple, Type
 
 from pydantic import BaseModel, Field
 
-from .base import create_pydantic_models_dynamic
+from .util import create_pydantic_models_dynamic
 
 
 def generate_pydantic_q_learning_params(

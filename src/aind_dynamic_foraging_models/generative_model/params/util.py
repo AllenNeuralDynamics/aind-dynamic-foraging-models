@@ -60,9 +60,9 @@ def get_params_options(
     para_range_override={},
     ) -> dict:
     """Get options for the params fields.
-    
+
     Useful for the Streamlit app.
-    
+
     Parameters
     ----------
     params_model : Pydantic model
@@ -72,10 +72,21 @@ def get_params_options(
         If the range is not specified in the Pydantic model, this default range will be used.
     para_range_override : dict, optional
         The range override for user-specified parameters, by default {}
-    
+
     Example
-    >>> 
-    
+    >>> ParamsModel, FittingBoundsModel = generate_pydantic_q_learning_params(
+            number_of_learning_rate=1,
+            number_of_forget_rate=1,
+            choice_kernel="one_step",
+            action_selection="softmax",
+        )
+    >>> params_options = get_params_options(ParamsModel)
+    {'learn_rate': {'para_range': [0.0, 1.0], 
+                    'para_default': 0.5, 
+                    'para_symbol': <ParamsSymbols.learn_rate: '$\\alpha$'>, 
+                    'para_desc': 'Learning rate'}, ...
+    }
+
     """
     # Get the schema
     params_schema = params_model.model_json_schema()["properties"]
@@ -86,7 +97,7 @@ def get_params_options(
     for para_name, para_field in params_schema.items():
         default = para_field.get("default", None)
         para_desc = para_field.get("description", "")
-        
+
         if para_name in para_range_override:
             para_range = para_range_override[para_name]
         else:  # Get from pydantic schema
@@ -97,7 +108,7 @@ def get_params_options(
             if "maximum" in para_field:
                 para_range[1] = para_field["maximum"]
             para_range = [type(default)(x) for x in para_range]
-            
+
         param_options[para_name] = dict(
             para_range=para_range,
             para_default=default,

@@ -10,7 +10,7 @@ from .forager_q_learning_params import _add_choice_kernel_fields
 
 
 def generate_pydantic_loss_counting_params(
-    win_stay_lose_switch: bool = False,
+    win_stay_lose_switch: Literal[False, True] = False,
     choice_kernel: Literal["none", "one_step", "full"] = "none",
 ) -> Tuple[Type[BaseModel], Type[BaseModel]]:
     """Generate Pydantic models for Loss-counting agent parameters.

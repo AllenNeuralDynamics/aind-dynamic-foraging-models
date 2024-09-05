@@ -18,7 +18,7 @@ class ForagerLossCounting(DynamicForagingAgentMLEBase):
 
     def __init__(
         self,
-        win_stay_lose_switch: bool = False,
+        win_stay_lose_switch: Literal[False, True] = False,
         choice_kernel: Literal["none", "one_step", "full"] = "none",
         params: dict = {},
         **kwargs,

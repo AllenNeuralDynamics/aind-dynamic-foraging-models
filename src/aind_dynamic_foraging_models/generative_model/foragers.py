@@ -4,7 +4,7 @@
 
 import inspect
 import itertools
-from typing import _LiteralGenericAlias, get_type_hints
+from typing_extensions import _LiteralGenericAlias, get_type_hints
 
 import pandas as pd
 

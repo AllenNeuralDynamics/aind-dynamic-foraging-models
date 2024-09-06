@@ -16,20 +16,20 @@ def act_softmax(
     rng=None,
 ):
     """Given q values and softmax_inverse_temperature, return the choice and choice probability.
-    
+
     If chocie_kernel is not None, it will sum it into the softmax function like this
-    
+
     1. Compute adjusted Q values by adding bias terms and choice kernel
-    
-        :math:`Q' = \\beta * (Q + w_{ck} * choice\_kernel) + bias`
-    
+
+        :math:`Q' = \\beta * (Q + w_{ck} * choice\\_kernel) + bias`
+
         :math:`\\beta` ~ softmax_inverse_temperature
-    
+
         :math:`w_{ck}` ~ choice_kernel_relative_weight
-        
+
     2. Compute choice probabilities by softmax function
-    
-        :math:`choice\_prob = exp(Q'_i) / \sum_i(exp(Q'_i))`
+
+        :math:`choice\\_prob = exp(Q'_i) / \\sum_i(exp(Q'_i))`
 
     Parameters
     ----------

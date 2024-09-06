@@ -4,15 +4,29 @@
    contain the root `toctree` directive.
 
 
-Welcome to aind-dynamic-foraging-models documentation!
-===========================================
+Welcome to aind-dynamic-foraging-models!
+========================================
+
+AIND library for generative (RL) and descriptive (logistic regression) models of dynamic foraging tasks.
+
+- :doc:`Reinforcement learning models <RL_models>`
+- :doc:`Logistic regression models <logistic_models>`
+
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+   :caption: Overview
+   :hidden:
+   :maxdepth: 1
+
+   RL_models
+   logistic_models
+
+.. toctree::
+   :caption: API Reference
+   :hidden:
+   :maxdepth: 1
 
    modules
-
 
 Indices and tables
 ==================

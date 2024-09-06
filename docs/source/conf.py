@@ -5,6 +5,7 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
 # -- Path Setup --------------------------------------------------------------
+import os
 from os.path import dirname, abspath
 from pathlib import Path
 from datetime import date
@@ -50,3 +51,8 @@ html_show_sphinx = False
 
 # If true, "(C) Copyright ..." is shown in the HTML footer. Default is True.
 html_show_copyright = False
+
+
+# --- Substitutions ---
+rst_epilog = ""
+rst_epilog += f".. |classes_aind_dynamic_foraging_models| image:: ../../classes_aind_dynamic_foraging_models.svg\n"

@@ -50,3 +50,11 @@ html_show_sphinx = False
 
 # If true, "(C) Copyright ..." is shown in the HTML footer. Default is True.
 html_show_copyright = False
+
+
+# --- Substitutions ---
+rst_epilog = ""
+rst_epilog += (
+    ".. |classes_aind_dynamic_foraging_models| "
+    "image:: ../../classes_aind_dynamic_foraging_models.svg\n"
+)

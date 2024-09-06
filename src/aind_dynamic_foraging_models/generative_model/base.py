@@ -332,6 +332,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         # Validate fit_bounds_override and fill in the missing bounds with default bounds
         fit_bounds = self.ParamFitBoundModel(**fit_bounds_override).model_dump()
         # Add agent's frozen parameters (by construction) to clamp_params (user specified)
+        clamp_params = clamp_params.deepcopy()  # Make a copy to avoid modifying the default dict!!
         clamp_params.update(self.params_list_frozen)
         # Remove clamped parameters from fit_bounds
         for name in clamp_params.keys():

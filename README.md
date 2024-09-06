@@ -9,7 +9,7 @@
 
 AIND library for generative (RL) and descriptive (logistic regression) models of dynamic foraging tasks.
 
-User documentation available on [readthedocs](https://aind-dynamic-foraging-models.readthedocs.io/en/latest/).
+User documentation available on [readthedocs](https://aind-dynamic-foraging-models.readthedocs.io/).
 
 ## Reinforcement Learning (RL) models with Maximum Likelihood Estimation (MLE) fitting
 

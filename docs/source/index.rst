@@ -4,7 +4,7 @@
    contain the root `toctree` directive.
 
 
-Welcome to this repository's documentation!
+Welcome to aind-dynamic-foraging-models documentation!
 ===========================================
 
 .. toctree::

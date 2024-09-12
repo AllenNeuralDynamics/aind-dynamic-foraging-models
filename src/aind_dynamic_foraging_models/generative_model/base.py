@@ -676,7 +676,75 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         if_fitted: whether the latent variables are from the fitted model (styling purpose)
         """
         pass
+    
+    def get_latent_variables(self):
+        """Return the latent variables of the agent
+        
+        This is agent-specific and should be implemented by the subclass.
+        """
+        return None
+    
+    def get_fitting_result_dict(self):
+        """Return the fitting result in a json-compatible dict for uploading to docDB etc.
+        """
+        if self.fitting_result is None:
+            print("No fitting result found. Please fit the model first.")
+        return
+    
+        # -- fit settings --
+        fit_settings = self.fitting_result.fit_settings.copy()
+        fit_settings["fit_choice_history"] = fit_settings["fit_choice_history"].tolist()
+        fit_settings["fit_reward_history"] = fit_settings["fit_reward_history"].tolist()
+    
+        # -- fit_stats --
+        fit_stats = {}
+        fit_stats_fields = [
+            "log_likelihood",
+            "AIC",
+            "BIC",
+            "LPT",
+            "LPT_AIC",
+            "LPT_BIC",
+            "prediction_accuracy",
+            "k_model",
+            "n_trials",
+            "nfev",
+            "nit",
+            "success",
+            "population",
+            "population_energies",
+        ]
+        for field in fit_stats_fields:
+            value = self.fitting_result[field]
 
+            # If numpy array, convert to list
+            if isinstance(value, np.ndarray):
+                value = value.tolist()
+            fit_stats[field] = value
+            
+        # -- latent variables --
+        latent_variables = self.get_latent_variables()
+            
+        # -- Pack all results --
+        fitting_result_dict = {
+            "fit_settings": fit_settings,
+            "fitted_params": self.params,
+            **fit_stats,
+            "fitted_latent_variables": latent_variables,
+        }
+            
+        # -- Add cross validation if available --
+        if self.fitting_result_cross_validation is not None:
+            cross_validation = {
+                "prediction_accuracy_test": 
+                    self.fitting_result_cross_validation["prediction_accuracy_test"],
+                "prediction_accuracy_fit":
+                    self.fitting_result_cross_validation["prediction_accuracy_fit"],
+                "prediction_accuracy_test_bias_only":
+                    self.fitting_result_cross_validation["prediction_accuracy_test_bias_only"],
+                }
+            fitting_result_dict["cross_validation"] = cross_validation
+            
 
 # -- Helper function --
 def negLL(choice_prob, fit_choice_history, fit_reward_history, fit_trial_set=None):

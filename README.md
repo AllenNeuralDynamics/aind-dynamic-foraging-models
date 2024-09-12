@@ -3,9 +3,9 @@
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 ![Code Style](https://img.shields.io/badge/code%20style-black-black)
 [![semantic-release: angular](https://img.shields.io/badge/semantic--release-angular-e10079?logo=semantic-release)](https://github.com/semantic-release/semantic-release)
-![Interrogate](https://img.shields.io/badge/interrogate-98.2%25-brightgreen)
+![Interrogate](https://img.shields.io/badge/interrogate-96.6%25-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-96%25-brightgreen?logo=codecov)
-![Python](https://img.shields.io/badge/python->=3.7-blue?logo=python)
+![Python](https://img.shields.io/badge/python->=3.9-blue?logo=python)
 
 AIND library for generative (RL) and descriptive (logistic regression) models of dynamic foraging tasks.
 

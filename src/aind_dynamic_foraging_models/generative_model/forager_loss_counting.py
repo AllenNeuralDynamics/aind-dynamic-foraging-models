@@ -121,7 +121,7 @@ class ForagerLossCounting(DynamicForagingAgentMLEBase):
                 choice_kernel_tminus1=self.choice_kernel[:, self.trial - 1],
                 choice_kernel_step_size=self.params.choice_kernel_step_size,
             )
-            
+
     def get_latent_variables(self):
         return {
             "loss_count": self.loss_count.tolist(),

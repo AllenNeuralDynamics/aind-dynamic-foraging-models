@@ -54,7 +54,7 @@ html_show_copyright = False
 
 # Add source code link
 html_show_sourcelink = True
-html_sourcelink_suffix = ''
+html_sourcelink_suffix = ""
 
 # --- Substitutions ---
 rst_epilog = ""

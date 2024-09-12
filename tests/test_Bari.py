@@ -76,10 +76,9 @@ class TestBari(unittest.TestCase):
         print(f'Fitted:       {[f"{num:.4f}" for num in fitting_result.x]}')
         print(f"Likelihood-Per-Trial: {fitting_result.LPT}")
         print(f"Prediction accuracy full dataset: {fitting_result.prediction_accuracy}\n")
-        
+
         # Check get_fitting_result_dict
-        fitting_result_dict = forager.get_fitting_result_dict()
-        
+        forager.get_fitting_result_dict()
 
         # Plot fitted latent variables
         fig_fitting, axes = forager.plot_fitted_session(if_plot_latent=True)

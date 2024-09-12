@@ -551,20 +551,20 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         # Always save the result without polishing, regardless of the polish setting
         # (sometimes polishing will move parameters to boundaries, so I add this for sanity check)
         # - About `polish` in DE:
-        #   - If `polish=False`, final `x` will be exactly the one in `population` that has the 
-        #     lowest `population_energy` (typically the first one). 
+        #   - If `polish=False`, final `x` will be exactly the one in `population` that has the
+        #     lowest `population_energy` (typically the first one).
         #     Its energy will also be the final `-log_likelihood`.
         #   - If `polish=True`, an additional gradient-based optimization will
-        #     work on `population[0]`, resulting in the final `x`, and override the likelihood 
+        #     work on `population[0]`, resulting in the final `x`, and override the likelihood
         #     `population_energy[0]` . But it will not change `population[0]`!
         #   - That is to say, `population[0]` is always the result without `polish`.
-        #     And if polished, we should rerun a `_cost_func_for_DE` to retrieve 
+        #     And if polished, we should rerun a `_cost_func_for_DE` to retrieve
         #     its likelihood, because it has been overridden by `x`.
         idx_lowest_energy = fitting_result.population_energies.argmin()
         x_without_polishing = fitting_result.population[idx_lowest_energy]
 
         log_likelihood_without_polishing = -self._cost_func_for_DE(
-            x_without_polishing,                 
+            x_without_polishing,
             agent_kwargs,  # Other kwargs to pass to the model
             fit_choice_history,
             fit_reward_history,
@@ -574,7 +574,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         )
         fitting_result.x_without_polishing = x_without_polishing
         fitting_result.log_likelihood_without_polishing = log_likelihood_without_polishing
-        
+
         params_without_polishing = dict(zip(fit_names, fitting_result.x_without_polishing))
         params_without_polishing.update(clamp_params)
         fitting_result.params_without_polishing = params_without_polishing
@@ -710,7 +710,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
 
     def get_latent_variables(self):
         """Return the latent variables of the agent
-        
+
         This is agent-specific and should be implemented by the subclass.
         """
         return None
@@ -718,7 +718,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
     @staticmethod
     def _fitting_result_to_dict(fitting_result_object, if_include_choice_reward_history=True):
         """Turn each fitting_result object (all data or cross-validation) into a dict
-        
+
         if_include_choice_reward_history: whether to include choice and reward history in the dict.
         To save space, we may not want to include them for each fold in cross-validation.
         """
@@ -766,8 +766,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         }
 
     def get_fitting_result_dict(self):
-        """Return the fitting result in a json-compatible dict for uploading to docDB etc.
-        """
+        """Return the fitting result in a json-compatible dict for uploading to docDB etc."""
         if self.fitting_result is None:
             print("No fitting result found. Please fit the model first.")
             return
@@ -792,13 +791,16 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         if self.fitting_result_cross_validation is not None:
             # Overall goodness of fit
             cross_validation = {
-                "prediction_accuracy_test": 
-                    self.fitting_result_cross_validation["prediction_accuracy_test"],
-                "prediction_accuracy_fit":
-                    self.fitting_result_cross_validation["prediction_accuracy_fit"],
-                "prediction_accuracy_test_bias_only":
-                    self.fitting_result_cross_validation["prediction_accuracy_test_bias_only"],
-                }
+                "prediction_accuracy_test": self.fitting_result_cross_validation[
+                    "prediction_accuracy_test"
+                ],
+                "prediction_accuracy_fit": self.fitting_result_cross_validation[
+                    "prediction_accuracy_fit"
+                ],
+                "prediction_accuracy_test_bias_only": self.fitting_result_cross_validation[
+                    "prediction_accuracy_test_bias_only"
+                ],
+            }
 
             # Fitting results of each fold
             fitting_results_each_fold = {}
@@ -812,6 +814,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             fitting_result_dict["cross_validation"] = cross_validation
 
         return fitting_result_dict
+
 
 # -- Helper function --
 def negLL(choice_prob, fit_choice_history, fit_reward_history, fit_trial_set=None):

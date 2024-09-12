@@ -55,7 +55,12 @@ class TestHattori(unittest.TestCase):
             reward_history,
             fit_bounds_override={"softmax_inverse_temperature": [0, 100]},
             clamp_params={"biasL": 0},
-            DE_kwargs=dict(workers=mp.cpu_count(), disp=False, seed=np.random.default_rng(42)),
+            DE_kwargs=dict(
+                workers=mp.cpu_count(),
+                disp=False,
+                seed=np.random.default_rng(42),
+                polish=True,
+            ),
             k_fold_cross_validation=2,
         )
 
@@ -84,6 +89,40 @@ class TestHattori(unittest.TestCase):
             f"Prediction accuracy cross-validation (test, bias only): "
             f'{np.mean(fitting_result_cross_validation["prediction_accuracy_test_bias_only"])}'
         )
+
+        # Check get_fitting_result_dict
+        forager.get_fitting_result_dict()
+
+        """
+        - About `polish` in DE:
+            - If `polish=False`, final `x` will be exactly the one in `population` that has the
+              lowest `population_energy` (typically the first one).
+              Its energy will also be the final `-log_likelihood`.
+            - If `polish=True`, an additional gradient-based optimization will
+              work on `population[0]`, resulting in the final `x`, and override the likelihood
+              `population_energy[0]` . But it will not change `population[0]`!
+            - That is to say, `population[0]` is always the result without `polish`.
+              And if polished, we should rerun a `_cost_func_for_DE` to retrieve
+              its likelihood, because it has been overridden by `x`.
+
+        -- With polishing --
+        fitting_result_dict["log_likelihood"] = -24.48229546352151 (indeed lowered)
+        fitting_result_dict["log_likelihood_without_polishing"]
+        = -24.483815590071163 (same as polish=False)
+        fitting_result_dict["params"]
+        = [0.6033178889116801, 0.19876389091937388, 0.2559107382027955, 5.359943069348114]
+        fitting_result_dict["params_without_polishing"]
+        = fitting_result_dict["population"][0]
+        = [0.607805498632581, 0.1998445971938479, 0.25454867132718245, 5.401614141060691]
+        (same as polish=False)
+        -- Without polishing (polish=False) --
+        fitting_result_dict["params"] = fitting_result_dict["params_without_polishing"]
+        = fitting_result_dict["population"][0]
+        = [0.607805498632581, 0.1998445971938479, 0.25454867132718245, 5.401614141060691]
+        fitting_result_dict["log_likelihood"]
+        = fitting_result_dict["log_likelihood_without_polishing"]
+        = -24.483815590071163
+        """
 
         # Plot fitted latent variables
         fig_fitting, axes = forager.plot_fitted_session(if_plot_latent=True)

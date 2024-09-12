@@ -122,6 +122,13 @@ class ForagerLossCounting(DynamicForagingAgentMLEBase):
                 choice_kernel_step_size=self.params.choice_kernel_step_size,
             )
 
+    def get_latent_variables(self):
+        return {
+            "loss_count": self.loss_count.tolist(),
+            "choice_kernel": self.choice_kernel.tolist(),
+            "choice_prob": self.choice_prob.tolist(),
+        }
+
     def plot_latent_variables(self, ax, if_fitted=False):
         """Plot Q values"""
         if if_fitted:

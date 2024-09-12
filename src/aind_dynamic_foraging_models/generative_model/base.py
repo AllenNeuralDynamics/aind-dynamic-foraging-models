@@ -492,6 +492,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             mutation=(0.5, 1),
             recombination=0.7,
             popsize=16,
+            polish=True,
             strategy="best1bin",
             disp=False,
             workers=1,

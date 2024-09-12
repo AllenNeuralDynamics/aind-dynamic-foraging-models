@@ -702,9 +702,6 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             fit_settings.pop("fit_choice_history")
             fit_settings.pop("fit_reward_history")
             
-        # -- fitted params --
-        fitted_params = fitting_result_object.params.copy()
-
         # -- fit_stats --
         fit_stats = {}
         fit_stats_fields = [
@@ -714,7 +711,6 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             "LPT",
             "LPT_AIC",
             "LPT_BIC",
-            "prediction_accuracy",
             "k_model",
             "n_trials",
             "nfev",
@@ -733,7 +729,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
 
         return {
             "fit_settings": fit_settings,
-            "fitted_params": fitted_params,
+            "fitted_params": fitting_result_object.params,
             **fit_stats,
         }
 
@@ -745,17 +741,18 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             return
 
         # -- result of fitting with all data --
-        dict_all_data = self._fitting_result_to_dict(
+        dict_fit_on_whole_data = self._fitting_result_to_dict(
             self.fitting_result, if_include_choice_reward_history=True
         )
+        # Add prediction accuracy because it is treated separately for the whole dataset fitting
+        dict_fit_on_whole_data["prediction_accuracy"] = self.fitting_result.prediction_accuracy
 
         # -- latent variables --
         latent_variables = self.get_latent_variables()
 
         # -- Pack all results --
         fitting_result_dict = {
-            "fit_settings": fit_settings,
-            **fit_stats,
+            **dict_fit_on_whole_data,
             "fitted_latent_variables": latent_variables,
         }
 
@@ -770,7 +767,6 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
                 "prediction_accuracy_test_bias_only":
                     self.fitting_result_cross_validation["prediction_accuracy_test_bias_only"],
                 }
-            fitting_result_dict["cross_validation"] = cross_validation
             
             # Fitting results of each fold
             fitting_results_each_fold = {}
@@ -780,7 +776,8 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
                 fitting_results_each_fold[kk] = self._fitting_result_to_dict(
                     fitting_result_fold, if_include_choice_reward_history=False
                 )
-            fitting_result_dict["fitting_results_each_fold"] = fitting_results_each_fold
+            cross_validation["fitting_results_each_fold"] = fitting_results_each_fold
+            fitting_result_dict["cross_validation"] = cross_validation
 
         return fitting_result_dict
 

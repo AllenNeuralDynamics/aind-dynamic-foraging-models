@@ -86,10 +86,10 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         _params.update(params)
         self.params = self.ParamModel(**_params)
         return self.get_params()
-    
+
     def get_agent_alias(self):
-        """ Get the agent alias for the model 
-        
+        """Get the agent alias for the model
+
         Should be overridden by the subclass.
         """
         return ""

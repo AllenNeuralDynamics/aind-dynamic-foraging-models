@@ -818,7 +818,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             for kk, fitting_result_fold in enumerate(
                 self.fitting_result_cross_validation["fitting_results_all_folds"]
             ):
-                fitting_results_each_fold[kk] = self._fitting_result_to_dict(
+                fitting_results_each_fold[f"{kk}"] = self._fitting_result_to_dict(
                     fitting_result_fold, if_include_choice_reward_history=False
                 )
             cross_validation["fitting_results_each_fold"] = fitting_results_each_fold

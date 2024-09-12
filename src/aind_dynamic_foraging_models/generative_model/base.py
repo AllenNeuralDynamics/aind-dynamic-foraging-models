@@ -742,7 +742,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         """
         if self.fitting_result is None:
             print("No fitting result found. Please fit the model first.")
-        return
+            return
 
         # -- result of fitting with all data --
         dict_all_data = self._fitting_result_to_dict(

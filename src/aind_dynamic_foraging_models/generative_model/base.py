@@ -785,6 +785,10 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         # Add prediction accuracy because it is treated separately for the whole dataset fitting
         dict_fit_on_whole_data["prediction_accuracy"] = self.fitting_result.prediction_accuracy
 
+        # Add class name and agent alias to fit_settings for convenience
+        dict_fit_on_whole_data["fit_settings"]["agent_class_name"] = self.__class__.__name__
+        dict_fit_on_whole_data["fit_settings"]["agent_alias"] = self.get_agent_alias()
+
         # -- latent variables --
         latent_variables = self.get_latent_variables()
 

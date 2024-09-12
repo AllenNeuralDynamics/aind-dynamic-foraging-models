@@ -548,6 +548,36 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         fitting_result.LPT_AIC = np.exp(-fitting_result.AIC / 2 / fitting_result.n_trials)
         fitting_result.LPT_BIC = np.exp(-fitting_result.BIC / 2 / fitting_result.n_trials)
 
+        # Always save the result without polishing, regardless of the polish setting
+        # (sometimes polishing will move parameters to boundaries, so I add this for sanity check)
+        # - About `polish` in DE:
+        #   - If `polish=False`, final `x` will be exactly the one in `population` that has the 
+        #     lowest `population_energy` (typically the first one). 
+        #     Its energy will also be the final `-log_likelihood`.
+        #   - If `polish=True`, an additional gradient-based optimization will
+        #     work on `population[0]`, resulting in the final `x`, and override the likelihood 
+        #     `population_energy[0]` . But it will not change `population[0]`!
+        #   - That is to say, `population[0]` is always the result without `polish`.
+        #     And if polished, we should rerun a `_cost_func_for_DE` to retrieve 
+        #     its likelihood, because it has been overridden by `x`.
+        idx_lowest_energy = fitting_result.population_energies.argmin()
+        x_without_polishing = fitting_result.population[idx_lowest_energy]
+
+        log_likelihood_without_polishing = -self._cost_func_for_DE(
+            x_without_polishing,                 
+            agent_kwargs,  # Other kwargs to pass to the model
+            fit_choice_history,
+            fit_reward_history,
+            fit_trial_set,  # subset of trials to fit; if empty, use all trials)
+            fit_names,  # Pass names so that negLL_func_for_de knows which parameters to fit
+            clamp_params,
+        )
+        fitting_result.x_without_polishing = x_without_polishing
+        fitting_result.log_likelihood_without_polishing = log_likelihood_without_polishing
+        
+        params_without_polishing = dict(zip(fit_names, fitting_result.x_without_polishing))
+        params_without_polishing.update(clamp_params)
+        fitting_result.params_without_polishing = params_without_polishing
         return fitting_result
 
     @classmethod
@@ -701,10 +731,11 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         else:
             fit_settings.pop("fit_choice_history")
             fit_settings.pop("fit_reward_history")
-            
+
         # -- fit_stats --
         fit_stats = {}
         fit_stats_fields = [
+            "params",
             "log_likelihood",
             "AIC",
             "BIC",
@@ -718,6 +749,8 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             "success",
             "population",
             "population_energies",
+            "params_without_polishing",
+            "log_likelihood_without_polishing",
         ]
         for field in fit_stats_fields:
             value = fitting_result_object[field]
@@ -729,7 +762,6 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
 
         return {
             "fit_settings": fit_settings,
-            "fitted_params": fitting_result_object.params,
             **fit_stats,
         }
 
@@ -767,7 +799,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
                 "prediction_accuracy_test_bias_only":
                     self.fitting_result_cross_validation["prediction_accuracy_test_bias_only"],
                 }
-            
+
             # Fitting results of each fold
             fitting_results_each_fold = {}
             for kk, fitting_result_fold in enumerate(

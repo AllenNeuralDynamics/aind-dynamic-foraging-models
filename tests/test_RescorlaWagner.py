@@ -64,6 +64,9 @@ class TestRescorlaWagner(unittest.TestCase):
 
         fitting_result = forager.fitting_result
         assert fitting_result.success
+        
+        # Check get_fitting_result_dict
+        fitting_result_dict = forager.get_fitting_result_dict()
 
         # Check fitted parameters
         fit_names = fitting_result.fit_settings["fit_names"]

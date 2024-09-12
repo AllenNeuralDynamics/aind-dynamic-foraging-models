@@ -676,26 +676,34 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         if_fitted: whether the latent variables are from the fitted model (styling purpose)
         """
         pass
-    
+
     def get_latent_variables(self):
         """Return the latent variables of the agent
         
         This is agent-specific and should be implemented by the subclass.
         """
         return None
-    
-    def get_fitting_result_dict(self):
-        """Return the fitting result in a json-compatible dict for uploading to docDB etc.
+
+    @staticmethod
+    def _fitting_result_to_dict(fitting_result_object, if_include_choice_reward_history=True):
+        """Turn each fitting_result object (all data or cross-validation) into a dict
+        
+        if_include_choice_reward_history: whether to include choice and reward history in the dict.
+        To save space, we may not want to include them for each fold in cross-validation.
         """
-        if self.fitting_result is None:
-            print("No fitting result found. Please fit the model first.")
-        return
-    
-        # -- fit settings --
-        fit_settings = self.fitting_result.fit_settings.copy()
-        fit_settings["fit_choice_history"] = fit_settings["fit_choice_history"].tolist()
-        fit_settings["fit_reward_history"] = fit_settings["fit_reward_history"].tolist()
-    
+
+        # -- fit_settings --
+        fit_settings = fitting_result_object.fit_settings.copy()
+        if if_include_choice_reward_history:
+            fit_settings["fit_choice_history"] = fit_settings["fit_choice_history"].tolist()
+            fit_settings["fit_reward_history"] = fit_settings["fit_reward_history"].tolist()
+        else:
+            fit_settings.pop("fit_choice_history")
+            fit_settings.pop("fit_reward_history")
+            
+        # -- fitted params --
+        fitted_params = fitting_result_object.params.copy()
+
         # -- fit_stats --
         fit_stats = {}
         fit_stats_fields = [
@@ -715,26 +723,44 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             "population_energies",
         ]
         for field in fit_stats_fields:
-            value = self.fitting_result[field]
+            value = fitting_result_object[field]
 
             # If numpy array, convert to list
             if isinstance(value, np.ndarray):
                 value = value.tolist()
             fit_stats[field] = value
-            
+
+        return {
+            "fit_settings": fit_settings,
+            "fitted_params": fitted_params,
+            **fit_stats,
+        }
+
+    def get_fitting_result_dict(self):
+        """Return the fitting result in a json-compatible dict for uploading to docDB etc.
+        """
+        if self.fitting_result is None:
+            print("No fitting result found. Please fit the model first.")
+        return
+
+        # -- result of fitting with all data --
+        dict_all_data = self._fitting_result_to_dict(
+            self.fitting_result, if_include_choice_reward_history=True
+        )
+
         # -- latent variables --
         latent_variables = self.get_latent_variables()
-            
+
         # -- Pack all results --
         fitting_result_dict = {
             "fit_settings": fit_settings,
-            "fitted_params": self.params,
             **fit_stats,
             "fitted_latent_variables": latent_variables,
         }
-            
+
         # -- Add cross validation if available --
         if self.fitting_result_cross_validation is not None:
+            # Overall goodness of fit
             cross_validation = {
                 "prediction_accuracy_test": 
                     self.fitting_result_cross_validation["prediction_accuracy_test"],
@@ -745,6 +771,17 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
                 }
             fitting_result_dict["cross_validation"] = cross_validation
             
+            # Fitting results of each fold
+            fitting_results_each_fold = {}
+            for kk, fitting_result_fold in enumerate(
+                self.fitting_result_cross_validation["fitting_results_all_folds"]
+            ):
+                fitting_results_each_fold[kk] = self._fitting_result_to_dict(
+                    fitting_result_fold, if_include_choice_reward_history=False
+                )
+            fitting_result_dict["fitting_results_each_fold"] = fitting_results_each_fold
+
+        return fitting_result_dict
 
 # -- Helper function --
 def negLL(choice_prob, fit_choice_history, fit_reward_history, fit_trial_set=None):

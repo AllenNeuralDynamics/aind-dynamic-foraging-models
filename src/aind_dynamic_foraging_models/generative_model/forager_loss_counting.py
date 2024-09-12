@@ -64,6 +64,14 @@ class ForagerLossCounting(DynamicForagingAgentMLEBase):
     def _get_params_model(self, agent_kwargs):
         """Get the params model of the agent"""
         return generate_pydantic_loss_counting_params(**agent_kwargs)
+    
+    def get_agent_alias(self):
+        """Get the agent alias"""
+        _prefix = "WSLS" if self.agent_kwargs["win_stay_lose_switch"] else "LossCounting"
+        _ck = {"none": "", "one_step": "_CK1", "full": "_CKfull"}[
+            self.agent_kwargs["choice_kernel"]
+        ]
+        return _prefix + _ck
 
     def _reset(self):
         """Reset the agent"""

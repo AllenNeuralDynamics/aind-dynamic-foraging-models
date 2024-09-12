@@ -71,6 +71,22 @@ class ForagerQLearning(DynamicForagingAgentMLEBase):
         """
         return generate_pydantic_q_learning_params(**agent_kwargs)
 
+    def get_agent_alias(self):
+        """Get the agent alias"""
+        _ck = {"none": "", "one_step": "_CK1", "full": "_CKfull"}[
+            self.agent_kwargs["choice_kernel"]
+        ]
+        _as = {"softmax": "_softmax", "epsilon-greedy": "_epsi"}[
+            self.agent_kwargs["action_selection"]
+        ]
+        return (
+            "QLearning"
+            + f"_L{self.agent_kwargs['number_of_learning_rate']}"
+            + f"F{self.agent_kwargs['number_of_forget_rate']}"
+            + _ck
+            + _as
+        )
+
     def _reset(self):
         """Reset the agent"""
         # --- Call the base class reset ---

@@ -160,6 +160,7 @@ class ForagerCollection:
                     dict(
                         agent_class_name=agent_class_name,
                         agent_kwargs=agent_kwargs,
+                        agent_alias=forager.get_agent_alias(),
                         **agent_kwargs,  # Also unpack agent_kwargs
                         preset_name=preset_name,
                         n_free_params=len(forager.params_list_free),
@@ -204,5 +205,6 @@ if __name__ == "__main__":
     print(forager.params)
 
     df = forager_collection.get_all_foragers()
+    print(df.agent_alias)
     forager = df.iloc[0].forager
     forager.params

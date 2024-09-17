@@ -10,9 +10,8 @@ from scipy.stats import norm
 def act_logistic(
     w_t: np.array,
     bias_terms: np.array,
-    rng=None,   
+    rng=None,
 ):
-    
     """Given weights, return the choice and choice probability.
     If chocie_kernel is not None, it will sum it into the softmax function like this
 
@@ -36,12 +35,12 @@ def act_logistic(
     _type_
         _description_
     """
-    input = [w_t[0,0] - w_t[1,0] - bias_terms, w_t[0,1] - w_t[1,1] + bias_terms]
-    choice_prob = 1 / (1 + np.exp(-1*input))
+    input = [w_t[0, 0] - w_t[1, 0] - bias_terms, w_t[0, 1] - w_t[1, 1] + bias_terms]
+    choice_prob = 1 / (1 + np.exp(-1 * input))
     choice = choose_bern(choice_prob)
-    
+
     return choice, choice_prob
-            
+
 
 def act_softmax(
     q_value_t: np.array,
@@ -277,9 +276,10 @@ def choose_ps(ps, rng=None):
     ps = ps / np.sum(ps)
     return np.max(np.argwhere(np.hstack([-1e-16, np.cumsum(ps)]) < rng.random()))
 
+
 def choose_bern(prob, rng=None):
     """
-    Bernoulli choice 
+    Bernoulli choice
     """
     rng = rng or np.random.default_rng()
     return 1 if np.random.rand() < prob else 0

@@ -7,9 +7,9 @@ from typing import Literal
 import numpy as np
 from aind_behavior_gym.dynamic_foraging.task import L, R
 
-from .act_functions import act_epsilon_greedy, act_softmax, act_logistic
+from .act_functions import act_logistic
 from .base import DynamicForagingAgentMLEBase
-from .learn_functions import learn_choice_kernel, learn_RWlike, learn_actor
+from .learn_functions import learn_actor
 from .params.forager_q_learning_params import generate_pydantic_actor_params
 
 
@@ -101,16 +101,15 @@ class ForagerActor(DynamicForagingAgentMLEBase):
         else:
             forget_rates = [self.params.forget_rate_unchosen, 0]
 
-        # Update W 
+        # Update W
         self.w[:, self.trial] = learn_actor(
             choice=choice,
             choice_prob=choice,
             reward=reward,
             w_tminus1=self.w[:, self.trial - 1],
             learn_rates=learn_rates,
-            forget_rates=forget_rates
+            forget_rates=forget_rates,
         )
-
 
     def plot_latent_variables(self, ax, if_fitted=False):
         """Plot W"""
@@ -124,5 +123,3 @@ class ForagerActor(DynamicForagingAgentMLEBase):
         x = np.arange(self.n_trials + 1) + 1  # When plotting, we start from 1
         ax.plot(x, self.w[L, :], label=f"{prefix}W(L)", color="red", **style)
         ax.plot(x, self.w[R, :], label=f"{prefix}W(R)", color="blue", **style)
-
-

@@ -1,3 +1,6 @@
+"""
+util functions for params
+"""
 from typing import Any, Dict, List, Tuple
 
 import numpy as np
@@ -36,6 +39,9 @@ def create_pydantic_models_dynamic(
 
     # Add a validator to check the fitting bounds
     def validate_bounds(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        validatitor to check the fitting bounds
+        """
         for name, bounds in values.model_dump().items():
             lower_bound, upper_bound = bounds
             if lower_bound > upper_bound:

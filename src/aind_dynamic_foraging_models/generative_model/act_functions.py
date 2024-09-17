@@ -52,13 +52,20 @@ def act_softmax(
     rng=None,
 ):
     """Given q values and softmax_inverse_temperature, return the choice and choice probability.
+
     If chocie_kernel is not None, it will sum it into the softmax function like this
 
-    Steps:
     1. Compute adjusted Q values by adding bias terms and choice kernel
-       Q' = softmax_inverse_temperature * (Q + choice_kernel_relative_weight * choice_kernel) + bias
+
+        :math:`Q' = \\beta * (Q + w_{ck} * choice\\_kernel) + bias`
+
+        :math:`\\beta` ~ softmax_inverse_temperature
+
+        :math:`w_{ck}` ~ choice_kernel_relative_weight
+
     2. Compute choice probabilities by softmax function
-       choice_prob ~ exp(Q') / sum(exp(Q'))
+
+        :math:`choice\\_prob = exp(Q'_i) / \\sum_i(exp(Q'_i))`
 
     Parameters
     ----------
@@ -71,7 +78,7 @@ def act_softmax(
     choice_kernel_relative_weight : _type_, optional
         relative strength of choice kernel relative to Q in decision, by default None.
         If not none, choice kernel will have an inverse temperature of
-            softmax_inverse_temperature * choice_kernel_relative_weight
+        softmax_inverse_temperature * choice_kernel_relative_weight
     choice_kernel : _type_, optional
         _description_, by default None
     rng : _type_, optional
@@ -112,13 +119,13 @@ def act_epsilon_greedy(
 
     Steps:
     1. Compute adjusted Q values by adding bias terms and choice kernel
-          Q' = Q + bias + choice_kernel_relative_weight * choice_kernel
+        Q' = Q + bias + choice_kernel_relative_weight * choice_kernel
     2. The espilon-greedy method is quivalent to choice probabilities:
-          If Q'_L != Q'_R (for simplicity, we assume only two choices)
-             choice_prob [(argmax(Q')] = 1 - epsilon / 2
-             choice_prob [(argmin(Q'))] = epsilon / 2
-          else
-             choice_prob [:] = 0.5
+        If Q'_L != Q'_R (for simplicity, we assume only two choices)
+            choice_prob [(argmax(Q')] = 1 - epsilon / 2
+            choice_prob [(argmin(Q'))] = epsilon / 2
+        else
+            choice_prob [:] = 0.5
 
     Parameters
     ----------

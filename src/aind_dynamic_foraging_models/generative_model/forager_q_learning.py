@@ -18,10 +18,10 @@ class ForagerQLearning(DynamicForagingAgentMLEBase):
 
     def __init__(
         self,
-        number_of_learning_rate: Literal[1, 2],
-        number_of_forget_rate: Literal[0, 1],
-        choice_kernel: Literal["none", "one_step", "full"],
-        action_selection: Literal["softmax", "epsilon-greedy"],
+        number_of_learning_rate: Literal[1, 2] = 2,
+        number_of_forget_rate: Literal[0, 1] = 1,
+        choice_kernel: Literal["none", "one_step", "full"] = "none",
+        action_selection: Literal["softmax", "epsilon-greedy"] = "softmax",
         params: dict = {},
         **kwargs,
     ):
@@ -70,6 +70,22 @@ class ForagerQLearning(DynamicForagingAgentMLEBase):
         for parameters and fitting bounds for simple Q learning.
         """
         return generate_pydantic_q_learning_params(**agent_kwargs)
+
+    def get_agent_alias(self):
+        """Get the agent alias"""
+        _ck = {"none": "", "one_step": "_CK1", "full": "_CKfull"}[
+            self.agent_kwargs["choice_kernel"]
+        ]
+        _as = {"softmax": "_softmax", "epsilon-greedy": "_epsi"}[
+            self.agent_kwargs["action_selection"]
+        ]
+        return (
+            "QLearning"
+            + f"_L{self.agent_kwargs['number_of_learning_rate']}"
+            + f"F{self.agent_kwargs['number_of_forget_rate']}"
+            + _ck
+            + _as
+        )
 
     def _reset(self):
         """Reset the agent"""
@@ -153,6 +169,13 @@ class ForagerQLearning(DynamicForagingAgentMLEBase):
                 choice_kernel_tminus1=self.choice_kernel[:, self.trial - 1],
                 choice_kernel_step_size=self.params.choice_kernel_step_size,
             )
+
+    def get_latent_variables(self):
+        return {
+            "q_value": self.q_value.tolist(),
+            "choice_kernel": self.choice_kernel.tolist(),
+            "choice_prob": self.choice_prob.tolist(),
+        }
 
     def plot_latent_variables(self, ax, if_fitted=False):
         """Plot Q values"""

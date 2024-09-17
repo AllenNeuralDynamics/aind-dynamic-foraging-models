@@ -7,7 +7,7 @@ on:
 # Change line 67 from "if: false" to "if: true" to enable PyPI publishing. 
 # Requires that svc-aindscicomp be added as an admin to repo.
 jobs:
-  update_badges:
+  update_badges_and_docs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
@@ -16,10 +16,10 @@ jobs:
         ref: ${{ env.DEFAULT_BRANCH }}
         fetch-depth: 0
         token: ${{ secrets.SERVICE_TOKEN }}
-    - name: Set up Python 3.8
+    - name: Set up Python 3.9
       uses: actions/setup-python@v3
       with:
-        python-version: 3.8
+        python-version: 3.9
     - name: Install dependencies
       run: | 
         python -m pip install -e .[dev] --no-cache-dir
@@ -60,11 +60,24 @@ jobs:
         default_author: github_actions
         message: "ci: update badges [skip actions]"
         add: '["README.md"]'
+
+    # Add the following steps to update the documentation (using the same machine)
+    - name: Generate new rst files
+      run: | 
+        sphinx-apidoc -o docs/source/ src
+    - name: Commit changes
+      uses: EndBug/add-and-commit@v9
+      with:
+        default_author: github_actions
+        message: "ci: update docs [skip actions]"
+        add: '["*.rst"]'
+
   tag:
-    needs: update_badges
+    needs: update_badges_and_docs
     uses: AllenNeuralDynamics/aind-github-actions/.github/workflows/tag.yml@main
     secrets:
       SERVICE_TOKEN: ${{ secrets.SERVICE_TOKEN }}
+      
   publish:
     needs: tag
     if: true
@@ -73,10 +86,10 @@ jobs:
       - uses: actions/checkout@v3
       - name: Pull latest changes
         run: git pull origin main
-      - name: Set up Python 3.8
+      - name: Set up Python 3.9
         uses: actions/setup-python@v2
         with:
-          python-version: 3.8
+          python-version: 3.9
       - name: Install dependencies
         run: |
           pip install --upgrade setuptools wheel twine build

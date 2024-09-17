@@ -30,6 +30,7 @@ extensions = [
     "sphinx.ext.doctest",
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
+    "sphinx.ext.viewcode",
 ]
 templates_path = ["_templates"]
 exclude_patterns = []
@@ -50,3 +51,14 @@ html_show_sphinx = False
 
 # If true, "(C) Copyright ..." is shown in the HTML footer. Default is True.
 html_show_copyright = False
+
+# Add source code link
+html_show_sourcelink = True
+html_sourcelink_suffix = ""
+
+# --- Substitutions ---
+rst_epilog = ""
+rst_epilog += (
+    ".. |classes_aind_dynamic_foraging_models| "
+    "image:: ../../classes_aind_dynamic_foraging_models.svg\n"
+)

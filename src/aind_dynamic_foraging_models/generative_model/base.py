@@ -87,6 +87,13 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         self.params = self.ParamModel(**_params)
         return self.get_params()
 
+    def get_agent_alias(self):
+        """Get the agent alias for the model
+
+        Should be overridden by the subclass.
+        """
+        return ""
+
     def get_params(self):
         """Get the model parameters in a dictionary format"""
         return self.params.model_dump()
@@ -120,7 +127,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         ps = []
         for p in params_list:
             name_str = ParamsSymbols[p[0]] if if_latex else p[0]
-            value_str = f"={p[1]: .{decimal}f}" if if_value else ""
+            value_str = f" = {p[1]:.{decimal}f}" if if_value else ""
             fix_str = " (fixed)" if p[0] in fixed_params else ""
             ps.append(f"{name_str}{value_str}{fix_str}")
 
@@ -332,6 +339,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         # Validate fit_bounds_override and fill in the missing bounds with default bounds
         fit_bounds = self.ParamFitBoundModel(**fit_bounds_override).model_dump()
         # Add agent's frozen parameters (by construction) to clamp_params (user specified)
+        clamp_params = clamp_params.copy()  # Make a copy to avoid modifying the default dict!!
         clamp_params.update(self.params_list_frozen)
         # Remove clamped parameters from fit_bounds
         for name in clamp_params.keys():
@@ -491,6 +499,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             mutation=(0.5, 1),
             recombination=0.7,
             popsize=16,
+            polish=True,
             strategy="best1bin",
             disp=False,
             workers=1,
@@ -546,6 +555,36 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         fitting_result.LPT_AIC = np.exp(-fitting_result.AIC / 2 / fitting_result.n_trials)
         fitting_result.LPT_BIC = np.exp(-fitting_result.BIC / 2 / fitting_result.n_trials)
 
+        # Always save the result without polishing, regardless of the polish setting
+        # (sometimes polishing will move parameters to boundaries, so I add this for sanity check)
+        # - About `polish` in DE:
+        #   - If `polish=False`, final `x` will be exactly the one in `population` that has the
+        #     lowest `population_energy` (typically the first one).
+        #     Its energy will also be the final `-log_likelihood`.
+        #   - If `polish=True`, an additional gradient-based optimization will
+        #     work on `population[0]`, resulting in the final `x`, and override the likelihood
+        #     `population_energy[0]` . But it will not change `population[0]`!
+        #   - That is to say, `population[0]` is always the result without `polish`.
+        #     And if polished, we should rerun a `_cost_func_for_DE` to retrieve
+        #     its likelihood, because it has been overridden by `x`.
+        idx_lowest_energy = fitting_result.population_energies.argmin()
+        x_without_polishing = fitting_result.population[idx_lowest_energy]
+
+        log_likelihood_without_polishing = -self._cost_func_for_DE(
+            x_without_polishing,
+            agent_kwargs,  # Other kwargs to pass to the model
+            fit_choice_history,
+            fit_reward_history,
+            fit_trial_set,  # subset of trials to fit; if empty, use all trials)
+            fit_names,  # Pass names so that negLL_func_for_de knows which parameters to fit
+            clamp_params,
+        )
+        fitting_result.x_without_polishing = x_without_polishing
+        fitting_result.log_likelihood_without_polishing = log_likelihood_without_polishing
+
+        params_without_polishing = dict(zip(fit_names, fitting_result.x_without_polishing))
+        params_without_polishing.update(clamp_params)
+        fitting_result.params_without_polishing = params_without_polishing
         return fitting_result
 
     @classmethod
@@ -595,18 +634,18 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             p_reward=self.task.get_p_reward(),
         )
 
-        # Add Q value
         if if_plot_latent:
+            # Plot latent variables
             self.plot_latent_variables(axes[0], if_fitted=False)
+            # Plot choice_prob
+            axes[0].plot(
+                np.arange(self.n_trials) + 1,
+                self.choice_prob[1] / self.choice_prob.sum(axis=0),
+                lw=0.5,
+                color="green",
+                label="choice_prob(R/R+L)",
+            )
 
-        # -- Plot choice_prob
-        axes[0].plot(
-            np.arange(self.n_trials) + 1,
-            self.choice_prob[1] / self.choice_prob.sum(axis=0),
-            lw=0.5,
-            color="green",
-            label="choice_prob(R/R+L)",
-        )
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=3)
 
         # 　Add the model parameters
@@ -645,19 +684,20 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             p_reward=np.full((2, len(fit_choice_history)), np.nan),  # Dummy p_reward
         )
 
-        # -- Plot fitted Q values
+        # -- Plot fitted latent variables and choice_prob --
         if if_plot_latent:
+            # Plot latent variables
             self.plot_latent_variables(axes[0], if_fitted=True)
+            # Plot fitted choice_prob
+            axes[0].plot(
+                np.arange(self.n_trials) + 1,
+                self.choice_prob[1] / self.choice_prob.sum(axis=0),
+                lw=2,
+                color="green",
+                ls=":",
+                label="fitted_choice_prob(R/R+L)",
+            )
 
-        # -- Plot fitted choice_prob
-        axes[0].plot(
-            np.arange(self.n_trials) + 1,
-            self.choice_prob[1] / self.choice_prob.sum(axis=0),
-            lw=2,
-            color="green",
-            ls=":",
-            label="fitted_choice_prob(R/R+L)",
-        )
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=4)
 
         # 　Add the model parameters
@@ -674,6 +714,117 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         if_fitted: whether the latent variables are from the fitted model (styling purpose)
         """
         pass
+
+    def get_latent_variables(self):
+        """Return the latent variables of the agent
+
+        This is agent-specific and should be implemented by the subclass.
+        """
+        return None
+
+    @staticmethod
+    def _fitting_result_to_dict(fitting_result_object, if_include_choice_reward_history=True):
+        """Turn each fitting_result object (all data or cross-validation) into a dict
+
+        if_include_choice_reward_history: whether to include choice and reward history in the dict.
+        To save space, we may not want to include them for each fold in cross-validation.
+        """
+
+        # -- fit_settings --
+        fit_settings = fitting_result_object.fit_settings.copy()
+        if if_include_choice_reward_history:
+            fit_settings["fit_choice_history"] = fit_settings["fit_choice_history"].tolist()
+            fit_settings["fit_reward_history"] = fit_settings["fit_reward_history"].tolist()
+        else:
+            fit_settings.pop("fit_choice_history")
+            fit_settings.pop("fit_reward_history")
+
+        # -- fit_stats --
+        fit_stats = {}
+        fit_stats_fields = [
+            "params",
+            "log_likelihood",
+            "AIC",
+            "BIC",
+            "LPT",
+            "LPT_AIC",
+            "LPT_BIC",
+            "k_model",
+            "n_trials",
+            "nfev",
+            "nit",
+            "success",
+            "population",
+            "population_energies",
+            "params_without_polishing",
+            "log_likelihood_without_polishing",
+        ]
+        for field in fit_stats_fields:
+            value = fitting_result_object[field]
+
+            # If numpy array, convert to list
+            if isinstance(value, np.ndarray):
+                value = value.tolist()
+            fit_stats[field] = value
+
+        return {
+            "fit_settings": fit_settings,
+            **fit_stats,
+        }
+
+    def get_fitting_result_dict(self):
+        """Return the fitting result in a json-compatible dict for uploading to docDB etc."""
+        if self.fitting_result is None:
+            print("No fitting result found. Please fit the model first.")
+            return
+
+        # -- result of fitting with all data --
+        dict_fit_on_whole_data = self._fitting_result_to_dict(
+            self.fitting_result, if_include_choice_reward_history=True
+        )
+        # Add prediction accuracy because it is treated separately for the whole dataset fitting
+        dict_fit_on_whole_data["prediction_accuracy"] = self.fitting_result.prediction_accuracy
+
+        # Add class name and agent alias to fit_settings for convenience
+        dict_fit_on_whole_data["fit_settings"]["agent_class_name"] = self.__class__.__name__
+        dict_fit_on_whole_data["fit_settings"]["agent_alias"] = self.get_agent_alias()
+
+        # -- latent variables --
+        latent_variables = self.get_latent_variables()
+
+        # -- Pack all results --
+        fitting_result_dict = {
+            **dict_fit_on_whole_data,
+            "fitted_latent_variables": latent_variables,
+        }
+
+        # -- Add cross validation if available --
+        if self.fitting_result_cross_validation is not None:
+            # Overall goodness of fit
+            cross_validation = {
+                "prediction_accuracy_test": self.fitting_result_cross_validation[
+                    "prediction_accuracy_test"
+                ],
+                "prediction_accuracy_fit": self.fitting_result_cross_validation[
+                    "prediction_accuracy_fit"
+                ],
+                "prediction_accuracy_test_bias_only": self.fitting_result_cross_validation[
+                    "prediction_accuracy_test_bias_only"
+                ],
+            }
+
+            # Fitting results of each fold
+            fitting_results_each_fold = {}
+            for kk, fitting_result_fold in enumerate(
+                self.fitting_result_cross_validation["fitting_results_all_folds"]
+            ):
+                fitting_results_each_fold[f"{kk}"] = self._fitting_result_to_dict(
+                    fitting_result_fold, if_include_choice_reward_history=False
+                )
+            cross_validation["fitting_results_each_fold"] = fitting_results_each_fold
+            fitting_result_dict["cross_validation"] = cross_validation
+
+        return fitting_result_dict
 
 
 # -- Helper function --

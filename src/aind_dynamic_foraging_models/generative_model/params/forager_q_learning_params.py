@@ -5,7 +5,7 @@ from typing import Literal, Tuple, Type
 
 from pydantic import BaseModel, Field
 
-from .base import create_pydantic_models_dynamic
+from .util import create_pydantic_models_dynamic
 
 
 def generate_pydantic_q_learning_params(
@@ -118,7 +118,12 @@ def _add_choice_kernel_fields(params_fields, fitting_bounds, choice_kernel):
     if choice_kernel == "full":
         params_fields["choice_kernel_step_size"] = (
             float,
-            Field(default=0.1, ge=0.0, le=1.0, description="Step size for choice kernel"),
+            Field(
+                default=0.1,
+                ge=0.0,
+                le=1.0,
+                description="Step size for choice kernel (1.0 means only previous choice)",
+            ),
         )
         fitting_bounds["choice_kernel_step_size"] = (0.0, 1.0)
     elif choice_kernel == "one_step":
@@ -140,13 +145,13 @@ def _add_choice_kernel_fields(params_fields, fitting_bounds, choice_kernel):
 def _add_action_selection_fields(params_fields, fitting_bounds, action_selection):
     """Add action selection fields to the params_fields and fitting_bounds dictionaries."""
     # Always include biasL
-    params_fields["biasL"] = (float, Field(default=0.0, description="Bias term for softmax"))
+    params_fields["biasL"] = (float, Field(default=0.0, description="Left bias for softmax"))
     fitting_bounds["biasL"] = (-5.0, 5.0)
 
     if action_selection == "softmax":
         params_fields["softmax_inverse_temperature"] = (
             float,
-            Field(default=10, ge=0.0, description="Softmax temperature"),
+            Field(default=10.0, ge=0.0, description="Softmax inverse temperature"),
         )
         fitting_bounds["softmax_inverse_temperature"] = (0.0, 100.0)
     elif action_selection == "epsilon-greedy":

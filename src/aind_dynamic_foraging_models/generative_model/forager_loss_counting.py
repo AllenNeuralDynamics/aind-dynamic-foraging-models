@@ -18,7 +18,8 @@ class ForagerLossCounting(DynamicForagingAgentMLEBase):
 
     def __init__(
         self,
-        choice_kernel: Literal["none", "one_step", "full"],
+        win_stay_lose_switch: Literal[False, True] = False,
+        choice_kernel: Literal["none", "one_step", "full"] = "none",
         params: dict = {},
         **kwargs,
     ):
@@ -31,6 +32,10 @@ class ForagerLossCounting(DynamicForagingAgentMLEBase):
 
         Parameters
         ----------
+        win_stay_lose_switch: bool, optional
+            If True, the agent will be a win-stay-lose-shift agent
+            (loss_count_threshold_mean and loss_count_threshold_std are fixed at 1 and 0),
+            by default False
         choice_kernel : Literal["none", "one_step", "full"], optional
             Choice kernel type, by default "none"
             If "none", no choice kernel will be included in the model.
@@ -46,6 +51,7 @@ class ForagerLossCounting(DynamicForagingAgentMLEBase):
         """
         # -- Pack the agent_kwargs --
         self.agent_kwargs = dict(
+            win_stay_lose_switch=win_stay_lose_switch,
             choice_kernel=choice_kernel,
         )
 
@@ -58,6 +64,14 @@ class ForagerLossCounting(DynamicForagingAgentMLEBase):
     def _get_params_model(self, agent_kwargs):
         """Get the params model of the agent"""
         return generate_pydantic_loss_counting_params(**agent_kwargs)
+
+    def get_agent_alias(self):
+        """Get the agent alias"""
+        _prefix = "WSLS" if self.agent_kwargs["win_stay_lose_switch"] else "LossCounting"
+        _ck = {"none": "", "one_step": "_CK1", "full": "_CKfull"}[
+            self.agent_kwargs["choice_kernel"]
+        ]
+        return _prefix + _ck
 
     def _reset(self):
         """Reset the agent"""
@@ -115,6 +129,13 @@ class ForagerLossCounting(DynamicForagingAgentMLEBase):
                 choice_kernel_tminus1=self.choice_kernel[:, self.trial - 1],
                 choice_kernel_step_size=self.params.choice_kernel_step_size,
             )
+
+    def get_latent_variables(self):
+        return {
+            "loss_count": self.loss_count.tolist(),
+            "choice_kernel": self.choice_kernel.tolist(),
+            "choice_prob": self.choice_prob.tolist(),
+        }
 
     def plot_latent_variables(self, ax, if_fitted=False):
         """Plot Q values"""

@@ -136,7 +136,7 @@ class ForagerQLearning(DynamicForagingAgentMLEBase):
 
         return choice, choice_prob
 
-    def learn(self, _observation, choice, reward, _next_observation, done):
+    def learn(self, _observation, choice, _, reward, _next_observation, done):
         """Update Q values
 
         Note that self.trial already increased by 1 before learn() in the base class

@@ -84,7 +84,7 @@ class ForagerActor(DynamicForagingAgentMLEBase):
             )
         return choice, choice_prob
 
-    def learn(self, _observation, choice, reward, _next_observation, done):
+    def learn(self, _observation, choice, choice_prob, reward, _next_observation, done):
         """Update Q values
 
         Note that self.trial already increased by 1 before learn() in the base class
@@ -104,6 +104,7 @@ class ForagerActor(DynamicForagingAgentMLEBase):
         # Update W 
         self.w[:, self.trial] = learn_actor(
             choice=choice,
+            choice_prob=choice,
             reward=reward,
             w_tminus1=self.w[:, self.trial - 1],
             learn_rates=learn_rates,

@@ -269,7 +269,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         Args:
             observation: The observation before the action was taken.
             action: The action taken by the agent.
-            action_prob: The probability for each action taken by the agent. 
+            action_prob: The probability for each action taken by the agent.
             reward: The reward received after taking the action.
             next_observation: The next observation after the action.
             done: Whether the episode has ended.

@@ -8,7 +8,6 @@ from pydantic import BaseModel, Field
 from .base import create_pydantic_models_dynamic
 
 
-
 def generate_pydantic_actor_params(
     number_of_learning_rate: Literal[1, 2] = 2,
     number_of_forget_rate: Literal[0, 1] = 1,
@@ -48,7 +47,6 @@ def generate_pydantic_actor_params(
 
     # ====== Dynamically create the pydantic models =====
     return create_pydantic_models_dynamic(params_fields, fitting_bounds)
-
 
 
 def generate_pydantic_q_learning_params(
@@ -186,7 +184,7 @@ def _add_action_selection_fields(params_fields, fitting_bounds, action_selection
     params_fields["biasL"] = (float, Field(default=0.0, description="Bias term for softmax"))
     fitting_bounds["biasL"] = (-5.0, 5.0)
 
-    if action_selection=="logistic":
+    if action_selection == "logistic":
         return
     elif action_selection == "softmax":
         params_fields["softmax_inverse_temperature"] = (

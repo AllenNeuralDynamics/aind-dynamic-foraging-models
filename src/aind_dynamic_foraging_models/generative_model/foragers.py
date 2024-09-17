@@ -2,7 +2,7 @@
 
 """
 
-from aind_dynamic_foraging_models import generative_model
+from src.aind_dynamic_foraging_models import generative_model
 
 
 class ForagerCollection:

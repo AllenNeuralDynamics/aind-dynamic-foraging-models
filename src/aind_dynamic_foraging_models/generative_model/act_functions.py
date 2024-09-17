@@ -7,6 +7,42 @@ from aind_behavior_gym.dynamic_foraging.task import L, R
 from scipy.stats import norm
 
 
+def act_logistic(
+    w_t: np.array,
+    bias_terms: np.array,
+    rng=None,   
+):
+    
+    """Given weights, return the choice and choice probability.
+    If chocie_kernel is not None, it will sum it into the softmax function like this
+
+    Steps:
+    1. Compute adjusted new w by adding bias terms and choice kernel
+       Q' = softmax_inverse_temperature * (Q + choice_kernel_relative_weight * choice_kernel) + bias
+    2. Compute choice probabilities by softmax function
+       choice_prob ~ exp(Q') / sum(exp(Q'))
+
+    Parameters
+    ----------
+    w_t : list or np.array
+        array of w, by default 0
+    bias_terms : np.array, optional
+        _description_, by default 0
+    rng : _type_, optional
+        random number generator, by default None
+
+    Returns
+    -------
+    _type_
+        _description_
+    """
+    input = [w_t[0,0] - w_t[1,0] - bias_terms, w_t[0,1] - w_t[1,1] + bias_terms]
+    choice_prob = 1 / (1 + np.exp(-1*input))
+    choice = choose_bern(choice_prob)
+    
+    return choice, choice_prob
+            
+
 def act_softmax(
     q_value_t: np.array,
     softmax_inverse_temperature: float,
@@ -233,3 +269,10 @@ def choose_ps(ps, rng=None):
 
     ps = ps / np.sum(ps)
     return np.max(np.argwhere(np.hstack([-1e-16, np.cumsum(ps)]) < rng.random()))
+
+def choose_bern(prob, rng=None):
+    """
+    Bernoulli choice 
+    """
+    rng = rng or np.random.default_rng()
+    return 1 if np.random.rand() < prob else 0

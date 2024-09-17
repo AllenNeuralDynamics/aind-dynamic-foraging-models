@@ -2,6 +2,17 @@
 
 import numpy as np
 
+def learn_actor(choice, reward, w_tminus1, learn_rates, forget_rates):
+    w_t = np.zeros_like(w_tminus1)
+
+    # Learning component
+    for t in range(trials - 1):
+        if choice == 0:  # Left choice
+            w_t[0] = w_tminus1[0] + learn_rates * (1 - probChoice[0, t]) * reward[0]
+            w_t[1] = forget_rates * w_tminus1[1] - learn_rates * probChoice[1, t] * reward[0]
+         elif choice == 1:  # Right choice
+            w_t[1] = w_tminus1[1] + learn_rates * (1 - probChoice[1, t]) * reward[1]
+            w_t[0] = forget_rates * w_tminus1[0] - learn_rates * probChoice[0, t] * reward[1]
 
 def learn_RWlike(choice, reward, q_value_tminus1, forget_rates, learn_rates):
     """Learning function for Rescorla-Wagner-like model.

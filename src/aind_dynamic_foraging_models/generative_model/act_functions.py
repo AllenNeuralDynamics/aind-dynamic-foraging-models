@@ -46,9 +46,11 @@ def act_logistic(
     if choice_kernel is not None:
         choice_kernel_multiplier = choice_kernel_relative_weight * choice_kernel
     else:
-        choice_kernel_multiplier = 1 
-    adjusted_input = [w_t[0, 0] - w_t[1, 0] - bias_terms * choice_kernel_multiplier, 
-                      w_t[0, 1] - w_t[1, 1] + bias_terms * choice_kernel_multiplier]
+        choice_kernel_multiplier = 1
+    adjusted_input = [
+        w_t[0, 0] - w_t[1, 0] - bias_terms * choice_kernel_multiplier,
+        w_t[0, 1] - w_t[1, 1] + bias_terms * choice_kernel_multiplier,
+    ]
     choice_prob = 1 / (1 + np.exp(-1 * adjusted_input))
     choice = choose_bern(choice_prob)
 
@@ -290,7 +292,6 @@ def choose_ps(ps, rng=None):
     return np.max(np.argwhere(np.hstack([-1e-16, np.cumsum(ps)]) < rng.random()))
 
 
-
 def choose_bern(prob, rng=None):
     """
     Bernoulli choice
@@ -298,4 +299,3 @@ def choose_bern(prob, rng=None):
     """
     rng = rng or np.random.default_rng()
     return 1 if np.random.rand() < prob else 0
-

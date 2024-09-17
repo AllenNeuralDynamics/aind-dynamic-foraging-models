@@ -6,8 +6,6 @@ from typing import Literal
 
 import numpy as np
 from aind_behavior_gym.dynamic_foraging.task import L, R
-
-from .act_functions import act_logistic
 from .act_functions import act_logistic
 from .base import DynamicForagingAgentMLEBase
 from .learn_functions import learn_actor, learn_choice_kernel
@@ -21,7 +19,8 @@ class ForagerActor(DynamicForagingAgentMLEBase):
         self,
         number_of_learning_rate: Literal[1, 2],
         number_of_forget_rate: Literal[0, 1],
-        action_selection: Literal["act_logistic", "softmax", "epsilon-greedy"],
+        choice_kernel: Literal["none", "one_step", "full"] = "none",
+        action_selection: Literal["act_logistic"] = "act_logistic",
         params: dict = {},
         **kwargs,
     ):
@@ -74,8 +73,6 @@ class ForagerActor(DynamicForagingAgentMLEBase):
         # after the last trial (HH20210726)
         self.w = np.full([self.n_actions, self.n_trials], np.nan)
         self.w[:, 0] = 0  # Initial Q values as 0
-        
-        
         # Always initialize choice_kernel with nan, even if choice_kernel = "none"
         self.choice_kernel = np.full([self.n_actions, self.n_trials + 1], np.nan)
         self.choice_kernel[:, 0] = 0  # Initial choice kernel as 0
@@ -89,7 +86,6 @@ class ForagerActor(DynamicForagingAgentMLEBase):
         else:
             choice_kernel = self.choice_kernel[:, self.trial]
             choice_kernel_relative_weight = self.params.choice_kernel_relative_weight
-        
         # Action selection
         if self.agnet_kwargs["action_selection"] == "logistic":
             choice, choice_prob = act_logistic(

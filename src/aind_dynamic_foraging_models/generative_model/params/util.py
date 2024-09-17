@@ -1,9 +1,6 @@
 """
 util functions for params
 """
-"""
-util functions for params
-"""
 from typing import Any, Dict, List, Tuple
 
 import numpy as np

@@ -4,6 +4,28 @@ import numpy as np
 
 
 def learn_actor(choice, choice_prob, reward, w_tminus1, learn_rates, forget_rates):
+    """Learning function for actor 
+
+    Parameters
+    ----------
+    choice : int
+        this choice
+    choice_prob : float
+        probability of choices 
+    reward : float
+        this reward
+    w_tminus1 : np.ndarray
+        array of old w
+    learn_rates : _type_
+        learning rates for [rewarded, unrewarded] sides
+    forget_rates : list
+        forget rates for [unchosen, chosen] sides
+
+    Returns
+    -------
+    nd.array
+        updated w
+    """
     w_t = np.zeros_like(w_tminus1)
     # Learning component
     if choice == 0:  # Left choice

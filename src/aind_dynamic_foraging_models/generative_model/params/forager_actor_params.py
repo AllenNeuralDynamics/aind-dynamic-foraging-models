@@ -11,47 +11,6 @@ from .base import create_pydantic_models_dynamic
 def generate_pydantic_actor_params(
     number_of_learning_rate: Literal[1, 2] = 2,
     number_of_forget_rate: Literal[0, 1] = 1,
-    action_selection: Literal["logistic", "softmax", "epsilon-greedy"] = "logistic",
-) -> Tuple[Type[BaseModel], Type[BaseModel]]:
-    """Dynamically generate Pydantic models for Q-learning agent parameters.
-
-    All default values are hard-coded in this function. But when instantiating the model,
-    you can always override the default values, both the params_fields and the fitting bounds.
-
-    Parameters
-    ----------
-    number_of_learning_rate : Literal[1, 2], optional
-        Number of learning rates, by default 2
-        If 1, only one learn_rate will be included in the model.
-        If 2, learn_rate_rew and learn_rate_unrew will be included in the model.
-    number_of_forget_rate : Literal[0, 1], optional
-        Number of forget_rates, by default 1.
-        If 0, forget_rate_unchosen will not be included in the model.
-        If 1, forget_rate_unchosen will be included in the model.
-    action_selection : Literal["softmax", "epsilon-greedy"], optional
-        Action selection type, by default "softmax"
-    """
-
-    # ====== Define common fields and constraints ======
-    params_fields = {}
-    fitting_bounds = {}
-
-    # -- Handle learning rate fields --
-    _add_learning_rate_fields(params_fields, fitting_bounds, number_of_learning_rate)
-
-    # -- Handle forget rate field --
-    _add_forget_rate_fields(params_fields, fitting_bounds, number_of_forget_rate)
-
-    # -- Handle action selection fields --
-    _add_action_selection_fields(params_fields, fitting_bounds, action_selection)
-
-    # ====== Dynamically create the pydantic models =====
-    return create_pydantic_models_dynamic(params_fields, fitting_bounds)
-
-
-def generate_pydantic_actor_params(
-    number_of_learning_rate: Literal[1, 2] = 2,
-    number_of_forget_rate: Literal[0, 1] = 1,
     choice_kernel: Literal["none", "one_step", "full"] = "none",
     action_selection: Literal["logistic", "softmax", "epsilon-greedy"] = "logistic",
 ) -> Tuple[Type[BaseModel], Type[BaseModel]]:

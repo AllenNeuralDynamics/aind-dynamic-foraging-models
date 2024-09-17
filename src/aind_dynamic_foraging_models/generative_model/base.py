@@ -507,8 +507,13 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             callback=None,
         )  # Default DE kwargs
         kwargs.update(DE_kwargs)  # Update user specified kwargs
+        # Special treatments
         if kwargs["workers"] > 1:
             kwargs["updating"] = "deferred"
+        if "seed" in kwargs and isinstance(kwargs["seed"], (int, float)):
+            # Convert seed to a numpy random number generator
+            # because there seems to be a bug in DE when using int as a seed (not reproducible)
+            kwargs["seed"] = np.random.default_rng(kwargs["seed"])
 
         # --- Heavy lifting here!! ---
         fitting_result = optimize.differential_evolution(

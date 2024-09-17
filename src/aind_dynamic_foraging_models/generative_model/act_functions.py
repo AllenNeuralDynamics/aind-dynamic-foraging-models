@@ -290,9 +290,12 @@ def choose_ps(ps, rng=None):
     return np.max(np.argwhere(np.hstack([-1e-16, np.cumsum(ps)]) < rng.random()))
 
 
+
 def choose_bern(prob, rng=None):
     """
+    Bernoulli choice
     Bernoulli choice
     """
     rng = rng or np.random.default_rng()
     return 1 if np.random.rand() < prob else 0
+

@@ -8,6 +8,7 @@ import numpy as np
 from aind_behavior_gym.dynamic_foraging.task import L, R
 
 from .act_functions import act_logistic
+from .act_functions import act_logistic
 from .base import DynamicForagingAgentMLEBase
 from .learn_functions import learn_actor, learn_choice_kernel
 from .params.forager_actor_params import generate_pydantic_actor_params
@@ -125,6 +126,7 @@ class ForagerActor(DynamicForagingAgentMLEBase):
             reward=reward,
             w_tminus1=self.w[:, self.trial - 1],
             learn_rates=learn_rates,
+            forget_rates=forget_rates,
             forget_rates=forget_rates,
         )
         # Update choice kernel, if used

@@ -9,8 +9,8 @@ from aind_behavior_gym.dynamic_foraging.task import L, R
 
 from .act_functions import act_logistic
 from .base import DynamicForagingAgentMLEBase
-from .learn_functions import learn_actor
-from .params.forager_q_learning_params import generate_pydantic_actor_params
+from .learn_functions import learn_actor, learn_choice_kernel
+from .params.forager_actor_params import generate_pydantic_actor_params
 
 
 class ForagerActor(DynamicForagingAgentMLEBase):
@@ -47,6 +47,7 @@ class ForagerActor(DynamicForagingAgentMLEBase):
         self.agent_kwargs = dict(
             number_of_learning_rate=number_of_learning_rate,
             number_of_forget_rate=number_of_forget_rate,
+            choice_kernel=choice_kernel,
             action_selection=action_selection,
         )  # Note that the class and self.agent_kwargs fully define the agent
 
@@ -72,14 +73,30 @@ class ForagerActor(DynamicForagingAgentMLEBase):
         # after the last trial (HH20210726)
         self.w = np.full([self.n_actions, self.n_trials], np.nan)
         self.w[:, 0] = 0  # Initial Q values as 0
+        
+        
+        # Always initialize choice_kernel with nan, even if choice_kernel = "none"
+        self.choice_kernel = np.full([self.n_actions, self.n_trials + 1], np.nan)
+        self.choice_kernel[:, 0] = 0  # Initial choice kernel as 0
 
     def act(self, _):
         """Action selection"""
+        # Handle choice kernel
+        if self.agent_kwargs["choice_kernel"] == "none":
+            choice_kernel = None
+            choice_kernel_relative_weight = None
+        else:
+            choice_kernel = self.choice_kernel[:, self.trial]
+            choice_kernel_relative_weight = self.params.choice_kernel_relative_weight
+        
         # Action selection
         if self.agnet_kwargs["action_selection"] == "logistic":
             choice, choice_prob = act_logistic(
                 w_t=self.q_value[:, self.trial],
                 bias_terms=np.array([self.params.biasL, 0]),
+                # -- Choice kernel --
+                choice_kernel=choice_kernel,
+                choice_kernel_relative_weight=choice_kernel_relative_weight,
                 rng=self.rng,
             )
         return choice, choice_prob
@@ -110,6 +127,13 @@ class ForagerActor(DynamicForagingAgentMLEBase):
             learn_rates=learn_rates,
             forget_rates=forget_rates,
         )
+        # Update choice kernel, if used
+        if self.agent_kwargs["choice_kernel"] != "none":
+            self.choice_kernel[:, self.trial] = learn_choice_kernel(
+                choice=choice,
+                choice_kernel_tminus1=self.choice_kernel[:, self.trial - 1],
+                choice_kernel_step_size=self.params.choice_kernel_step_size,
+            )
 
     def plot_latent_variables(self, ax, if_fitted=False):
         """Plot W"""

@@ -10,6 +10,8 @@ from scipy.stats import norm
 def act_logistic(
     w_t: np.array,
     bias_terms: np.array,
+    choice_kernel_relative_weight=None,
+    choice_kernel=None,
     rng=None,
 ):
     """Given weights, return the choice and choice probability.
@@ -27,6 +29,12 @@ def act_logistic(
         array of w, by default 0
     bias_terms : np.array, optional
         _description_, by default 0
+    choice_kernel_relative_weight : _type_, optional
+        relative strength of choice kernel relative to Q in decision, by default None.
+        If not none, choice kernel will have an inverse temperature of
+        softmax_inverse_temperature * choice_kernel_relative_weight
+    choice_kernel : _type_, optional
+        _description_, by default None
     rng : _type_, optional
         random number generator, by default None
 
@@ -35,8 +43,13 @@ def act_logistic(
     _type_
         _description_
     """
-    input = [w_t[0, 0] - w_t[1, 0] - bias_terms, w_t[0, 1] - w_t[1, 1] + bias_terms]
-    choice_prob = 1 / (1 + np.exp(-1 * input))
+    if choice_kernel is not None:
+        choice_kernel_multiplier = choice_kernel_relative_weight * choice_kernel
+    else:
+        choice_kernel_multiplier = 1 
+    adjusted_input = [w_t[0, 0] - w_t[1, 0] - bias_terms * choice_kernel_multiplier, 
+                      w_t[0, 1] - w_t[1, 1] + bias_terms * choice_kernel_multiplier]
+    choice_prob = 1 / (1 + np.exp(-1 * adjusted_input))
     choice = choose_bern(choice_prob)
 
     return choice, choice_prob
@@ -52,7 +65,7 @@ def act_softmax(
 ):
     """Given q values and softmax_inverse_temperature, return the choice and choice probability.
 
-    If chocie_kernel is not None, it will sum it into the softmax function like this
+    If choice_kernel is not None, it will sum it into the softmax function like this
 
     1. Compute adjusted Q values by adding bias terms and choice kernel
 

@@ -11,7 +11,7 @@ from .base import create_pydantic_models_dynamic
 def generate_pydantic_actor_params(
     number_of_learning_rate: Literal[1, 2] = 2,
     number_of_forget_rate: Literal[0, 1] = 1,
-    action_selection: Literal["softmax", "epsilon-greedy"] = "softmax",
+    action_selection: Literal["logistic", "softmax", "epsilon-greedy"] = "logistic",
 ) -> Tuple[Type[BaseModel], Type[BaseModel]]:
     """Dynamically generate Pydantic models for Q-learning agent parameters.
 
@@ -49,11 +49,11 @@ def generate_pydantic_actor_params(
     return create_pydantic_models_dynamic(params_fields, fitting_bounds)
 
 
-def generate_pydantic_q_learning_params(
+def generate_pydantic_actor_params(
     number_of_learning_rate: Literal[1, 2] = 2,
     number_of_forget_rate: Literal[0, 1] = 1,
     choice_kernel: Literal["none", "one_step", "full"] = "none",
-    action_selection: Literal["softmax", "epsilon-greedy"] = "softmax",
+    action_selection: Literal["logistic", "softmax", "epsilon-greedy"] = "logistic",
 ) -> Tuple[Type[BaseModel], Type[BaseModel]]:
     """Dynamically generate Pydantic models for Q-learning agent parameters.
 

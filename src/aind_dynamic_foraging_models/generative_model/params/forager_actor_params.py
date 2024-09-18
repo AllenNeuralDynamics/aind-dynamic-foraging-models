@@ -1,18 +1,18 @@
-"""Dynamically generate pydantic models for Q-learning agent parameters."""
+"""Dynamically generate pydantic models for Actoragent parameters."""
 
 # %%
 from typing import Literal, Tuple, Type
 
 from pydantic import BaseModel, Field
 
-from .base import create_pydantic_models_dynamic
+from .util import create_pydantic_models_dynamic
 
 
 def generate_pydantic_actor_params(
     number_of_learning_rate: Literal[1, 2] = 2,
     number_of_forget_rate: Literal[0, 1] = 1,
     choice_kernel: Literal["none", "one_step", "full"] = "none",
-    action_selection: Literal["logistic", "softmax", "epsilon-greedy"] = "logistic",
+    action_selection: Literal["logistic"] = "logistic",
 ) -> Tuple[Type[BaseModel], Type[BaseModel]]:
     """Dynamically generate Pydantic models for Q-learning agent parameters.
 
@@ -159,3 +159,6 @@ def _add_action_selection_fields(params_fields, fitting_bounds, action_selection
         fitting_bounds["epsilon"] = (0.0, 1.0)
     else:
         raise ValueError("action_selection must be 'softmax' or 'epsilon-greedy'")
+
+
+# %%

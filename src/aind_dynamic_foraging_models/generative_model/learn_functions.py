@@ -4,14 +4,14 @@ import numpy as np
 
 
 def learn_actor(choice, choice_prob, reward, w_tminus1, learn_rates, forget_rates):
-    """Learning function for actor 
+    """Learning function for actor
 
     Parameters
     ----------
     choice : int
         this choice
     choice_prob : float
-        probability of choices 
+        probability of choices
     reward : float
         this reward
     w_tminus1 : np.ndarray

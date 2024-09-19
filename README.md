@@ -16,7 +16,8 @@ User documentation available on [readthedocs](https://aind-dynamic-foraging-mode
 ### Overview
 RL agents that can perform any dynamic foraging task in [aind-behavior-gym](https://github.com/AllenNeuralDynamics/aind-behavior-gym) and can fit behavior using MLE.
 
-![image](https://github.com/user-attachments/assets/1edbcdb4-932f-4674-bcdc-97d2c840fc72)
+![image](https://github.com/user-attachments/assets/b01a208e-b994-4857-a6da-66563bb0916b)
+
 
 ### Code structure
 ![image](classes_aind_dynamic_foraging_models.svg)

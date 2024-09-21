@@ -4,6 +4,10 @@ import unittest
 
 from pydantic import ValidationError
 
+from aind_dynamic_foraging_models.generative_model.params.forager_actor_params import (
+    generate_pydantic_actor_params,
+)
+
 from aind_dynamic_foraging_models.generative_model.params.forager_loss_counting_params import (
     generate_pydantic_loss_counting_params,
 )
@@ -12,10 +16,59 @@ from aind_dynamic_foraging_models.generative_model.params.forager_q_learning_par
 )
 from aind_dynamic_foraging_models.generative_model.params.util import get_params_options
 
+# class TestActor(unittest.TestCase):
+#     """Test generating Pydantic models for Actor model parameters"""
 
+#     def test_generate_models_Actor(self):
+#         """Test generating pydantic models for Actor model"""
+#         # Create Pydantic models
+#         ParamsModel, FittingBoundsModel = generate_pydantic_actor_params(
+#             number_of_learning_rate=1,
+#             number_of_forget_rate=1,
+#             choice_kernel="one_step",
+#             action_selection="logistic",
+#         )
+#         expected_fields = [
+#             "learn_rate",
+#             "forget_rate",
+#             "choice_kernel_step_size",
+#             "choice_kernel_relative_weight",
+#             "biasL",
+#         ]
+#         expected_fields = ["biasL"]
+
+#         self.check_fields(ParamsModel, FittingBoundsModel, expected_fields)
+#         self.check_validation(ParamsModel, FittingBoundsModel)
+
+#     def check_fields(self, ParamsModel, FittingBoundsModel, expected_fields):
+#         """Check fields of Pydantic models"""
+#         self.assertEqual(set(ParamsModel.model_fields.keys()), set(expected_fields))
+#         self.assertEqual(set(FittingBoundsModel.model_fields.keys()), set(expected_fields))
+
+#     def check_validation(self, ParamsModel, FittingBoundsModel):
+#         """Check validation of Pydantic models"""
+#         with self.assertRaises(ValidationError):
+#             ParamsModel(loss_count_threshold_mean=-0.1)
+#         with self.assertRaises(ValidationError):
+#             FittingBoundsModel(loss_count_threshold_std=(1.0, 0.9))
+            
 class TestParamsSimpleQ(unittest.TestCase):
     """Test generating Pydantic models for Q-learning agent parameters"""
+    def test_generate_models_RW1972(self):
+        """Test generating pydantic models for RW1972 agent"""
+        # Create Pydantic models
+        ParamsModel, FittingBoundsModel = generate_pydantic_q_learning_params(
+            number_of_learning_rate=1,
+            number_of_forget_rate=0,
+            choice_kernel="none",
+            action_selection="epsilon-greedy",
+        )
+        expected_fields = ["learn_rate", "epsilon", "biasL"]
 
+        self.check_fields(ParamsModel, FittingBoundsModel, expected_fields)
+        self.check_validation(ParamsModel, FittingBoundsModel)
+        
+        
     def test_generate_models_RW1972(self):
         """Test generating pydantic models for RW1972 agent"""
         # Create Pydantic models

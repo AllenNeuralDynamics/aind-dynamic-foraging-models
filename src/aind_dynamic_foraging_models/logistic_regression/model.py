@@ -317,16 +317,12 @@ def _bootstrap(func, X, Y, n_iters=1000, n_samplesize=None, **kwargs):
     bootstrap_X = [X[index, :] for index in indices]
 
     # Apply func to each bootstrap sample
-    # return np.array([func(X, Y, **kwargs) for X, Y in zip(bootstrap_X, bootstrap_Y)])
     results = []
-    number_bad = 0
     for X, Y in zip(bootstrap_X, bootstrap_Y):
         try:
             results.append(func(X, Y, **kwargs))
         except Exception as ex:
-            number_bad += 1
             pass
-    print(number_bad)
     return np.array(results)
 
 

@@ -133,7 +133,7 @@ def fit_logistic_regression(
     penalty: Literal["l1", "l2", "elasticnet", None] = "l2",
     Cs: int = 10,
     cv: int = 5,
-    C: int = .1,
+    C: int = 0.1,
     n_jobs_cross_validation: int = -1,
     n_bootstrap_iters: int = 1000,
     n_bootstrap_samplesize: Union[int, None] = None,
@@ -191,7 +191,7 @@ def fit_logistic_regression(
 
     # Ensure cross validation folds are positive integers
     if (not isinstance(cv, int)) or (cv < 1):
-        raise ValueError('cv folds must be positive integer, got: {}'.format(cv))
+        raise ValueError("cv folds must be positive integer, got: {}".format(cv))
 
     # -- Prepare design matrix --
     df_design = prepare_logistic_design_matrix(
@@ -204,10 +204,10 @@ def fit_logistic_regression(
     Y = df_design.Y.to_numpy().ravel()
     X = df_design.X.to_numpy()
 
-    # -- fit base model -- 
+    # -- fit base model --
     if cv == 1:
-        # -- Skip cross validation, and use best C passed in -- 
-        logistic_reg_cv = LogisticRegression(solver=solver, penalty=penalty, C=C,**kwargs)
+        # -- Skip cross validation, and use best C passed in --
+        logistic_reg_cv = LogisticRegression(solver=solver, penalty=penalty, C=C, **kwargs)
         logistic_reg_cv.fit(X, Y)
         beta = np.hstack([logistic_reg_cv.coef_[0], logistic_reg_cv.intercept_])
         beta_names = df_design.X.columns.tolist() + [("bias", np.nan)]
@@ -256,7 +256,7 @@ def fit_logistic_regression(
         df_beta["bootstrap_CI_lower"] = np.percentile(beta_bootstrap, 2.5, axis=0)
         df_beta["bootstrap_CI_upper"] = np.percentile(beta_bootstrap, 97.5, axis=0)
 
-    # -- Build dictionary of results -- 
+    # -- Build dictionary of results --
     dict_logistic_result = {
         "model": logistic_model,
         "model_terms": MODEL_MAPPER[logistic_model] + ["bias"],
@@ -266,7 +266,7 @@ def fit_logistic_regression(
         "Y": Y,
         "df_beta": df_beta,  # Main output
         "logistic_reg_cv": logistic_reg_cv,  # raw output of the fitting with CV,
-        "C":best_C,  # Hyperparameter used
+        "C": best_C,  # Hyperparameter used
         "beta_bootstrap": (
             beta_bootstrap if n_bootstrap_iters > 0 else None
         ),  # raw beta from all bootstrap samples
@@ -300,7 +300,7 @@ def fit_logistic_regression(
             df_beta_exp_fit.loc[var] = [amp, amp_se, tau, tau_se]
 
         # Add to results dictionary
-        dict_logistic_result['df_beta_exp_fit'] =df_beta_exp_fit
+        dict_logistic_result["df_beta_exp_fit"] = df_beta_exp_fit
 
     return dict_logistic_result
 
@@ -318,14 +318,15 @@ def _bootstrap(func, X, Y, n_iters=1000, n_samplesize=None, **kwargs):
     bootstrap_X = [X[index, :] for index in indices]
 
     # Apply func to each bootstrap sample
-    #return np.array([func(X, Y, **kwargs) for X, Y in zip(bootstrap_X, bootstrap_Y)])
+    # return np.array([func(X, Y, **kwargs) for X, Y in zip(bootstrap_X, bootstrap_Y)])
     results = []
-    for X,Y in zip(bootstrap_X, bootstrap_Y):
+    for X, Y in zip(bootstrap_X, bootstrap_Y):
         try:
-            results.append(func(X,Y, **kwargs))
+            results.append(func(X, Y, **kwargs))
         except:
             pass
     return np.array(results)
+
 
 def _fit_logistic_one_sample(X, Y, **kwargs):
     """Simple wrapper for fitting logistic regression without CV and return all coefs as an array"""

@@ -199,7 +199,6 @@ def fit_logistic_regression(
         reward_history,
         logistic_model=logistic_model,
         n_trial_back=n_trial_back,
-        DA=DA,
     )
     Y = df_design.Y.to_numpy().ravel()
     X = df_design.X.to_numpy()
@@ -320,11 +319,14 @@ def _bootstrap(func, X, Y, n_iters=1000, n_samplesize=None, **kwargs):
     # Apply func to each bootstrap sample
     # return np.array([func(X, Y, **kwargs) for X, Y in zip(bootstrap_X, bootstrap_Y)])
     results = []
+    number_bad = 0
     for X, Y in zip(bootstrap_X, bootstrap_Y):
         try:
             results.append(func(X, Y, **kwargs))
-        except:
+        except Exception as ex:
+            number_bad += 1
             pass
+    print(number_bad)
     return np.array(results)
 
 

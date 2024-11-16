@@ -16,6 +16,7 @@ COLOR_MAPPER = {
     "Reward": "c",
     "Choice_x_Reward": "m",
     "bias": "k",
+    "signed_DA":"y"
 }
 
 

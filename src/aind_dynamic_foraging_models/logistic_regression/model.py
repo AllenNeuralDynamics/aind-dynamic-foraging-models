@@ -20,15 +20,19 @@ MODEL_MAPPER = {
     "Bari2019": ["RewC", "Choice"],
     "Hattori2019": ["RewC", "UnrC", "Choice"],
     "Miller2021": ["Choice", "Reward", "Choice_x_Reward"],
+    "Su2022_DA": ["RewC","UnrC","signed_DA"],
+    "DA":["signed_DA","Reward"],
+    "choice":["Choice","Reward"],
 }
 
 
 def prepare_logistic_design_matrix(
     choice_history: Union[List, np.ndarray],
     reward_history: Union[List, np.ndarray],
-    logistic_model: Literal["Su2022", "Bari2019", "Hattori2019", "Miller2021"] = "Su2022",
+    logistic_model: Literal["Su2022", "Bari2019", "Hattori2019", "Miller2021","Su2022_DA","DA","choice"] = "Su2022",
     n_trial_back: int = 15,
     selected_trial_idx: Union[List, np.ndarray] = None,
+    DA: Union[List, np.ndarray] = None,
 ) -> pd.DataFrame:
     """Prepare logistic regression design matrix from choice and reward history.
 
@@ -61,10 +65,14 @@ def prepare_logistic_design_matrix(
     # Remove ignore trials in choice and reward
     choice_history = np.array(choice_history)
     reward_history = np.array(reward_history)
+    if DA is not None:
+        DA = np.array(DA)
 
     ignored = np.isnan(choice_history)
     choice_history = choice_history[~ignored]
     reward_history = reward_history[~ignored]
+    if DA is not None:
+        DA = DA[~ignored]
 
     # Sanity checks
     assert len(choice_history) == len(
@@ -86,6 +94,7 @@ def prepare_logistic_design_matrix(
     encoding["RewC"] = encoding["Choice"] * (encoding["Reward"] == 1)
     encoding["UnrC"] = encoding["Choice"] * (encoding["Reward"] == -1)
     encoding["Choice_x_Reward"] = encoding["Choice"] * encoding["Reward"]
+    encoding["signed_DA"] = DA
 
     assert np.array_equal(encoding["Choice"], encoding["RewC"] + encoding["UnrC"])
     assert np.array_equal(encoding["Choice_x_Reward"], encoding["RewC"] - encoding["UnrC"])
@@ -124,7 +133,7 @@ def prepare_logistic_design_matrix(
 def fit_logistic_regression(
     choice_history: Union[List, np.ndarray],
     reward_history: Union[List, np.ndarray],
-    logistic_model: Literal["Su2022", "Bari2019", "Hattori2019", "Miller2021"] = "Su2022",
+    logistic_model: Literal["Su2022", "Bari2019", "Hattori2019", "Miller2021","Su2022_DA","DA","choice"] = "Su2022",
     n_trial_back: int = 15,
     selected_trial_idx: Union[List, np.ndarray] = None,
     solver: Literal[
@@ -132,10 +141,13 @@ def fit_logistic_regression(
     ] = "liblinear",
     penalty: Literal["l1", "l2", "elasticnet", None] = "l2",
     Cs: int = 10,
-    cv: int = 10,
+    cv: int = 5,
+    C: int = .1,
     n_jobs_cross_validation: int = -1,
     n_bootstrap_iters: int = 1000,
     n_bootstrap_samplesize: Union[int, None] = None,
+    DA: Union[List, np.ndarray] = None,
+    fit_exponential: bool = True,
     **kwargs,
 ) -> Dict:
     """Fit logistic regression model to choice and reward history.
@@ -166,6 +178,10 @@ def fit_logistic_regression(
         Number of hyperparameter C to do grid search on, by default 10
     cv : int, optional
         Number of folds in cross validation, by default 10
+        if cv is 1, skip cross validation and use hyperparameter passed in
+    C : int, optional
+        Logistic regression hyperparameter, only used if cv = 1
+        by default 0.1
     n_jobs_cross_validation : int, optional
         Number of CPU cores used during the cross-validation loop, by default -1 (all CPU cores)
     n_bootstrap_iters : int, optional
@@ -173,6 +189,9 @@ def fit_logistic_regression(
     n_bootstrap_samplesize : Union[int, None], optional
         Number of samples in each bootstrap iteration,
         by default None (use the same number of samples as the original dataset)
+    fit_exponential : bool, optional
+        Whether to fit an exponential curve to the trial-delayed regression weights
+        by default True (fit the exponential)
 
     Returns
     -------
@@ -180,34 +199,53 @@ def fit_logistic_regression(
         A dictionary containing logistic regression results.
     """
 
+    # Ensure cross validation folds are positive integers
+    if (not isinstance(cv, int)) or (cv < 1):
+        raise ValueError('cv folds must be positive integer, got: {}'.format(cv))
+
     # -- Prepare design matrix --
     df_design = prepare_logistic_design_matrix(
         choice_history,
         reward_history,
         logistic_model=logistic_model,
         n_trial_back=n_trial_back,
+        DA=DA,
     )
     Y = df_design.Y.to_numpy().ravel()
     X = df_design.X.to_numpy()
 
-    # -- Do cross validation with all data and find the best C --
-    logistic_reg_cv = LogisticRegressionCV(
-        solver=solver,
-        penalty=penalty,
-        Cs=Cs,
-        cv=cv,
-        n_jobs=n_jobs_cross_validation,
-        **kwargs,
-    )
-    logistic_reg_cv.fit(X, Y)
-    best_C = logistic_reg_cv.C_[0]
-    beta_from_CV = np.hstack([logistic_reg_cv.coef_[0], logistic_reg_cv.intercept_])
-    beta_names = df_design.X.columns.tolist() + [("bias", np.nan)]
-    df_beta = pd.DataFrame(
-        beta_from_CV,
-        columns=["cross_validation"],
-        index=pd.MultiIndex.from_tuples(beta_names, name=("var", "trial_back")),
-    )
+    # -- fit base model -- 
+    if cv == 1:
+        # -- Skip cross validation, and use best C passed in -- 
+        logistic_reg_cv = LogisticRegression(solver=solver, penalty=penalty, C=C,**kwargs)
+        logistic_reg_cv.fit(X, Y)
+        beta = np.hstack([logistic_reg_cv.coef_[0], logistic_reg_cv.intercept_])
+        beta_names = df_design.X.columns.tolist() + [("bias", np.nan)]
+        best_C = C
+        df_beta = pd.DataFrame(
+            beta,
+            columns=["cross_validation"],
+            index=pd.MultiIndex.from_tuples(beta_names, name=("var", "trial_back")),
+        )
+    else:
+        # -- Do cross validation with all data and find the best C --
+        logistic_reg_cv = LogisticRegressionCV(
+            solver=solver,
+            penalty=penalty,
+            Cs=Cs,
+            cv=cv,
+            n_jobs=n_jobs_cross_validation,
+            **kwargs,
+        )
+        logistic_reg_cv.fit(X, Y)
+        best_C = logistic_reg_cv.C_[0]
+        beta_from_CV = np.hstack([logistic_reg_cv.coef_[0], logistic_reg_cv.intercept_])
+        beta_names = df_design.X.columns.tolist() + [("bias", np.nan)]
+        df_beta = pd.DataFrame(
+            beta_from_CV,
+            columns=["cross_validation"],
+            index=pd.MultiIndex.from_tuples(beta_names, name=("var", "trial_back")),
+        )
 
     # -- Do bootstrap with the best C to get confidence interval --
     if n_bootstrap_iters > 0:
@@ -228,32 +266,7 @@ def fit_logistic_regression(
         df_beta["bootstrap_CI_lower"] = np.percentile(beta_bootstrap, 2.5, axis=0)
         df_beta["bootstrap_CI_upper"] = np.percentile(beta_bootstrap, 97.5, axis=0)
 
-    # -- Fit exponential curve on betas --
-    df_beta_exp_fit = pd.DataFrame(
-        columns=pd.MultiIndex.from_product(
-            [["amp", "tau"], ["fitted", "standard_error"]],
-            names=["var", "stat"],
-        )
-    )
-    for var in MODEL_MAPPER[logistic_model]:
-        this_betas = df_beta.loc[var, "cross_validation"]
-        try:
-            params, covariance = curve_fit(
-                exp_func,
-                this_betas.index,
-                this_betas.values,
-                p0=[1, 3],  # Initial guess: amp=1, tau=3
-                bounds=([-10, 0], [10, n_trial_back]),
-            )
-            amp, tau = params
-            amp_se, tau_se = np.sqrt(np.diag(covariance))
-        except RuntimeError:
-            # If optimization fails to converge, return np.nan for parameters and covariance
-            amp, tau, amp_se, tau_se = [np.nan] * 4
-
-        # Extract fitted parameters
-        df_beta_exp_fit.loc[var] = [amp, amp_se, tau, tau_se]
-
+    # -- Build dictionary of results -- 
     dict_logistic_result = {
         "model": logistic_model,
         "model_terms": MODEL_MAPPER[logistic_model] + ["bias"],
@@ -262,12 +275,42 @@ def fit_logistic_regression(
         "X": X,
         "Y": Y,
         "df_beta": df_beta,  # Main output
-        "df_beta_exp_fit": df_beta_exp_fit,
-        "logistic_reg_cv": logistic_reg_cv,  # raw output of the fitting with CV
+        "logistic_reg_cv": logistic_reg_cv,  # raw output of the fitting with CV,
+        "C":best_C,  # Hyperparameter used
         "beta_bootstrap": (
             beta_bootstrap if n_bootstrap_iters > 0 else None
         ),  # raw beta from all bootstrap samples
     }
+
+    # -- Fit exponential curve on betas --
+    if fit_exponential:
+        df_beta_exp_fit = pd.DataFrame(
+            columns=pd.MultiIndex.from_product(
+                [["amp", "tau"], ["fitted", "standard_error"]],
+                names=["var", "stat"],
+            )
+        )
+        for var in MODEL_MAPPER[logistic_model]:
+            this_betas = df_beta.loc[var, "cross_validation"]
+            try:
+                params, covariance = curve_fit(
+                    exp_func,
+                    this_betas.index,
+                    this_betas.values,
+                    p0=[1, 3],  # Initial guess: amp=1, tau=3
+                    bounds=([-10, 0], [10, n_trial_back]),
+                )
+                amp, tau = params
+                amp_se, tau_se = np.sqrt(np.diag(covariance))
+            except RuntimeError:
+                # If optimization fails to converge, return np.nan for parameters and covariance
+                amp, tau, amp_se, tau_se = [np.nan] * 4
+
+            # Extract fitted parameters
+            df_beta_exp_fit.loc[var] = [amp, amp_se, tau, tau_se]
+
+        # Add to results dictionary
+        dict_logistic_result['df_beta_exp_fit'] =df_beta_exp_fit
 
     return dict_logistic_result
 
@@ -285,8 +328,14 @@ def _bootstrap(func, X, Y, n_iters=1000, n_samplesize=None, **kwargs):
     bootstrap_X = [X[index, :] for index in indices]
 
     # Apply func to each bootstrap sample
-    return np.array([func(X, Y, **kwargs) for X, Y in zip(bootstrap_X, bootstrap_Y)])
-
+    #return np.array([func(X, Y, **kwargs) for X, Y in zip(bootstrap_X, bootstrap_Y)])
+    results = []
+    for X,Y in zip(bootstrap_X, bootstrap_Y):
+        try:
+            results.append(func(X,Y, **kwargs))
+        except:
+            pass
+    return np.array(results)
 
 def _fit_logistic_one_sample(X, Y, **kwargs):
     """Simple wrapper for fitting logistic regression without CV and return all coefs as an array"""

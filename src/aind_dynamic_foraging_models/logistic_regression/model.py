@@ -20,19 +20,15 @@ MODEL_MAPPER = {
     "Bari2019": ["RewC", "Choice"],
     "Hattori2019": ["RewC", "UnrC", "Choice"],
     "Miller2021": ["Choice", "Reward", "Choice_x_Reward"],
-    "Su2022_DA": ["RewC","UnrC","signed_DA"],
-    "DA":["signed_DA","Reward"],
-    "choice":["Choice","Reward"],
 }
 
 
 def prepare_logistic_design_matrix(
     choice_history: Union[List, np.ndarray],
     reward_history: Union[List, np.ndarray],
-    logistic_model: Literal["Su2022", "Bari2019", "Hattori2019", "Miller2021","Su2022_DA","DA","choice"] = "Su2022",
+    logistic_model: Literal["Su2022", "Bari2019", "Hattori2019", "Miller2021"] = "Su2022",
     n_trial_back: int = 15,
     selected_trial_idx: Union[List, np.ndarray] = None,
-    DA: Union[List, np.ndarray] = None,
 ) -> pd.DataFrame:
     """Prepare logistic regression design matrix from choice and reward history.
 
@@ -65,14 +61,10 @@ def prepare_logistic_design_matrix(
     # Remove ignore trials in choice and reward
     choice_history = np.array(choice_history)
     reward_history = np.array(reward_history)
-    if DA is not None:
-        DA = np.array(DA)
 
     ignored = np.isnan(choice_history)
     choice_history = choice_history[~ignored]
     reward_history = reward_history[~ignored]
-    if DA is not None:
-        DA = DA[~ignored]
 
     # Sanity checks
     assert len(choice_history) == len(
@@ -94,7 +86,6 @@ def prepare_logistic_design_matrix(
     encoding["RewC"] = encoding["Choice"] * (encoding["Reward"] == 1)
     encoding["UnrC"] = encoding["Choice"] * (encoding["Reward"] == -1)
     encoding["Choice_x_Reward"] = encoding["Choice"] * encoding["Reward"]
-    encoding["signed_DA"] = DA
 
     assert np.array_equal(encoding["Choice"], encoding["RewC"] + encoding["UnrC"])
     assert np.array_equal(encoding["Choice_x_Reward"], encoding["RewC"] - encoding["UnrC"])
@@ -133,7 +124,7 @@ def prepare_logistic_design_matrix(
 def fit_logistic_regression(
     choice_history: Union[List, np.ndarray],
     reward_history: Union[List, np.ndarray],
-    logistic_model: Literal["Su2022", "Bari2019", "Hattori2019", "Miller2021","Su2022_DA","DA","choice"] = "Su2022",
+    logistic_model: Literal["Su2022", "Bari2019", "Hattori2019", "Miller2021"] = "Su2022",
     n_trial_back: int = 15,
     selected_trial_idx: Union[List, np.ndarray] = None,
     solver: Literal[
@@ -146,7 +137,6 @@ def fit_logistic_regression(
     n_jobs_cross_validation: int = -1,
     n_bootstrap_iters: int = 1000,
     n_bootstrap_samplesize: Union[int, None] = None,
-    DA: Union[List, np.ndarray] = None,
     fit_exponential: bool = True,
     **kwargs,
 ) -> Dict:

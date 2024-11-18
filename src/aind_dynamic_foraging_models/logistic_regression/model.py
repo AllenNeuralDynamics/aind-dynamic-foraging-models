@@ -319,10 +319,8 @@ def _bootstrap(func, X, Y, n_iters=1000, n_samplesize=None, **kwargs):
     # Apply func to each bootstrap sample
     results = []
     for X, Y in zip(bootstrap_X, bootstrap_Y):
-        try:
+        if len(np.unique(Y)) > 1:
             results.append(func(X, Y, **kwargs))
-        except Exception as ex:
-            pass
     return np.array(results)
 
 

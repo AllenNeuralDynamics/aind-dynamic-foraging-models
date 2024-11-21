@@ -110,7 +110,7 @@ class ForagerLossCounting(DynamicForagingAgentMLEBase):
         )
         return choice, choice_prob
 
-    def learn(self, _, choice, reward, __, done):
+    def learn(self, _, choice, __, reward, ___, done):
         """Update loss counter
 
         Note that self.trial already increased by 1 before learn() in the base class

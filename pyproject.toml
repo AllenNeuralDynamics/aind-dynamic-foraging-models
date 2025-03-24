@@ -24,6 +24,7 @@ dependencies = [
     'pydantic',
     'aind_dynamic_foraging_basic_analysis',
     'aind-behavior-gym',
+    'psytrack'
 ]
 
 [project.optional-dependencies]

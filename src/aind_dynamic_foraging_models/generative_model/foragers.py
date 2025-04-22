@@ -17,6 +17,7 @@ class ForagerCollection:
     FORAGER_CLASSES = [
         "ForagerQLearning",
         "ForagerLossCounting",
+        "ForagerCompareThreshold",
     ]
 
     FORAGER_PRESETS = {
@@ -55,6 +56,13 @@ class ForagerCollection:
             agent_class="ForagerLossCounting",
             agent_kwargs=dict(
                 win_stay_lose_switch=True,
+                choice_kernel="none",
+            ),
+        ),
+        "CompareToThreshold": dict(
+            description="Compare-to-threshold foraging model",
+            agent_class="ForagerCompareThreshold",
+            agent_kwargs=dict(
                 choice_kernel="none",
             ),
         ),

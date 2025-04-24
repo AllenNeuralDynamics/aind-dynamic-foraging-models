@@ -42,11 +42,11 @@ def generate_pydantic_compare_threshold_params(
     params_fields["threshold"] = (
         float,
         Field(
-            default=0.5, 
+            default=0.1, 
             description="Threshold value for comparison (ρ)"
         ),
     )
-    fitting_bounds["threshold"] = (0.0, 1.0)
+    fitting_bounds["threshold"] = (0.0, 0.5)
     
     # Softmax inverse temperature (β)
     params_fields["softmax_inverse_temperature"] = (

@@ -642,14 +642,16 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         if if_plot_latent:
             # Plot latent variables
             self.plot_latent_variables(axes[0], if_fitted=False)
+
             # Plot choice_prob
-            axes[0].plot(
-                np.arange(self.n_trials) + 1,
-                self.choice_prob[1] / self.choice_prob.sum(axis=0),
-                lw=0.5,
-                color="green",
-                label="choice_prob(R/R+L)",
-            )
+            if "ForagingCompareThreshold" not in self.get_agent_alias():
+                axes[0].plot(
+                    np.arange(self.n_trials) + 1,
+                    self.choice_prob[1] / self.choice_prob.sum(axis=0),
+                    lw=0.5,
+                    color="green",
+                    label="choice_prob(R/R+L)",
+                )
 
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=3)
 

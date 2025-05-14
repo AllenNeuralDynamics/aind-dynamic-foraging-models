@@ -24,6 +24,9 @@ RL agents that can perform any dynamic foraging task in [aind-behavior-gym](http
 - To add more generative models, please subclass [`DynamicForagingAgentMLEBase`](https://github.com/AllenNeuralDynamics/aind-dynamic-foraging-models/blob/11c858f93f67a0699ed23892364f3f51b08eab37/src/aind_dynamic_foraging_models/generative_model/base.py#L25C7-L25C34).
 
 ### Implemented foragers
+
+<img width="1951" alt="image" src="https://github.com/user-attachments/assets/dacfe875-4e51-492d-a5aa-d3b27ec03e90" />
+
 - [`ForagerQLearning`](https://github.com/AllenNeuralDynamics/aind-dynamic-foraging-models/blob/f9ab39bbdc2cbea350e5a8f11d3f935d6674e08b/src/aind_dynamic_foraging_models/generative_model/forager_q_learning.py): Simple Q-learning agents that incrementally update Q-values.
     - Available `agent_kwargs`:
       ```python
@@ -38,6 +41,9 @@ RL agents that can perform any dynamic foraging task in [aind-behavior-gym](http
         win_stay_lose_switch: Literal[False, True] = False,
         choice_kernel: Literal["none", "one_step", "full"] = "none",
       ```
+- Action selections ([readthedoc](https://aind-dynamic-foraging-models.readthedocs.io/en/stable/aind_dynamic_foraging_models.generative_model.html#module-aind_dynamic_foraging_models.generative_model.act_functions))
+
+
 [Here is the full list](https://foraging-behavior-browser.allenneuraldynamics-test.org/RL_model_playground#all-available-foragers) of available foragers:
 
 ![image](https://github.com/user-attachments/assets/db2e3b6c-f888-496c-a12b-06e030499165)

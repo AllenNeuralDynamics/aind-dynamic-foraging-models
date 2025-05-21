@@ -105,30 +105,51 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
         # Record if we're currently exploiting
         self.exploiting[self.trial] = (self.current_option == "exploit")
         
-        # Choice probabilities for return
-        p_choice_given_exploit = np.zeros(self.n_actions)
-        p_choice_given_explore = np.full(self.n_actions, 1.0/self.n_actions)
-        choice_prob = np.zeros(self.n_actions)
-
         if self.current_option == "exploit" and self.trial > 0:
             # For exploitation: Use the previous choice
             choice = self.choice_history[self.trial - 1]
-            p_choice_given_exploit[choice] = 1
         else:
-            # For exploration or first trial: Choose randomly (with bias)
-            base_prob = np.array([0.5, 0.5])
-            base_prob[L] += self.params.biasL
-            base_prob[R] -= self.params.biasL
-            base_prob = np.clip(base_prob, 0, 1)
-            base_prob = base_prob / np.sum(base_prob)  # Normalize
+            if self.trial == 0:
+                choice = self.rng.choice([L, R], p=np.array([0.5, 0.5]))
+            else:
+                choice = 1 - self.choice_history[self.trial - 1]
+            # # For exploration or first trial: Choose randomly (with bias)
+            # base_prob = np.array([0.5, 0.5])
+            # base_prob[L] += self.params.biasL
+            # base_prob[R] -= self.params.biasL
+            # base_prob = np.clip(base_prob, 0, 1)
+            # base_prob = base_prob / np.sum(base_prob)  # Normalize
             
-            choice = self.rng.choice([L, R], p=base_prob)
-            p_choice_given_explore[:] = base_prob
+            # choice = self.rng.choice([L, R], p=base_prob)
+            
 
         # compute likelihood
+        # Choice probabilities for return
+        choice_prob = np.zeros(self.n_actions)
+        ## choice probability under exploitation: repeat the previous choice
+        p_choice_given_exploit = np.zeros(self.n_actions)
+        p_choice_given_exploit[self.choice_history[self.trial - 1]] = 1
+        ## choice probability under exploration: choose randomly among other options
+        # p_choice_given_explore = np.full(self.n_actions, 1.0/self.n_actions)
+        # base_prob = np.array([0.5, 0.5])
+        # base_prob[L] += self.params.biasL
+        # base_prob[R] -= self.params.biasL
+        # base_prob = np.clip(base_prob, 0, 1)
+        # base_prob = base_prob / np.sum(base_prob)  # Normalize
+        # p_choice_given_explore[:] = base_prob
+        ## choice probability under exploration: choose randomly among other options, but exclude the previous choice
+        p_choice_given_explore = np.zeros(self.n_actions)
+        if self.trial == 0:
+            p_choice_given_explore = np.array([0.5, 0.5])
+        else:
+            p_choice_given_explore[1 - self.choice_history[self.trial - 1]] = 1
+
+
+
         for action in range(self.n_actions):
             choice_prob[action] = p_exploit * p_choice_given_exploit[action] + (1-p_exploit) * p_choice_given_explore[action]
         
+
         # Apply choice kernel influence if enabled
         if self.agent_kwargs["choice_kernel"] != "none":
             ck = self.choice_kernel[:, self.trial]

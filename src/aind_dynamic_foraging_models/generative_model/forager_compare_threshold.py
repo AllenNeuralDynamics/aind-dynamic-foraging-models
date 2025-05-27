@@ -79,12 +79,12 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
 
     def act(self, _):
         """Action selection using the options framework"""
-        # Calculate p(exploit) using softmax comparison with threshold
-        # p(exploit) = 1 / (1 + e^(-β(v-ρ)))
         value = self.value[self.trial]
         threshold = self.params.threshold
         beta = self.params.softmax_inverse_temperature
         
+        # Calculate p(exploit) using softmax comparison with threshold
+        # p(exploit) = 1 / (1 + e^(-β(v-ρ)))
         p_exploit = 1 / (1 + np.exp(-beta * (value - threshold)))
         
         # Calculate termination probabilities for each option
@@ -95,8 +95,10 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
         terminate = False
         if self.current_option == "exploit":
             terminate = self.rng.random() < beta_exploit
-        else:  # current_option == "explore"
+        elif self.current_option == "explore":
             terminate = self.rng.random() < beta_explore
+        else:
+            raise ValueError(f'unrecognized current_option: {self.current_option}')
         
         # If terminating, switch to the other option
         if terminate:
@@ -111,8 +113,14 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
         else:
             if self.trial == 0:
                 choice = self.rng.choice([L, R], p=np.array([0.5, 0.5]))
-            else:
+            elif self.current_option == "explore":
+                # variant 1: explore means switch
                 choice = 1 - self.choice_history[self.trial - 1]
+                # # variant 2: explore means uniformly random choice
+                # choice = self.rng.choice([L, R], p=np.array([0.5, 0.5]))
+            else:
+                raise ValueError(f'unrecognized current_option: {self.current_option}')
+
             # # For exploration or first trial: Choose randomly (with bias)
             # base_prob = np.array([0.5, 0.5])
             # base_prob[L] += self.params.biasL
@@ -123,12 +131,13 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
             # choice = self.rng.choice([L, R], p=base_prob)
             
 
-        # compute likelihood
-        # Choice probabilities for return
+        # compute the likelihood
         choice_prob = np.zeros(self.n_actions)
+        
         ## choice probability under exploitation: repeat the previous choice
         p_choice_given_exploit = np.zeros(self.n_actions)
         p_choice_given_exploit[self.choice_history[self.trial - 1]] = 1
+        
         ## choice probability under exploration: choose randomly among other options
         # p_choice_given_explore = np.full(self.n_actions, 1.0/self.n_actions)
         # base_prob = np.array([0.5, 0.5])
@@ -142,9 +151,10 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
         if self.trial == 0:
             p_choice_given_explore = np.array([0.5, 0.5])
         else:
+            # variant 1: explore means switch
             p_choice_given_explore[1 - self.choice_history[self.trial - 1]] = 1
-
-
+            # # variant 2: explore means uniformly random choice
+            # p_choice_given_explore = np.array([0.5, 0.5])
 
         for action in range(self.n_actions):
             choice_prob[action] = p_exploit * p_choice_given_exploit[action] + (1-p_exploit) * p_choice_given_explore[action]
@@ -166,15 +176,22 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
         return choice, choice_prob
 
     def learn(self, _observation, choice, reward, _next_observation, done):
-        """Update value based on whether we're exploring or exploiting"""
+        """Update value based on whether exploring or exploiting"""
         
-        if not self.exploiting[self.trial-1]:
-            # If we were exploring, reset value to threshold
-            self.value[self.trial] = self.params.threshold
+        # update value based on wheteher exploiting
+        # if not self.exploiting[self.trial-1]:
+        #     # If we were exploring, reset value to threshold
+        #     self.value[self.trial] = self.params.threshold
+        # else:
+        #     # If we were exploiting, update value using delta rule
+        #     self.value[self.trial] = self.value[self.trial-1] + self.params.learn_rate * (reward - self.value[self.trial-1])
+
+        # update value based on choice history
+        if choice != self.choice_history[self.trial - 1]:
+            self.value[self.trial] = self.params.threshold + self.params.learn_rate * (reward - self.params.threshold)
         else:
-            # If we were exploiting, update value using delta rule
             self.value[self.trial] = self.value[self.trial-1] + self.params.learn_rate * (reward - self.value[self.trial-1])
-        
+
         # Update choice kernel, if used
         if self.agent_kwargs["choice_kernel"] != "none":
             self.choice_kernel[:, self.trial] = learn_choice_kernel(

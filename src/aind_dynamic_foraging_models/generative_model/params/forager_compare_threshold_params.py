@@ -42,11 +42,11 @@ def generate_pydantic_compare_threshold_params(
     params_fields["threshold"] = (
         float,
         Field(
-            default=0.1, 
+            default=0.4, 
             description="Threshold value for comparison (ρ)"
         ),
     )
-    fitting_bounds["threshold"] = (0.0, 0.5)
+    fitting_bounds["threshold"] = (-1.0, 1.0)
     
     # Softmax inverse temperature (β)
     params_fields["softmax_inverse_temperature"] = (
@@ -58,9 +58,10 @@ def generate_pydantic_compare_threshold_params(
     # Left bias term
     params_fields["biasL"] = (
         float,
-        Field(default=0.0, description="Left bias for action selection"),
+        Field(default=0.0, description="Sticky bias for action selection"),
     )
     fitting_bounds["biasL"] = (-5.0, 5.0)
+    # fitting_bounds["biasL"] = (-0.5, 0.5)
 
     # -- Add choice kernel fields if specified --
     _add_choice_kernel_fields(params_fields, fitting_bounds, choice_kernel)

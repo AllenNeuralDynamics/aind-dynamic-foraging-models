@@ -98,7 +98,7 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
         else:
             # a_{t-1} is L
             if self.choice_history[self.trial - 1] == 0:
-                p_exploit = 1 / (1 + np.exp(-beta * (value - threshold + self.params.biasL/ beta)))
+                p_exploit = 1 / (1 + np.exp(-beta * (value - threshold) - self.params.biasL))
             # a_{t-1} is R
             elif self.choice_history[self.trial - 1] == 1:
                 p_exploit = 1 / (1 + np.exp(-beta * (value - threshold)))

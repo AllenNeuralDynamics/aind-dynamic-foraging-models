@@ -53,7 +53,7 @@ def generate_pydantic_compare_threshold_params(
         float,
         Field(default=10.0, ge=0.0, description="Softmax inverse temperature"),
     )
-    fitting_bounds["softmax_inverse_temperature"] = (0.0, 100.0)
+    fitting_bounds["softmax_inverse_temperature"] = (0.00000000001, 100.0)
     
     # Left bias term
     params_fields["biasL"] = (

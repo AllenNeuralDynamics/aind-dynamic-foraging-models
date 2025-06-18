@@ -122,7 +122,7 @@ class TestCompareToThreshold(unittest.TestCase):
             label="actual_threshold",
         )
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=4)
-        os.mkdir("tests/results", exist_ok=True)
+        os.makedirs("tests/results", exist_ok=True)
         fig_fitting.savefig("tests/results/test_CompareToThreshold_fitted.png")
 
         # Test that fitted parameters are reasonable (allowing some tolerance due to optimization)

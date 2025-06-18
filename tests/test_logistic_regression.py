@@ -53,6 +53,8 @@ class TestLogistic(unittest.TestCase):
 
     def test_logistic_regression(self):
         """Testing logistic regression model"""
+        # Create results directory if it doesn't exist
+        os.makedirs("tests/results", exist_ok=True)
 
         # -- Call logistic regression --
         dict_logistic_result = fit_logistic_regression(

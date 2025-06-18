@@ -144,3 +144,5 @@ dmypy.json
 /environment
 /metadata
 /.codeocean
+
+tests/results/

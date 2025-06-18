@@ -1,6 +1,7 @@
 """Testing loss-counting model"""
 
 import multiprocessing as mp
+import os
 import sys
 import unittest
 
@@ -16,6 +17,9 @@ class TestLossCounting(unittest.TestCase):
 
     def test_LossCounting(self):
         """Test LossCounting model"""
+        # Create results directory if it doesn't exist
+        os.makedirs("tests/results", exist_ok=True)
+
         # -- Create task and forager --
         forager = ForagerLossCounting(
             choice_kernel="full",  # No choice kernel

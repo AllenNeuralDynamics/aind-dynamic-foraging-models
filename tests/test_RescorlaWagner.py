@@ -19,7 +19,7 @@ class TestRescorlaWagner(unittest.TestCase):
         """Test Rescorla-Wagner model"""
         # Create results directory if it doesn't exist
         os.makedirs("tests/results", exist_ok=True)
-        
+
         # -- Create task and forager --
         forager = ForagerCollection().get_preset_forager("Rescorla-Wagner", seed=42)
         forager.set_params(

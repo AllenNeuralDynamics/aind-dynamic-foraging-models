@@ -2,6 +2,7 @@
 
 import multiprocessing as mp
 import unittest
+import os
 
 import numpy as np
 from aind_behavior_gym.dynamic_foraging.task import CoupledBlockTask

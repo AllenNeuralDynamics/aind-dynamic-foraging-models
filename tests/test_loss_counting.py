@@ -19,7 +19,7 @@ class TestLossCounting(unittest.TestCase):
         """Test LossCounting model"""
         # Create results directory if it doesn't exist
         os.makedirs("tests/results", exist_ok=True)
-        
+
         # -- Create task and forager --
         forager = ForagerLossCounting(
             choice_kernel="full",  # No choice kernel

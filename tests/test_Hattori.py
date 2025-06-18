@@ -18,7 +18,7 @@ class TestHattori(unittest.TestCase):
         """Test Hattori model"""
         # Create results directory if it doesn't exist
         os.makedirs("tests/results", exist_ok=True)
-        
+
         # -- Create task and forager --
         forager = ForagerCollection().get_preset_forager("Hattori2019", seed=42)
         forager.set_params(

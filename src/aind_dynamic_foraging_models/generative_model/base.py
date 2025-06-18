@@ -1,5 +1,4 @@
-"""Base class for DynamicForagingAgent with MLE fitting
-"""
+"""Base class for DynamicForagingAgent with MLE fitting"""
 
 import logging
 from typing import Optional, Tuple, Type
@@ -507,8 +506,13 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             callback=None,
         )  # Default DE kwargs
         kwargs.update(DE_kwargs)  # Update user specified kwargs
+        # Special treatments
         if kwargs["workers"] > 1:
             kwargs["updating"] = "deferred"
+        if "seed" in kwargs and isinstance(kwargs["seed"], (int, float)):
+            # Convert seed to a numpy random number generator
+            # because there seems to be a bug in DE when using int as a seed (not reproducible)
+            kwargs["seed"] = np.random.default_rng(kwargs["seed"])
 
         # --- Heavy lifting here!! ---
         fitting_result = optimize.differential_evolution(
@@ -637,14 +641,16 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         if if_plot_latent:
             # Plot latent variables
             self.plot_latent_variables(axes[0], if_fitted=False)
+
             # Plot choice_prob
-            axes[0].plot(
-                np.arange(self.n_trials) + 1,
-                self.choice_prob[1] / self.choice_prob.sum(axis=0),
-                lw=0.5,
-                color="green",
-                label="choice_prob(R/R+L)",
-            )
+            if "ForagingCompareThreshold" not in self.get_agent_alias():
+                axes[0].plot(
+                    np.arange(self.n_trials) + 1,
+                    self.choice_prob[1] / self.choice_prob.sum(axis=0),
+                    lw=0.5,
+                    color="green",
+                    label="choice_prob(R/R+L)",
+                )
 
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=3)
 
@@ -818,7 +824,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             for kk, fitting_result_fold in enumerate(
                 self.fitting_result_cross_validation["fitting_results_all_folds"]
             ):
-                fitting_results_each_fold[kk] = self._fitting_result_to_dict(
+                fitting_results_each_fold[f"{kk}"] = self._fitting_result_to_dict(
                     fitting_result_fold, if_include_choice_reward_history=False
                 )
             cross_validation["fitting_results_each_fold"] = fitting_results_each_fold

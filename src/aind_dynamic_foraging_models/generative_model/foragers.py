@@ -1,10 +1,8 @@
-"""Presets of forager models and utility functions to create group of agents.
-
-"""
+"""Presets of forager models and utility functions to create group of agents."""
 
 import inspect
 import itertools
-from typing import get_type_hints, get_origin, Literal
+from typing import Literal, get_origin, get_type_hints
 
 import pandas as pd
 
@@ -17,6 +15,7 @@ class ForagerCollection:
     FORAGER_CLASSES = [
         "ForagerQLearning",
         "ForagerLossCounting",
+        "ForagerCompareThreshold",
     ]
 
     FORAGER_PRESETS = {
@@ -55,6 +54,13 @@ class ForagerCollection:
             agent_class="ForagerLossCounting",
             agent_kwargs=dict(
                 win_stay_lose_switch=True,
+                choice_kernel="none",
+            ),
+        ),
+        "CompareToThreshold": dict(
+            description="Compare-to-threshold foraging model",
+            agent_class="ForagerCompareThreshold",
+            agent_kwargs=dict(
                 choice_kernel="none",
             ),
         ),

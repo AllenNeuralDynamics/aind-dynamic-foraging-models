@@ -3,8 +3,8 @@
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 ![Code Style](https://img.shields.io/badge/code%20style-black-black)
 [![semantic-release: angular](https://img.shields.io/badge/semantic--release-angular-e10079?logo=semantic-release)](https://github.com/semantic-release/semantic-release)
-![Interrogate](https://img.shields.io/badge/interrogate-96.7%25-brightgreen)
-![Coverage](https://img.shields.io/badge/coverage-96%25-brightgreen?logo=codecov)
+![Interrogate](https://img.shields.io/badge/interrogate-97.1%25-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen?logo=codecov)
 ![Python](https://img.shields.io/badge/python->=3.9-blue?logo=python)
 
 AIND library for generative (RL) and descriptive (logistic regression) models of dynamic foraging tasks.
@@ -16,13 +16,17 @@ User documentation available on [readthedocs](https://aind-dynamic-foraging-mode
 ### Overview
 RL agents that can perform any dynamic foraging task in [aind-behavior-gym](https://github.com/AllenNeuralDynamics/aind-behavior-gym) and can fit behavior using MLE.
 
-![image](https://github.com/user-attachments/assets/1edbcdb4-932f-4674-bcdc-97d2c840fc72)
+![image](https://github.com/user-attachments/assets/b01a208e-b994-4857-a6da-66563bb0916b)
+
 
 ### Code structure
 ![image](classes_aind_dynamic_foraging_models.svg)
 - To add more generative models, please subclass [`DynamicForagingAgentMLEBase`](https://github.com/AllenNeuralDynamics/aind-dynamic-foraging-models/blob/11c858f93f67a0699ed23892364f3f51b08eab37/src/aind_dynamic_foraging_models/generative_model/base.py#L25C7-L25C34).
 
 ### Implemented foragers
+
+<img width="1951" alt="image" src="https://github.com/user-attachments/assets/dacfe875-4e51-492d-a5aa-d3b27ec03e90" />
+
 - [`ForagerQLearning`](https://github.com/AllenNeuralDynamics/aind-dynamic-foraging-models/blob/f9ab39bbdc2cbea350e5a8f11d3f935d6674e08b/src/aind_dynamic_foraging_models/generative_model/forager_q_learning.py): Simple Q-learning agents that incrementally update Q-values.
     - Available `agent_kwargs`:
       ```python
@@ -37,6 +41,9 @@ RL agents that can perform any dynamic foraging task in [aind-behavior-gym](http
         win_stay_lose_switch: Literal[False, True] = False,
         choice_kernel: Literal["none", "one_step", "full"] = "none",
       ```
+- Action selections ([readthedoc](https://aind-dynamic-foraging-models.readthedocs.io/en/stable/aind_dynamic_foraging_models.generative_model.html#module-aind_dynamic_foraging_models.generative_model.act_functions))
+
+
 [Here is the full list](https://foraging-behavior-browser.allenneuraldynamics-test.org/RL_model_playground#all-available-foragers) of available foragers:
 
 ![image](https://github.com/user-attachments/assets/db2e3b6c-f888-496c-a12b-06e030499165)

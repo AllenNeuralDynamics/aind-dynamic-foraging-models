@@ -1,6 +1,7 @@
 """Testing Rescorla-Wagner model"""
 
 import multiprocessing as mp
+import os
 import sys
 import unittest
 
@@ -16,6 +17,9 @@ class TestRescorlaWagner(unittest.TestCase):
 
     def test_RescorlaWagner(self):
         """Test Rescorla-Wagner model"""
+        # Create results directory if it doesn't exist
+        os.makedirs("tests/results", exist_ok=True)
+        
         # -- Create task and forager --
         forager = ForagerCollection().get_preset_forager("Rescorla-Wagner", seed=42)
         forager.set_params(

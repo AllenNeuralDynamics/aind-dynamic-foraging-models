@@ -15,6 +15,9 @@ class TestCompareToThreshold(unittest.TestCase):
 
     def test_CompareToThreshold(self):
         """Test CompareToThreshold model"""
+        # Create results directory if it doesn't exist
+        os.makedirs("tests/results", exist_ok=True)
+
         # -- Create task and forager --
         forager = ForagerCollection().get_preset_forager("CompareToThreshold", seed=42)
         forager.set_params(

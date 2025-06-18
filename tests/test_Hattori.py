@@ -1,6 +1,7 @@
 """Testing Hattori2019 model"""
 
 import multiprocessing as mp
+import os
 import unittest
 
 import numpy as np
@@ -15,6 +16,9 @@ class TestHattori(unittest.TestCase):
 
     def test_Hattori(self):
         """Test Hattori model"""
+        # Create results directory if it doesn't exist
+        os.makedirs("tests/results", exist_ok=True)
+        
         # -- Create task and forager --
         forager = ForagerCollection().get_preset_forager("Hattori2019", seed=42)
         forager.set_params(

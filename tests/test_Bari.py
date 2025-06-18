@@ -1,6 +1,7 @@
 """Testing Bari2019 model"""
 
 import multiprocessing as mp
+import os
 import sys
 import unittest
 
@@ -16,6 +17,9 @@ class TestBari(unittest.TestCase):
 
     def test_Bari(self):
         """Test Bari model"""
+        # Create results directory if it doesn't exist
+        os.makedirs("tests/results", exist_ok=True)
+        
         # -- Create task and forager --
         forager = ForagerCollection().get_preset_forager("Bari2019", seed=42)
         forager.set_params(

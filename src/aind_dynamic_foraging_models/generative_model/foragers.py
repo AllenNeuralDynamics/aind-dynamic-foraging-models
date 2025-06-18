@@ -2,7 +2,7 @@
 
 import inspect
 import itertools
-from typing import get_type_hints, get_origin, Literal
+from typing import Literal, get_origin, get_type_hints
 
 import pandas as pd
 

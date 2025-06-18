@@ -1,5 +1,4 @@
-"""Test get forager
-"""
+"""Test get forager"""
 
 import unittest
 

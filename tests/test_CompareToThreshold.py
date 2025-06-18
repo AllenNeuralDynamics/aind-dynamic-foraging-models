@@ -49,7 +49,7 @@ class TestCompareToThreshold(unittest.TestCase):
         # Check that value and exploiting arrays have expected shapes
         self.assertEqual(len(ground_truth_value), len(choice_history) + 1)
         self.assertEqual(len(ground_truth_exploiting), len(choice_history))
-        
+
         # Check that value starts at threshold
         self.assertEqual(ground_truth_value[0], forager.params.threshold)
 
@@ -110,15 +110,20 @@ class TestCompareToThreshold(unittest.TestCase):
         fig_fitting, axes = forager.plot_fitted_session(if_plot_latent=True)
         # Add groundtruth
         axes[0].plot(ground_truth_value, lw=1, color="red", ls="-", label="actual_value")
-        axes[0].axhline(y=ground_truth_params["threshold"], color="black", linestyle="--", 
-                       lw=1, label="actual_threshold")
+        axes[0].axhline(
+            y=ground_truth_params["threshold"],
+            color="black",
+            linestyle="--",
+            lw=1,
+            label="actual_threshold",
+        )
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=4)
         fig_fitting.savefig("tests/results/test_CompareToThreshold_fitted.png")
 
         # Test that fitted parameters are reasonable (allowing some tolerance due to optimization)
         self.assertAlmostEqual(fitting_result.x[0], 0.675, delta=0.1)  # learn_rate
-        self.assertAlmostEqual(fitting_result.x[1], 0.4634, delta=0.1)  # threshold  
-        self.assertAlmostEqual(fitting_result.x[2],3.83, delta=0.1)  # softmax_inverse_temperature
+        self.assertAlmostEqual(fitting_result.x[1], 0.4634, delta=0.1)  # threshold
+        self.assertAlmostEqual(fitting_result.x[2], 3.83, delta=0.1)  # softmax_inverse_temperature
 
     def test_CompareToThreshold_with_choice_kernel(self):
         """Test CompareToThreshold model with choice kernel enabled"""
@@ -127,7 +132,7 @@ class TestCompareToThreshold(unittest.TestCase):
         forager = forager_collection.get_forager(
             agent_class_name="ForagerCompareThreshold",
             agent_kwargs={"choice_kernel": "one_step"},
-            seed=42
+            seed=42,
         )
         forager.set_params(
             learn_rate=0.3,
@@ -141,7 +146,7 @@ class TestCompareToThreshold(unittest.TestCase):
 
         # -- Generative run --
         forager.perform(task)
-        
+
         # --    test figure --
         fig, axes = forager.plot_session(if_plot_latent=True)
         fig.savefig("tests/results/test_CompareToThreshold_choice_kernel.png")
@@ -149,7 +154,7 @@ class TestCompareToThreshold(unittest.TestCase):
 
         # Test that choice kernel is being used
         self.assertFalse(np.all(np.isnan(forager.choice_kernel)))
-        
+
         # Test latent variables
         latent_vars = forager.get_latent_variables()
         self.assertIn("value", latent_vars)

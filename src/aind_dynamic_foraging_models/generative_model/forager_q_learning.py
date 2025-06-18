@@ -1,5 +1,4 @@
-"""Maximum likelihood fitting of foraging models
-"""
+"""Maximum likelihood fitting of foraging models"""
 
 # %%
 from typing import Literal

@@ -1,6 +1,4 @@
-"""Presets of forager models and utility functions to create group of agents.
-
-"""
+"""Presets of forager models and utility functions to create group of agents."""
 
 import inspect
 import itertools

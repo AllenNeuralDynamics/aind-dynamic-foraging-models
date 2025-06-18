@@ -37,24 +37,21 @@ def generate_pydantic_compare_threshold_params(
         Field(default=0.5, ge=0.0, le=1.0, description="Learning rate for value update"),
     )
     fitting_bounds["learn_rate"] = (0.0, 1.0)
-    
+
     # Threshold (ρ) - the value to compare against
     params_fields["threshold"] = (
         float,
-        Field(
-            default=0.4, 
-            description="Threshold value for comparison (ρ)"
-        ),
+        Field(default=0.4, description="Threshold value for comparison (ρ)"),
     )
     fitting_bounds["threshold"] = (-1.0, 1.0)
-    
+
     # Softmax inverse temperature (β)
     params_fields["softmax_inverse_temperature"] = (
         float,
         Field(default=10.0, ge=0.0, description="Softmax inverse temperature"),
     )
     fitting_bounds["softmax_inverse_temperature"] = (0.00000000001, 100.0)
-    
+
     # Left bias term
     params_fields["biasL"] = (
         float,

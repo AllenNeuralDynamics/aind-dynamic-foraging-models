@@ -1,5 +1,4 @@
-"""Base class for DynamicForagingAgent with MLE fitting
-"""
+"""Base class for DynamicForagingAgent with MLE fitting"""
 
 import logging
 from typing import Optional, Tuple, Type

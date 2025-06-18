@@ -239,7 +239,7 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
         p_exploit = [1 / (1 + np.exp(-self.params.softmax_inverse_temperature * 
                                 (v - self.params.threshold))) 
                 for v in self.value]
-        ax.plot(x, p_exploit, label=f"{prefix}p(exploit)", color="green", **style)
+        ax.plot(x, p_exploit, label=f"{prefix}p(exploit)", color="cyan", **style)
 
         # Plot exploitation/exploration decisions on a secondary y-axis if not fitted
         # if not if_fitted:

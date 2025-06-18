@@ -75,8 +75,8 @@ class ForagerCollection:
         agent_class = getattr(generative_model, agent_class_name, None)
         if agent_class is None:
             raise ValueError(
-                f"{agent_class} is not found in the generative_model. "
-                f"Available agents are: {self.available_agent_class}"
+                f"{agent_class_name} is not found in the generative_model. "
+                f"Available agent classes are: {self.FORAGER_CLASSES}"
             )
         return agent_class
 

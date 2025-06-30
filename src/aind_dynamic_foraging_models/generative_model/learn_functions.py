@@ -3,6 +3,40 @@
 import numpy as np
 
 
+def learn_actor(choice, choice_prob, reward, w_tminus1, learn_rates, forget_rates):
+    """Learning function for actor
+
+    Parameters
+    ----------
+    choice : int
+        this choice
+    choice_prob : float
+        probability of choices
+    reward : float
+        this reward
+    w_tminus1 : np.ndarray
+        array of old w
+    learn_rates : _type_
+        learning rates for [rewarded, unrewarded] sides
+    forget_rates : list
+        forget rates for [unchosen, chosen] sides
+
+    Returns
+    -------
+    nd.array
+        updated w
+    """
+    w_t = np.zeros_like(w_tminus1)
+    # Learning component
+    if choice == 0:  # Left choice
+        w_t[0] = w_tminus1[0] + learn_rates * (1 - choice_prob[0]) * reward[0]
+        w_t[1] = forget_rates * w_tminus1[1] - learn_rates * choice_prob[1] * reward[0]
+    elif choice == 1:  # Right choice
+        w_t[1] = w_tminus1[1] + learn_rates * (1 - choice_prob[1]) * reward[1]
+        w_t[0] = forget_rates * w_tminus1[0] - learn_rates * choice_prob[0] * reward[1]
+    return w_t
+
+
 def learn_RWlike(choice, reward, q_value_tminus1, forget_rates, learn_rates):
     """Learning function for Rescorla-Wagner-like model.
 

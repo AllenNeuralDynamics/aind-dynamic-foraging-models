@@ -1,26 +1,26 @@
-"""Maximum likelihood fitting of foraging models"""
+"""Maximum likelihood fitting of foraging models
+"""
 
 # %%
 from typing import Literal
 
 import numpy as np
 from aind_behavior_gym.dynamic_foraging.task import L, R
-
-from .act_functions import act_epsilon_greedy, act_softmax
+from .act_functions import act_logistic
 from .base import DynamicForagingAgentMLEBase
-from .learn_functions import learn_choice_kernel, learn_RWlike
-from .params.forager_q_learning_params import generate_pydantic_q_learning_params
+from .learn_functions import learn_actor, learn_choice_kernel
+from .params.forager_actor_params import generate_pydantic_actor_params
 
 
-class ForagerQLearning(DynamicForagingAgentMLEBase):
+class ForagerActor(DynamicForagingAgentMLEBase):
     """The familiy of simple Q-learning models."""
 
     def __init__(
         self,
-        number_of_learning_rate: Literal[1, 2] = 2,
-        number_of_forget_rate: Literal[0, 1] = 1,
+        number_of_learning_rate: Literal[1, 2],
+        number_of_forget_rate: Literal[0, 1],
         choice_kernel: Literal["none", "one_step", "full"] = "none",
-        action_selection: Literal["softmax", "epsilon-greedy"] = "softmax",
+        action_selection: Literal["act_logistic"] = "act_logistic",
         params: dict = {},
         **kwargs,
     ):
@@ -36,13 +36,6 @@ class ForagerQLearning(DynamicForagingAgentMLEBase):
             Number of forget_rates, by default 1.
             If 0, forget_rate_unchosen will not be included in the model.
             If 1, forget_rate_unchosen will be included in the model.
-        choice_kernel : Literal["none", "one_step", "full"], optional
-            Choice kernel type, by default "none"
-            If "none", no choice kernel will be included in the model.
-            If "one_step", choice_kernel_step_size will be set to 1.0, i.e., only the last choice
-                affects the choice kernel. (Bari2019)
-            If "full", both choice_kernel_step_size and choice_kernel_relative_weight
-            will be included during fitting
         action_selection : Literal["softmax", "epsilon-greedy"], optional
             Action selection type, by default "softmax"
         params: dict, optional
@@ -68,23 +61,7 @@ class ForagerQLearning(DynamicForagingAgentMLEBase):
         """Implement the base class method to dynamically generate Pydantic models
         for parameters and fitting bounds for simple Q learning.
         """
-        return generate_pydantic_q_learning_params(**agent_kwargs)
-
-    def get_agent_alias(self):
-        """Get the agent alias"""
-        _ck = {"none": "", "one_step": "_CK1", "full": "_CKfull"}[
-            self.agent_kwargs["choice_kernel"]
-        ]
-        _as = {"softmax": "_softmax", "epsilon-greedy": "_epsi"}[
-            self.agent_kwargs["action_selection"]
-        ]
-        return (
-            "QLearning"
-            + f"_L{self.agent_kwargs['number_of_learning_rate']}"
-            + f"F{self.agent_kwargs['number_of_forget_rate']}"
-            + _ck
-            + _as
-        )
+        return generate_pydantic_actor_params(**agent_kwargs)
 
     def _reset(self):
         """Reset the agent"""
@@ -94,9 +71,8 @@ class ForagerQLearning(DynamicForagingAgentMLEBase):
         # --- Agent family specific variables ---
         # Latent variables have n_trials + 1 length to capture the update
         # after the last trial (HH20210726)
-        self.q_value = np.full([self.n_actions, self.n_trials + 1], np.nan)
-        self.q_value[:, 0] = 0  # Initial Q values as 0
-
+        self.w = np.full([self.n_actions, self.n_trials], np.nan)
+        self.w[:, 0] = 0  # Initial Q values as 0
         # Always initialize choice_kernel with nan, even if choice_kernel = "none"
         self.choice_kernel = np.full([self.n_actions, self.n_trials + 1], np.nan)
         self.choice_kernel[:, 0] = 0  # Initial choice kernel as 0
@@ -110,32 +86,19 @@ class ForagerQLearning(DynamicForagingAgentMLEBase):
         else:
             choice_kernel = self.choice_kernel[:, self.trial]
             choice_kernel_relative_weight = self.params.choice_kernel_relative_weight
-
         # Action selection
-        if self.agent_kwargs["action_selection"] == "softmax":
-            choice, choice_prob = act_softmax(
-                q_value_t=self.q_value[:, self.trial],
-                softmax_inverse_temperature=self.params.softmax_inverse_temperature,
+        if self.agnet_kwargs["action_selection"] == "logistic":
+            choice, choice_prob = act_logistic(
+                w_t=self.q_value[:, self.trial],
                 bias_terms=np.array([self.params.biasL, 0]),
                 # -- Choice kernel --
                 choice_kernel=choice_kernel,
                 choice_kernel_relative_weight=choice_kernel_relative_weight,
                 rng=self.rng,
             )
-        elif self.agent_kwargs["action_selection"] == "epsilon-greedy":
-            choice, choice_prob = act_epsilon_greedy(
-                q_value_t=self.q_value[:, self.trial],
-                epsilon=self.params.epsilon,
-                bias_terms=np.array([self.params.biasL, 0]),
-                # -- Choice kernel --
-                choice_kernel=choice_kernel,
-                choice_kernel_relative_weight=choice_kernel_relative_weight,
-                rng=self.rng,
-            )
-
         return choice, choice_prob
 
-    def learn(self, _observation, choice, _, reward, _next_observation, done):
+    def learn(self, _observation, choice, choice_prob, reward, _next_observation, done):
         """Update Q values
 
         Note that self.trial already increased by 1 before learn() in the base class
@@ -152,15 +115,16 @@ class ForagerQLearning(DynamicForagingAgentMLEBase):
         else:
             forget_rates = [self.params.forget_rate_unchosen, 0]
 
-        # Update Q values
-        self.q_value[:, self.trial] = learn_RWlike(
+        # Update W
+        self.w[:, self.trial] = learn_actor(
             choice=choice,
+            choice_prob=choice,
             reward=reward,
-            q_value_tminus1=self.q_value[:, self.trial - 1],
+            w_tminus1=self.w[:, self.trial - 1],
             learn_rates=learn_rates,
             forget_rates=forget_rates,
+            forget_rates=forget_rates,
         )
-
         # Update choice kernel, if used
         if self.agent_kwargs["choice_kernel"] != "none":
             self.choice_kernel[:, self.trial] = learn_choice_kernel(
@@ -169,15 +133,8 @@ class ForagerQLearning(DynamicForagingAgentMLEBase):
                 choice_kernel_step_size=self.params.choice_kernel_step_size,
             )
 
-    def get_latent_variables(self):
-        return {
-            "q_value": self.q_value.tolist(),
-            "choice_kernel": self.choice_kernel.tolist(),
-            "choice_prob": self.choice_prob.tolist(),
-        }
-
     def plot_latent_variables(self, ax, if_fitted=False):
-        """Plot Q values"""
+        """Plot W"""
         if if_fitted:
             style = dict(lw=2, ls=":")
             prefix = "fitted_"
@@ -186,22 +143,5 @@ class ForagerQLearning(DynamicForagingAgentMLEBase):
             prefix = ""
 
         x = np.arange(self.n_trials + 1) + 1  # When plotting, we start from 1
-        ax.plot(x, self.q_value[L, :], label=f"{prefix}Q(L)", color="red", **style)
-        ax.plot(x, self.q_value[R, :], label=f"{prefix}Q(R)", color="blue", **style)
-
-        # Add choice kernel, if used
-        if self.agent_kwargs["choice_kernel"] != "none":
-            ax.plot(
-                x,
-                self.choice_kernel[L, :],
-                label=f"{prefix}choice_kernel(L)",
-                color="purple",
-                **style,
-            )
-            ax.plot(
-                x,
-                self.choice_kernel[R, :],
-                label=f"{prefix}choice_kernel(R)",
-                color="cyan",
-                **style,
-            )
+        ax.plot(x, self.w[L, :], label=f"{prefix}W(L)", color="red", **style)
+        ax.plot(x, self.w[R, :], label=f"{prefix}W(R)", color="blue", **style)

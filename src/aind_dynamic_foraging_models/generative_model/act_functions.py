@@ -7,6 +7,56 @@ from aind_behavior_gym.dynamic_foraging.task import L, R
 from scipy.stats import norm
 
 
+def act_logistic(
+    w_t: np.array,
+    bias_terms: np.array,
+    choice_kernel_relative_weight=None,
+    choice_kernel=None,
+    rng=None,
+):
+    """Given weights, return the choice and choice probability.
+    If chocie_kernel is not None, it will sum it into the softmax function like this
+
+    Steps:
+    1. Compute adjusted new w by adding bias terms and choice kernel
+       Q' = softmax_inverse_temperature * (Q + choice_kernel_relative_weight * choice_kernel) + bias
+    2. Compute choice probabilities by softmax function
+       choice_prob ~ exp(Q') / sum(exp(Q'))
+
+    Parameters
+    ----------
+    w_t : list or np.array
+        array of w, by default 0
+    bias_terms : np.array, optional
+        _description_, by default 0
+    choice_kernel_relative_weight : _type_, optional
+        relative strength of choice kernel relative to Q in decision, by default None.
+        If not none, choice kernel will have an inverse temperature of
+        softmax_inverse_temperature * choice_kernel_relative_weight
+    choice_kernel : _type_, optional
+        _description_, by default None
+    rng : _type_, optional
+        random number generator, by default None
+
+    Returns
+    -------
+    _type_
+        _description_
+    """
+    if choice_kernel is not None:
+        choice_kernel_multiplier = choice_kernel_relative_weight * choice_kernel
+    else:
+        choice_kernel_multiplier = 1
+    adjusted_input = [
+        w_t[0, 0] - w_t[1, 0] - bias_terms * choice_kernel_multiplier,
+        w_t[0, 1] - w_t[1, 1] + bias_terms * choice_kernel_multiplier,
+    ]
+    choice_prob = 1 / (1 + np.exp(-1 * adjusted_input))
+    choice = choose_bern(choice_prob)
+
+    return choice, choice_prob
+
+
 def act_softmax(
     q_value_t: np.array,
     softmax_inverse_temperature: float,
@@ -17,7 +67,7 @@ def act_softmax(
 ):
     """Given q values and softmax_inverse_temperature, return the choice and choice probability.
 
-    If chocie_kernel is not None, it will sum it into the softmax function like this
+    If choice_kernel is not None, it will sum it into the softmax function like this
 
     1. Compute adjusted Q values by adding bias terms and choice kernel
 
@@ -240,3 +290,12 @@ def choose_ps(ps, rng=None):
 
     ps = ps / np.sum(ps)
     return np.max(np.argwhere(np.hstack([-1e-16, np.cumsum(ps)]) < rng.random()))
+
+
+def choose_bern(prob, rng=None):
+    """
+    Bernoulli choice
+    Bernoulli choice
+    """
+    rng = rng or np.random.default_rng()
+    return 1 if np.random.rand() < prob else 0

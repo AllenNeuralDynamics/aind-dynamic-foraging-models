@@ -215,7 +215,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             # Note that this will update the q values **after the last trial**, a final update that
             # will not be used to make the next action (because task is *done*) but may be used for
             # correlating with physiology recordings
-            self.learn(_, choice, reward, _, task_done)
+            self.learn(_, choice, choice_prob, reward, _, task_done)
 
     def perform_closed_loop(self, fit_choice_history, fit_reward_history):
         """Simulates the agent over a fixed choice and reward history using its params.
@@ -242,7 +242,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             self.trial += 1
 
             # -- Update q values
-            self.learn(None, clamped_choice, clamped_reward, None, None)
+            self.learn(None, clamped_choice, choice_prob, clamped_reward, None, None)
 
     def act(self, observation):
         """
@@ -257,7 +257,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         """
         raise NotImplementedError("The 'act' method should be overridden by subclasses.")
 
-    def learn(self, observation, action, reward, next_observation, done):
+    def learn(self, observation, action, action_prob, reward, next_observation, done):
         """
         Updates the agent's knowledge or policy based on the last action and its outcome.
         I just copy and paste this from DynamicForagingAgentBase here for clarity.
@@ -268,6 +268,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         Args:
             observation: The observation before the action was taken.
             action: The action taken by the agent.
+            action_prob: The probability for each action taken by the agent.
             reward: The reward received after taking the action.
             next_observation: The next observation after the action.
             done: Whether the episode has ended.

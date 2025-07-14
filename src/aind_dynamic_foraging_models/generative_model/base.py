@@ -413,9 +413,9 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         self.rng.shuffle(trial_numbers_shuffled)
 
         prediction_accuracy_fit = []
-        lpt_fit = []
+        LPT_fit = []
         prediction_accuracy_test = []
-        lpt_test = []
+        LPT_test = []
         prediction_accuracy_test_bias_only = []
         fitting_results_all_folds = []
 
@@ -478,7 +478,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
                 fit_choice_history=fit_choice_history[fit_set_this],
                 fit_reward_history=fit_reward_history[fit_set_this],
             )
-            lpt_fit.append(
+            LPT_fit.append(
                 np.exp(log_likelihood_fit / len(fit_set_this))
             )
             log_likelihood_test = -negLL(
@@ -486,7 +486,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
                 fit_choice_history=fit_choice_history[test_set_this],
                 fit_reward_history=fit_reward_history[test_set_this],
             )
-            lpt_test.append(
+            LPT_test.append(
                 np.exp(log_likelihood_test / len(test_set_this))
             )
 
@@ -495,8 +495,8 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             prediction_accuracy_test=prediction_accuracy_test,
             prediction_accuracy_fit=prediction_accuracy_fit,
             prediction_accuracy_test_bias_only=prediction_accuracy_test_bias_only,
-            lpt_fit=lpt_fit,
-            lpt_test=lpt_test,
+            LPT_test=LPT_test,
+            LPT_fit=LPT_fit,
             fitting_results_all_folds=fitting_results_all_folds,
         )
         self.fitting_result_cross_validation = fitting_result_cross_validation

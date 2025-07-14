@@ -1,8 +1,8 @@
 """Testing CompareToThreshold model"""
 
 import multiprocessing as mp
-import unittest
 import os
+import unittest
 
 import numpy as np
 from aind_behavior_gym.dynamic_foraging.task import CoupledBlockTask

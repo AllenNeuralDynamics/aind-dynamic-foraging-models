@@ -478,17 +478,13 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
                 fit_choice_history=fit_choice_history[fit_set_this],
                 fit_reward_history=fit_reward_history[fit_set_this],
             )
-            LPT_fit.append(
-                np.exp(log_likelihood_fit / len(fit_set_this))
-            )
+            LPT_fit.append(np.exp(log_likelihood_fit / len(fit_set_this)))
             log_likelihood_test = -negLL(
                 choice_prob=tmp_agent.choice_prob[:, test_set_this],
                 fit_choice_history=fit_choice_history[test_set_this],
                 fit_reward_history=fit_reward_history[test_set_this],
             )
-            LPT_test.append(
-                np.exp(log_likelihood_test / len(test_set_this))
-            )
+            LPT_test.append(np.exp(log_likelihood_test / len(test_set_this)))
 
         # --- Save all cross_validation results, including raw fitting result of each fold ---
         fitting_result_cross_validation = dict(
@@ -567,7 +563,9 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         fitting_result.params = params
         fitting_result.k_model = len(fit_names)  # Number of free parameters of the model
 
-        fitting_result.n_trials = len(fit_choice_history) if fit_trial_set is None else len(fit_trial_set)
+        fitting_result.n_trials = (
+            len(fit_choice_history) if fit_trial_set is None else len(fit_trial_set)
+        )
         fitting_result.log_likelihood = -fitting_result.fun
 
         fitting_result.AIC = -2 * fitting_result.log_likelihood + 2 * fitting_result.k_model

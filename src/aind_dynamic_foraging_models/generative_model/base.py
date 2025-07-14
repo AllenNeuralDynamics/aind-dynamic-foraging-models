@@ -413,7 +413,9 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         self.rng.shuffle(trial_numbers_shuffled)
 
         prediction_accuracy_fit = []
+        LPT_fit = []
         prediction_accuracy_test = []
+        LPT_test = []
         prediction_accuracy_test_bias_only = []
         fitting_results_all_folds = []
 
@@ -470,11 +472,27 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
                     sum(prediction_correct_bias_only[test_set_this]) / len(test_set_this)
                 )
 
+            # -- Compute LPT (Likelihood-Per-Trial) for both fit and test sets --
+            log_likelihood_fit = -negLL(
+                choice_prob=tmp_agent.choice_prob[:, fit_set_this],
+                fit_choice_history=fit_choice_history[fit_set_this],
+                fit_reward_history=fit_reward_history[fit_set_this],
+            )
+            LPT_fit.append(np.exp(log_likelihood_fit / len(fit_set_this)))
+            log_likelihood_test = -negLL(
+                choice_prob=tmp_agent.choice_prob[:, test_set_this],
+                fit_choice_history=fit_choice_history[test_set_this],
+                fit_reward_history=fit_reward_history[test_set_this],
+            )
+            LPT_test.append(np.exp(log_likelihood_test / len(test_set_this)))
+
         # --- Save all cross_validation results, including raw fitting result of each fold ---
         fitting_result_cross_validation = dict(
             prediction_accuracy_test=prediction_accuracy_test,
             prediction_accuracy_fit=prediction_accuracy_fit,
             prediction_accuracy_test_bias_only=prediction_accuracy_test_bias_only,
+            LPT_test=LPT_test,
+            LPT_fit=LPT_fit,
             fitting_results_all_folds=fitting_results_all_folds,
         )
         self.fitting_result_cross_validation = fitting_result_cross_validation
@@ -544,7 +562,10 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         params.update(clamp_params)
         fitting_result.params = params
         fitting_result.k_model = len(fit_names)  # Number of free parameters of the model
-        fitting_result.n_trials = len(fit_choice_history)
+
+        fitting_result.n_trials = (
+            len(fit_choice_history) if fit_trial_set is None else len(fit_trial_set)
+        )
         fitting_result.log_likelihood = -fitting_result.fun
 
         fitting_result.AIC = -2 * fitting_result.log_likelihood + 2 * fitting_result.k_model
@@ -817,6 +838,8 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
                 "prediction_accuracy_test_bias_only": self.fitting_result_cross_validation[
                     "prediction_accuracy_test_bias_only"
                 ],
+                "LPT_test": self.fitting_result_cross_validation["LPT_test"],
+                "LPT_fit": self.fitting_result_cross_validation["LPT_fit"],
             }
 
             # Fitting results of each fold

@@ -840,8 +840,8 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
                 "prediction_accuracy_test_bias_only": self.fitting_result_cross_validation[
                     "prediction_accuracy_test_bias_only"
                 ],
-                "lpt_test": self.fitting_result_cross_validation["lpt_test"],
-                "lpt_fit": self.fitting_result_cross_validation["lpt_fit"],
+                "LPT_test": self.fitting_result_cross_validation["LPT_test"],
+                "LPT_fit": self.fitting_result_cross_validation["LPT_fit"],
             }
 
             # Fitting results of each fold

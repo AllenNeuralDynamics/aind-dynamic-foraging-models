@@ -563,11 +563,14 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         fitting_result.params = params
         fitting_result.k_model = len(fit_names)  # Number of free parameters of the model
 
+        # Total trial numbers for fitting
         fitting_result.n_trials = (
             len(fit_choice_history) if fit_trial_set is None else len(fit_trial_set)
         )
-        fitting_result.log_likelihood = -fitting_result.fun
+        # Also save the fit_trial_set
+        fitting_result.fit_trial_set = fit_trial_set
 
+        fitting_result.log_likelihood = -fitting_result.fun
         fitting_result.AIC = -2 * fitting_result.log_likelihood + 2 * fitting_result.k_model
         fitting_result.BIC = -2 * fitting_result.log_likelihood + fitting_result.k_model * np.log(
             fitting_result.n_trials

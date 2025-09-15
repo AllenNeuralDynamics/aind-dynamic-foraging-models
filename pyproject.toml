@@ -22,8 +22,6 @@ dependencies = [
     'scikit-learn',
     'scipy',
     'pydantic',
-    'aind_dynamic_foraging_basic_analysis',
-    'aind-behavior-gym',
 ]
 
 [project.optional-dependencies]
@@ -35,6 +33,13 @@ dev = [
     'isort',
     'Sphinx',
     'furo',
+    'aind-behavior-gym',
+    'aind_dynamic_foraging_basic_analysis',
+]
+
+rl = [
+    'aind-behavior-gym',
+    'aind_dynamic_foraging_basic_analysis',
 ]
 
 [tool.setuptools.packages.find]

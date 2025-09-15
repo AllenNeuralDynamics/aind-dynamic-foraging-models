@@ -3,12 +3,18 @@
 import logging
 from typing import Optional, Tuple, Type
 
+from pydantic import BaseModel
 import numpy as np
 import scipy.optimize as optimize
-from aind_behavior_gym.dynamic_foraging.agent import DynamicForagingAgentBase
-from aind_behavior_gym.dynamic_foraging.task import DynamicForagingTaskBase
-from aind_dynamic_foraging_basic_analysis import plot_foraging_session
-from pydantic import BaseModel
+try:
+    from aind_behavior_gym.dynamic_foraging.agent import DynamicForagingAgentBase
+    from aind_behavior_gym.dynamic_foraging.task import DynamicForagingTaskBase
+    from aind_dynamic_foraging_basic_analysis import plot_foraging_session
+except ImportError as e:
+    raise ImportError(
+        "aind_behavior_gym and aind_dynamic_foraging_basic_analysis are missing. "
+        "Please install this package using `pip install aind-dynamic-foraging-models[rl]`"
+    ) from e
 
 from .params import ParamsSymbols
 

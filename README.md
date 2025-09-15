@@ -145,9 +145,13 @@ The choice of optimizer depends on the penality term, as listed [here](https://s
 - Foraging model simulation, model recovery, etc.: https://github.com/hanhou/Dynamic-Foraging
 
 ## Installation
-To install the software, run
+To install the package (logistic regression only), run
 ```bash
 pip install aind-dynamic-foraging-models
+```
+To install the package with RL models, run
+```bash
+pip install aind-dynamic-foraging-models[rl]
 ```
 
 To develop the code, clone the repo to your local machine, and run

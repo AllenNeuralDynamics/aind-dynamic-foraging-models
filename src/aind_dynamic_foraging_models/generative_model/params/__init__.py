@@ -21,3 +21,4 @@ class ParamsSymbols(str, Enum):
     softmax_inverse_temperature = R"$\beta$"
     epsilon = R"$\epsilon$"
     threshold = R"$\rho$"  # Adding the threshold parameter with symbol ρ (rho)
+    threshold_offset = R"$\rho$"  # Adding the threshold_offset parameter with symbol ρ (rho)

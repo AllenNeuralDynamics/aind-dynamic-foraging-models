@@ -16,6 +16,8 @@ class ForagerCollection:
         "ForagerQLearning",
         "ForagerLossCounting",
         "ForagerCompareThreshold",
+        "ForagerCTTDualQ",
+        "ForagerCTTAvg"
     ]
 
     FORAGER_PRESETS = {
@@ -60,6 +62,20 @@ class ForagerCollection:
         "CompareToThreshold": dict(
             description="Compare-to-threshold foraging model",
             agent_class="ForagerCompareThreshold",
+            agent_kwargs=dict(
+                choice_kernel="none",
+            ),
+        ),
+        "CTTDualQ": dict(
+            description="CTT dual Q foraging model",
+            agent_class="ForagerCTTDualQ",
+            agent_kwargs=dict(
+                choice_kernel="none",
+            ),
+        ),
+        "CTTAvg": dict(
+            description="CTT average foraging model",
+            agent_class="ForagerCTTAvg",
             agent_kwargs=dict(
                 choice_kernel="none",
             ),

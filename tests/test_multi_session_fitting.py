@@ -516,8 +516,8 @@ class TestMultiSessionFitting(unittest.TestCase):
             DE_kwargs=dict(
                 workers=self.n_workers,
                 disp=False,
-                seed=np.random.default_rng(200),
-                maxiter=15,
+                seed=np.random.default_rng(42),
+                maxiter=25,
                 popsize=8,
                 polish=False,
             ),

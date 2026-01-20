@@ -584,6 +584,15 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
 
         if not input_was_multi_session:
             # ---- Single-session: trial-level CV (backward compatible) ----
+            logger.warning(
+                "Single-session trial-level cross-validation is theoretically incorrect "
+                "because trials within a session are autocorrelated. This introduces "
+                "data leakage between train and test sets, as the shuffling of trials "
+                "does not properly account for temporal dependencies. However, this "
+                "approach is commonly used in practice (e.g., Hattori et al., 2019). "
+                "For proper cross-validation, use multi-session input to enable "
+                "session-level CV, which holds out entire sessions."
+            )
             fit_choice_history_single = fit_choice_history_sessions[0]
             fit_reward_history_single = fit_reward_history_sessions[0]
             n_trials = len(fit_choice_history_single)

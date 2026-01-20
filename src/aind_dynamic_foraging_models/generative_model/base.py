@@ -3,9 +3,10 @@
 import logging
 from typing import List, Optional, Sequence, Tuple, Type, Union
 
-from pydantic import BaseModel
 import numpy as np
 import scipy.optimize as optimize
+from pydantic import BaseModel
+
 try:
     from aind_behavior_gym.dynamic_foraging.agent import DynamicForagingAgentBase
     from aind_behavior_gym.dynamic_foraging.task import DynamicForagingTaskBase
@@ -378,6 +379,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         fitting_result_cross_validation : dict or None
             Cross-validation results if k_fold_cross_validation is specified, else None.
         """
+
         # ===== Input Detection and Normalization =====
         def _as_1d_array(x, name: str) -> np.ndarray:
             arr = np.asarray(x)
@@ -392,11 +394,15 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             """Return (choice_sessions, reward_sessions, input_was_multi_session)."""
             # Single session (np.ndarray)
             if isinstance(choice_history, np.ndarray):
-                return [
-                    _as_1d_array(choice_history, "fit_choice_history"),
-                ], [
-                    _as_1d_array(reward_history, "fit_reward_history"),
-                ], False
+                return (
+                    [
+                        _as_1d_array(choice_history, "fit_choice_history"),
+                    ],
+                    [
+                        _as_1d_array(reward_history, "fit_reward_history"),
+                    ],
+                    False,
+                )
 
             # Possibly list/tuple
             if isinstance(choice_history, (list, tuple)):
@@ -421,37 +427,41 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
                         )
 
                     choice_sessions = [
-                        _as_1d_array(s, "fit_choice_history(session)")
-                        for s in choice_history
+                        _as_1d_array(s, "fit_choice_history(session)") for s in choice_history
                     ]
                     reward_sessions = [
-                        _as_1d_array(s, "fit_reward_history(session)")
-                        for s in reward_history
+                        _as_1d_array(s, "fit_reward_history(session)") for s in reward_history
                     ]
                     return choice_sessions, reward_sessions, True
 
                 # Otherwise treat as a single session array-like
-                return [
-                    _as_1d_array(choice_history, "fit_choice_history"),
-                ], [
-                    _as_1d_array(reward_history, "fit_reward_history"),
-                ], False
+                return (
+                    [
+                        _as_1d_array(choice_history, "fit_choice_history"),
+                    ],
+                    [
+                        _as_1d_array(reward_history, "fit_reward_history"),
+                    ],
+                    False,
+                )
 
             # Fallback: treat as single session array-like
-            return [
-                _as_1d_array(choice_history, "fit_choice_history"),
-            ], [
-                _as_1d_array(reward_history, "fit_reward_history"),
-            ], False
+            return (
+                [
+                    _as_1d_array(choice_history, "fit_choice_history"),
+                ],
+                [
+                    _as_1d_array(reward_history, "fit_reward_history"),
+                ],
+                False,
+            )
 
         fit_choice_history_sessions, fit_reward_history_sessions, input_was_multi_session = (
             _coerce_to_sessions(fit_choice_history, fit_reward_history)
         )
 
         # Validate per-session lengths match
-        for ii, (c, r) in enumerate(
-            zip(fit_choice_history_sessions, fit_reward_history_sessions)
-        ):
+        for ii, (c, r) in enumerate(zip(fit_choice_history_sessions, fit_reward_history_sessions)):
             if len(c) != len(r):
                 raise ValueError(
                     f"Session {ii} has mismatched lengths: choices={len(c)} rewards={len(r)}"
@@ -552,16 +562,12 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
                 fit_choice_history_sessions, fit_reward_history_sessions
             )
             correct_predictions = 0
-            for choice_prob, choices in zip(
-                choice_prob_sessions, fit_choice_history_sessions
-            ):
+            for choice_prob, choices in zip(choice_prob_sessions, fit_choice_history_sessions):
                 predictive_choice = np.argmax(choice_prob, axis=0)
                 correct_predictions += np.sum(predictive_choice == choices)
             fitting_result.prediction_accuracy = correct_predictions / fitting_result.n_trials
         else:
-            self.perform_closed_loop(
-                fit_choice_history_sessions[0], fit_reward_history_sessions[0]
-            )
+            self.perform_closed_loop(fit_choice_history_sessions[0], fit_reward_history_sessions[0])
             predictive_choice = np.argmax(self.choice_prob, axis=0)
             fitting_result.prediction_accuracy = (
                 np.sum(predictive_choice == fit_choice_history_sessions[0])
@@ -600,12 +606,8 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             self.rng.shuffle(trial_numbers_shuffled)
 
             for kk in range(k_fold_cross_validation):
-                logger.info(
-                    f"Cross-validation fold {kk+1}/{k_fold_cross_validation}..."
-                )
-                test_idx_begin = int(
-                    kk * np.floor(n_trials / k_fold_cross_validation)
-                )
+                logger.info(f"Cross-validation fold {kk+1}/{k_fold_cross_validation}...")
+                test_idx_begin = int(kk * np.floor(n_trials / k_fold_cross_validation))
                 test_idx_end = int(
                     n_trials
                     if (kk == k_fold_cross_validation - 1)
@@ -642,9 +644,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
                 tmp_agent = self.__class__(
                     params=fitting_result_this_fold.params, **self.agent_kwargs
                 )
-                tmp_agent.perform_closed_loop(
-                    fit_choice_history_single, fit_reward_history_single
-                )
+                tmp_agent.perform_closed_loop(fit_choice_history_single, fit_reward_history_single)
                 predictive_choice = np.argmax(tmp_agent.choice_prob, axis=0)
                 correct_predicted = predictive_choice == fit_choice_history_single
 
@@ -657,12 +657,9 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
 
                 if "biasL" in fitting_result_this_fold.params:
                     bias_this = fitting_result_this_fold.params["biasL"]
-                    prediction_correct_bias_only = (
-                        int(bias_this <= 0) == fit_choice_history_single
-                    )
+                    prediction_correct_bias_only = int(bias_this <= 0) == fit_choice_history_single
                     prediction_accuracy_test_bias_only.append(
-                        np.sum(prediction_correct_bias_only[test_set_this])
-                        / len(test_set_this)
+                        np.sum(prediction_correct_bias_only[test_set_this]) / len(test_set_this)
                     )
 
                 log_likelihood_fit = -negLL(
@@ -684,12 +681,8 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             self.rng.shuffle(session_indices)
 
             for kk in range(k_fold_cross_validation):
-                logger.info(
-                    f"Cross-validation fold {kk+1}/{k_fold_cross_validation}..."
-                )
-                test_idx_begin = int(
-                    kk * np.floor(n_sessions / k_fold_cross_validation)
-                )
+                logger.info(f"Cross-validation fold {kk+1}/{k_fold_cross_validation}...")
+                test_idx_begin = int(kk * np.floor(n_sessions / k_fold_cross_validation))
                 test_idx_end = int(
                     n_sessions
                     if (kk == k_fold_cross_validation - 1)
@@ -738,8 +731,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
                 )
                 fit_predictive_choice = np.argmax(fit_probs_concat, axis=0)
                 prediction_accuracy_fit.append(
-                    np.sum(fit_predictive_choice == fit_choices_concat)
-                    / len(fit_choices_concat)
+                    np.sum(fit_predictive_choice == fit_choices_concat) / len(fit_choices_concat)
                 )
 
                 test_choices_concat = np.concatenate(
@@ -750,8 +742,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
                 )
                 test_predictive_choice = np.argmax(test_probs_concat, axis=0)
                 prediction_accuracy_test.append(
-                    np.sum(test_predictive_choice == test_choices_concat)
-                    / len(test_choices_concat)
+                    np.sum(test_predictive_choice == test_choices_concat) / len(test_choices_concat)
                 )
 
                 if "biasL" in fitting_result_this_fold.params:
@@ -1158,12 +1149,8 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
                 ]
             else:
                 # Single session format (backward compatible)
-                fit_settings["fit_choice_history"] = fit_settings[
-                    "fit_choice_history"
-                ].tolist()
-                fit_settings["fit_reward_history"] = fit_settings[
-                    "fit_reward_history"
-                ].tolist()
+                fit_settings["fit_choice_history"] = fit_settings["fit_choice_history"].tolist()
+                fit_settings["fit_reward_history"] = fit_settings["fit_reward_history"].tolist()
         else:
             fit_settings.pop("fit_choice_history")
             fit_settings.pop("fit_reward_history")

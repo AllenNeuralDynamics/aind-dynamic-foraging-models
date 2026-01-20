@@ -63,14 +63,10 @@ def simulate_multi_sessions(
 
     for i, n_trials in enumerate(session_lengths):
         # Create new forager and task for each session
-        forager = ForagerCollection().get_preset_forager(
-            forager_preset, seed=base_seed + i
-        )
+        forager = ForagerCollection().get_preset_forager(forager_preset, seed=base_seed + i)
         forager.set_params(**ground_truth_params)
 
-        task = CoupledBlockTask(
-            num_trials=n_trials, seed=base_seed + i * 100, **task_kwargs
-        )
+        task = CoupledBlockTask(num_trials=n_trials, seed=base_seed + i * 100, **task_kwargs)
 
         # Run generative simulation
         forager.perform(task)
@@ -128,9 +124,7 @@ def plot_multi_session_fitting_results(
 
     # ---- Row 1: Parameter comparison (Ground Truth vs Fitted) ----
     ax = axes[0]
-    ground_truth_values = [
-        ground_truth_params.get(name, np.nan) for name in fit_names
-    ]
+    ground_truth_values = [ground_truth_params.get(name, np.nan) for name in fit_names]
     fitted_values = list(fitting_result.x)
 
     x_pos = np.arange(len(fit_names))
@@ -365,9 +359,7 @@ class TestMultiSessionFitting(unittest.TestCase):
         )
 
         # Create a new forager for fitting
-        forager = ForagerCollection().get_preset_forager(
-            "Win-Stay-Lose-Shift", seed=123
-        )
+        forager = ForagerCollection().get_preset_forager("Win-Stay-Lose-Shift", seed=123)
 
         # Fit across multiple sessions (no CV) - reduced iterations for speed
         fitting_result, _ = forager.fit(
@@ -386,12 +378,8 @@ class TestMultiSessionFitting(unittest.TestCase):
 
         # Assertions
         self.assertTrue(fitting_result.success, "Fitting should succeed")
-        self.assertEqual(
-            fitting_result.n_sessions, len(session_lengths), "Should track n_sessions"
-        )
-        self.assertEqual(
-            fitting_result.n_trials, sum(session_lengths), "Should track total trials"
-        )
+        self.assertEqual(fitting_result.n_sessions, len(session_lengths), "Should track n_sessions")
+        self.assertEqual(fitting_result.n_trials, sum(session_lengths), "Should track total trials")
 
         # Print results for visibility (no parameter recovery checks with small data)
         fit_names = fitting_result.fit_settings["fit_names"]
@@ -443,9 +431,7 @@ class TestMultiSessionFitting(unittest.TestCase):
             base_seed=100,
         )
 
-        forager = ForagerCollection().get_preset_forager(
-            "Win-Stay-Lose-Shift", seed=456
-        )
+        forager = ForagerCollection().get_preset_forager("Win-Stay-Lose-Shift", seed=456)
 
         # Fit with 2-fold session-level CV - reduced iterations for speed
         fitting_result, fitting_result_cv = forager.fit(
@@ -643,9 +629,7 @@ class TestMultiSessionFitting(unittest.TestCase):
         }
 
         # Single session
-        forager_gen = ForagerCollection().get_preset_forager(
-            "Win-Stay-Lose-Shift", seed=42
-        )
+        forager_gen = ForagerCollection().get_preset_forager("Win-Stay-Lose-Shift", seed=42)
         forager_gen.set_params(**ground_truth_params)
         task = CoupledBlockTask(num_trials=200, seed=42, reward_baiting=True)
         forager_gen.perform(task)
@@ -654,9 +638,7 @@ class TestMultiSessionFitting(unittest.TestCase):
         reward_history = forager_gen.get_reward_history()
 
         # Fit using single-session format (backward compatible)
-        forager_single = ForagerCollection().get_preset_forager(
-            "Win-Stay-Lose-Shift", seed=100
-        )
+        forager_single = ForagerCollection().get_preset_forager("Win-Stay-Lose-Shift", seed=100)
         fitting_result_single, _ = forager_single.fit(
             choice_history,  # Single array
             reward_history,  # Single array
@@ -670,9 +652,7 @@ class TestMultiSessionFitting(unittest.TestCase):
         )
 
         # Fit using multi-session format (list with one element)
-        forager_multi = ForagerCollection().get_preset_forager(
-            "Win-Stay-Lose-Shift", seed=100
-        )
+        forager_multi = ForagerCollection().get_preset_forager("Win-Stay-Lose-Shift", seed=100)
         fitting_result_multi, _ = forager_multi.fit(
             [choice_history],  # List with single array
             [reward_history],  # List with single array
@@ -789,9 +769,7 @@ class TestMultiSessionPlotting(unittest.TestCase):
             base_seed=42,
         )
 
-        forager = ForagerCollection().get_preset_forager(
-            "Win-Stay-Lose-Shift", seed=42
-        )
+        forager = ForagerCollection().get_preset_forager("Win-Stay-Lose-Shift", seed=42)
 
         # Fit model - reduced iterations for speed
         fitting_result, _ = forager.fit(
@@ -808,9 +786,7 @@ class TestMultiSessionPlotting(unittest.TestCase):
             k_fold_cross_validation=None,
         )
 
-        forager = ForagerCollection().get_preset_forager(
-            "Win-Stay-Lose-Shift", seed=42
-        )
+        forager = ForagerCollection().get_preset_forager("Win-Stay-Lose-Shift", seed=42)
 
         # Fit the model
         fitting_result, _ = forager.fit(
@@ -843,9 +819,7 @@ class TestMultiSessionPlotting(unittest.TestCase):
         # Test with if_plot_latent=False (no warning expected)
         fig2, axes2 = forager.plot_fitted_session(if_plot_latent=False)
         self.assertIsNotNone(fig2)
-        fig2.savefig(
-            "tests/results/test_plot_fitted_session_multi_wsls_no_latent.png", dpi=100
-        )
+        fig2.savefig("tests/results/test_plot_fitted_session_multi_wsls_no_latent.png", dpi=100)
         plt.close(fig2)
 
     def test_plot_fitted_session_multi_session_hattori(self):
@@ -974,21 +948,13 @@ class TestMultiSessionPlotting(unittest.TestCase):
         self.assertIsNotNone(axes)
 
         # Add ground truth Q-values for comparison
-        axes[0].plot(
-            ground_truth_q_value[0], lw=1, color="red", ls="-", label="actual_Q(L)"
-        )
-        axes[0].plot(
-            ground_truth_q_value[1], lw=1, color="blue", ls="-", label="actual_Q(R)"
-        )
+        axes[0].plot(ground_truth_q_value[0], lw=1, color="red", ls="-", label="actual_Q(L)")
+        axes[0].plot(ground_truth_q_value[1], lw=1, color="blue", ls="-", label="actual_Q(R)")
         axes[0].legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.6, 1.3), ncol=4)
 
-        fig.savefig(
-            "tests/results/test_plot_fitted_session_single_hattori.png", dpi=100
-        )
+        fig.savefig("tests/results/test_plot_fitted_session_single_hattori.png", dpi=100)
         plt.close(fig)
-        print(
-            "plot_fitted_session() single-session backward compatibility verified"
-        )
+        print("plot_fitted_session() single-session backward compatibility verified")
 
     def test_plot_session_generative(self):
         """Test plot_session() for generative simulation (single session)."""
@@ -1027,9 +993,7 @@ class TestMultiSessionPlotting(unittest.TestCase):
         plt.close(fig)
 
         # Test for WSLS model
-        forager_wsls = ForagerCollection().get_preset_forager(
-            "Win-Stay-Lose-Shift", seed=42
-        )
+        forager_wsls = ForagerCollection().get_preset_forager("Win-Stay-Lose-Shift", seed=42)
         forager_wsls.set_params(biasL=0.1)
         task_wsls = CoupledBlockTask(num_trials=100, seed=42, reward_baiting=True)
         forager_wsls.perform(task_wsls)
@@ -1076,9 +1040,7 @@ class TestMultiSessionPlotting(unittest.TestCase):
         self.assertEqual(len(choice_prob_sessions), len(session_lengths))
 
         # Check each session's choice_prob shape
-        for i, (choice_prob, expected_len) in enumerate(
-            zip(choice_prob_sessions, session_lengths)
-        ):
+        for i, (choice_prob, expected_len) in enumerate(zip(choice_prob_sessions, session_lengths)):
             self.assertEqual(
                 choice_prob.shape,
                 (2, expected_len),
@@ -1095,9 +1057,7 @@ class TestMultiSessionPlotting(unittest.TestCase):
 
         # Verify that the choice_prob matches ground truth (same params)
         gt_choice_probs = session_info["choice_prob_sessions"]
-        for i, (computed, expected) in enumerate(
-            zip(choice_prob_sessions, gt_choice_probs)
-        ):
+        for i, (computed, expected) in enumerate(zip(choice_prob_sessions, gt_choice_probs)):
             np.testing.assert_array_almost_equal(
                 computed,
                 expected,
@@ -1123,9 +1083,7 @@ class TestMultiSessionPlotting(unittest.TestCase):
             base_seed=42,
         )
 
-        forager = ForagerCollection().get_preset_forager(
-            "Win-Stay-Lose-Shift", seed=42
-        )
+        forager = ForagerCollection().get_preset_forager("Win-Stay-Lose-Shift", seed=42)
 
         # Fit model - reduced iterations for speed
         fitting_result, _ = forager.fit(
@@ -1142,9 +1100,7 @@ class TestMultiSessionPlotting(unittest.TestCase):
             k_fold_cross_validation=None,
         )
 
-        forager = ForagerCollection().get_preset_forager(
-            "Win-Stay-Lose-Shift", seed=42
-        )
+        forager = ForagerCollection().get_preset_forager("Win-Stay-Lose-Shift", seed=42)
 
         fitting_result, _ = forager.fit(
             choice_sessions,
@@ -1199,9 +1155,7 @@ class TestMultiSessionCVValidation(unittest.TestCase):
             base_seed=42,
         )
 
-        forager = ForagerCollection().get_preset_forager(
-            "Win-Stay-Lose-Shift", seed=42
-        )
+        forager = ForagerCollection().get_preset_forager("Win-Stay-Lose-Shift", seed=42)
 
         # Should raise ValueError when k_fold > n_sessions
         with self.assertRaises(ValueError) as context:

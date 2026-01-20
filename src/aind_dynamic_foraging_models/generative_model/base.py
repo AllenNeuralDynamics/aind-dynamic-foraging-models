@@ -314,7 +314,7 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         """
         raise NotImplementedError("The 'learn' method should be overridden by subclasses.")
 
-    def fit(
+    def fit(  # noqa: C901
         self,
         fit_choice_history,
         fit_reward_history,

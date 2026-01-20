@@ -18,8 +18,6 @@ from aind_behavior_gym.dynamic_foraging.task import CoupledBlockTask
 
 from aind_dynamic_foraging_models.generative_model import (
     ForagerCollection,
-    ForagerLossCounting,
-    ForagerQLearning,
 )
 
 
@@ -180,7 +178,8 @@ def plot_multi_session_fitting_results(
     ax = axes[1]
     metrics_text = (
         f"Model: {session_info['forager_preset']}\n"
-        f"Sessions: {session_info['n_sessions']}, Session lengths: {session_info['session_lengths']}\n"
+        f"Sessions: {session_info['n_sessions']}, "
+        f"Session lengths: {session_info['session_lengths']}\n"
         f"Total trials: {session_info['total_trials']}\n\n"
         f"Fitting Success: {fitting_result.success}\n"
         f"Log-Likelihood: {fitting_result.log_likelihood:.4f}\n"
@@ -193,9 +192,11 @@ def plot_multi_session_fitting_results(
     if fitting_result_cv is not None:
         metrics_text += (
             f"\n--- Cross-Validation Results ---\n"
-            f"CV Prediction Accuracy (Train): {np.mean(fitting_result_cv['prediction_accuracy_fit']):.4f} "
+            f"CV Prediction Accuracy (Train): "
+            f"{np.mean(fitting_result_cv['prediction_accuracy_fit']):.4f} "
             f"(+/- {np.std(fitting_result_cv['prediction_accuracy_fit']):.4f})\n"
-            f"CV Prediction Accuracy (Test): {np.mean(fitting_result_cv['prediction_accuracy_test']):.4f} "
+            f"CV Prediction Accuracy (Test): "
+            f"{np.mean(fitting_result_cv['prediction_accuracy_test']):.4f} "
             f"(+/- {np.std(fitting_result_cv['prediction_accuracy_test']):.4f})\n"
             f"CV LPT (Train): {np.mean(fitting_result_cv['LPT_fit']):.4f}\n"
             f"CV LPT (Test): {np.mean(fitting_result_cv['LPT_test']):.4f}\n"
@@ -457,10 +458,12 @@ class TestMultiSessionFitting(unittest.TestCase):
         print(f"\nGround truth params: {ground_truth_params}")
         print(f"Fitted params: {fitting_result.params}")
         print(
-            f"CV Prediction Accuracy (Test): {np.mean(fitting_result_cv['prediction_accuracy_test']):.4f}"
+            f"CV Prediction Accuracy (Test): "
+            f"{np.mean(fitting_result_cv['prediction_accuracy_test']):.4f}"
         )
         print(
-            f"CV Prediction Accuracy (Train): {np.mean(fitting_result_cv['prediction_accuracy_fit']):.4f}"
+            f"CV Prediction Accuracy (Train): "
+            f"{np.mean(fitting_result_cv['prediction_accuracy_fit']):.4f}"
         )
 
         # Generate plot

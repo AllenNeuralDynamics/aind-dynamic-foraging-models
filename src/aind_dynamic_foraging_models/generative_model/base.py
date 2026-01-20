@@ -1,7 +1,7 @@
 """Base class for DynamicForagingAgent with MLE fitting"""
 
 import logging
-from typing import List, Optional, Sequence, Tuple, Type, Union
+from typing import List, Optional, Tuple, Type
 
 import numpy as np
 import scipy.optimize as optimize
@@ -254,10 +254,12 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
     def perform_closed_loop_multi_session(
         self, fit_choice_history_sessions, fit_reward_history_sessions
     ):
-        """Simulates the agent over multiple sessions, resetting latent states at each session start.
+        """Simulates the agent over multiple sessions, resetting latent states at each
+        session start.
 
-        Unlike .perform() ("generative" simulation), this is called "predictive" simulation,
-        which does not need a task and is used for model fitting across multiple sessions.
+        Unlike .perform() ("generative" simulation), this is called "predictive"
+        simulation, which does not need a task and is used for model fitting across
+        multiple sessions.
 
         Parameters
         ----------
@@ -419,11 +421,13 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
                 if is_multi_session:
                     if not isinstance(reward_history, (list, tuple)):
                         raise ValueError(
-                            "fit_reward_history must be a list/tuple when fit_choice_history is multi-session"
+                            "fit_reward_history must be a list/tuple when "
+                            "fit_choice_history is multi-session"
                         )
                     if len(reward_history) != len(choice_history):
                         raise ValueError(
-                            "fit_choice_history and fit_reward_history must have the same number of sessions"
+                            "fit_choice_history and fit_reward_history must have the same"
+                            " number of sessions"
                         )
 
                     choice_sessions = [
@@ -476,7 +480,8 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             and n_sessions < k_fold_cross_validation
         ):
             raise ValueError(
-                f"Number of sessions ({n_sessions}) must be >= k_fold_cross_validation ({k_fold_cross_validation})"
+                f"Number of sessions ({n_sessions}) must be >= "
+                f"k_fold_cross_validation ({k_fold_cross_validation})"
             )
 
         # ===== Preparation =====

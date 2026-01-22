@@ -1,11 +1,12 @@
 """Base class for DynamicForagingAgent with MLE fitting"""
 
 import logging
-from typing import Optional, Tuple, Type
+from typing import List, Optional, Tuple, Type
 
-from pydantic import BaseModel
 import numpy as np
 import scipy.optimize as optimize
+from pydantic import BaseModel
+
 try:
     from aind_behavior_gym.dynamic_foraging.agent import DynamicForagingAgentBase
     from aind_behavior_gym.dynamic_foraging.task import DynamicForagingTaskBase
@@ -250,6 +251,39 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             # -- Update q values
             self.learn(None, clamped_choice, clamped_reward, None, None)
 
+    def perform_closed_loop_multi_session(
+        self, fit_choice_history_sessions, fit_reward_history_sessions
+    ):
+        """Simulates the agent over multiple sessions, resetting latent states at each
+        session start.
+
+        Unlike .perform() ("generative" simulation), this is called "predictive"
+        simulation, which does not need a task and is used for model fitting across
+        multiple sessions.
+
+        Parameters
+        ----------
+        fit_choice_history_sessions : list of np.ndarray
+            List of choice history arrays, one per session
+        fit_reward_history_sessions : list of np.ndarray
+            List of reward history arrays, one per session
+
+        Returns
+        -------
+        choice_prob_sessions : list of np.ndarray
+            List of choice probability arrays, one per session
+        """
+        choice_prob_sessions = []
+
+        for choice_hist, reward_hist in zip(
+            fit_choice_history_sessions, fit_reward_history_sessions
+        ):
+            # perform_closed_loop calls _reset() which initializes latent states to initial values
+            self.perform_closed_loop(choice_hist, reward_hist)
+            choice_prob_sessions.append(self.choice_prob.copy())
+
+        return choice_prob_sessions
+
     def act(self, observation):
         """
         Chooses an action based on the current observation.
@@ -280,12 +314,12 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         """
         raise NotImplementedError("The 'learn' method should be overridden by subclasses.")
 
-    def fit(
+    def fit(  # noqa: C901
         self,
         fit_choice_history,
         fit_reward_history,
         fit_bounds_override: Optional[dict] = {},
-        clamp_params: Optional[dict] = {},
+        clamp_params: Optional[dict] = None,
         k_fold_cross_validation: Optional[int] = None,
         DE_kwargs: Optional[dict] = {"workers": 1},
     ):
@@ -299,12 +333,20 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         For example, if params_to_fit and clamp_params are all empty, all parameters will
         be fitted with default bounds in the model's ParamFitBounds.
 
+        Supports both single-session and multi-session fitting.
+
+        Multi-session format is a list/tuple of per-session 1D arrays.
+        In multi-session fitting, latent states (Q-values, choice kernels, etc.)
+        are reset at the start of each session.
+
         Parameters
         ----------
-        fit_choice_history : _type_
-            _description_
-        fit_reward_history : _type_
-            _description_
+        fit_choice_history : np.ndarray or List[np.ndarray]
+            Choice history for fitting. Can be either:
+            - A single 1D array for single-session fitting (backward compatible)
+            - A list of 1D arrays for multi-session fitting, one array per session
+        fit_reward_history : np.ndarray or List[np.ndarray]
+            Reward history for fitting. Must match the format of fit_choice_history.
         fit_bounds_override : dict, optional
             Override the default bounds for fitting parameters in ParamFitBounds, by default {}
         clamp_params : dict, optional
@@ -313,6 +355,10 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             Whether to do cross-validation, by default None (no cross-validation).
             If k_fold_cross_validation > 1, it will do k-fold cross-validation and return the
             prediction accuracy of the test set for model comparison.
+            Cross-validation behavior:
+            - Single-session input: trial-level k-fold CV (backward compatible)
+            - Multi-session input: session-level k-fold CV (entire sessions held out)
+              Requires n_sessions >= k_fold_cross_validation.
         DE_kwargs : dict, optional
             kwargs for differential_evolution, by default {'workers': 1}
             For example:
@@ -330,15 +376,122 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
 
         Returns
         -------
-        _type_
-            _description_
+        fitting_result : OptimizeResult
+            The fitting result object containing optimized parameters and statistics.
+        fitting_result_cross_validation : dict or None
+            Cross-validation results if k_fold_cross_validation is specified, else None.
         """
+
+        # ===== Input Detection and Normalization =====
+        def _as_1d_array(x, name: str) -> np.ndarray:
+            arr = np.asarray(x)
+            if arr.ndim != 1:
+                raise ValueError(f"{name} must be 1D array-like; got shape {arr.shape}")
+            return arr
+
+        def _coerce_to_sessions(
+            choice_history,
+            reward_history,
+        ) -> Tuple[List[np.ndarray], List[np.ndarray], bool]:
+            """Return (choice_sessions, reward_sessions, input_was_multi_session)."""
+            # Single session (np.ndarray)
+            if isinstance(choice_history, np.ndarray):
+                return (
+                    [
+                        _as_1d_array(choice_history, "fit_choice_history"),
+                    ],
+                    [
+                        _as_1d_array(reward_history, "fit_reward_history"),
+                    ],
+                    False,
+                )
+
+            # Possibly list/tuple
+            if isinstance(choice_history, (list, tuple)):
+                if len(choice_history) == 0:
+                    raise ValueError("fit_choice_history cannot be an empty list")
+
+                # Multi-session if the first element is itself 1D array-like.
+                # Otherwise treat as single-session (e.g. list[int]).
+                first = choice_history[0]
+                is_multi_session = isinstance(first, (np.ndarray, list, tuple)) and (
+                    np.asarray(first).ndim == 1
+                )
+
+                if is_multi_session:
+                    if not isinstance(reward_history, (list, tuple)):
+                        raise ValueError(
+                            "fit_reward_history must be a list/tuple when "
+                            "fit_choice_history is multi-session"
+                        )
+                    if len(reward_history) != len(choice_history):
+                        raise ValueError(
+                            "fit_choice_history and fit_reward_history must have the same"
+                            " number of sessions"
+                        )
+
+                    choice_sessions = [
+                        _as_1d_array(s, "fit_choice_history(session)") for s in choice_history
+                    ]
+                    reward_sessions = [
+                        _as_1d_array(s, "fit_reward_history(session)") for s in reward_history
+                    ]
+                    return choice_sessions, reward_sessions, True
+
+                # Otherwise treat as a single session array-like
+                return (
+                    [
+                        _as_1d_array(choice_history, "fit_choice_history"),
+                    ],
+                    [
+                        _as_1d_array(reward_history, "fit_reward_history"),
+                    ],
+                    False,
+                )
+
+            # Fallback: treat as single session array-like
+            return (
+                [
+                    _as_1d_array(choice_history, "fit_choice_history"),
+                ],
+                [
+                    _as_1d_array(reward_history, "fit_reward_history"),
+                ],
+                False,
+            )
+
+        fit_choice_history_sessions, fit_reward_history_sessions, input_was_multi_session = (
+            _coerce_to_sessions(fit_choice_history, fit_reward_history)
+        )
+
+        # Validate per-session lengths match
+        for ii, (c, r) in enumerate(zip(fit_choice_history_sessions, fit_reward_history_sessions)):
+            if len(c) != len(r):
+                raise ValueError(
+                    f"Session {ii} has mismatched lengths: choices={len(c)} rewards={len(r)}"
+                )
+
+        n_sessions = len(fit_choice_history_sessions)
+
+        # For multi-session cross-validation, check that we have enough sessions
+        if (
+            k_fold_cross_validation is not None
+            and input_was_multi_session
+            and n_sessions < k_fold_cross_validation
+        ):
+            raise ValueError(
+                f"Number of sessions ({n_sessions}) must be >= "
+                f"k_fold_cross_validation ({k_fold_cross_validation})"
+            )
+
         # ===== Preparation =====
         # -- Sanity checks --
+        if clamp_params is None:
+            clamp_params = {}
         # Ensure params_to_fit and clamp_params are not overlapping
         assert set(fit_bounds_override.keys()).isdisjoint(clamp_params.keys())
         # Validate clamp_params
-        assert self.ParamModel(**clamp_params)
+        self.ParamModel(**clamp_params)
 
         # -- Get fit_names and fit_bounds --
         # Validate fit_bounds_override and fill in the missing bounds with default bounds
@@ -383,16 +536,25 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         # # ===== Fit using the whole dataset ======
         logger.info("Fitting the model using the whole dataset...")
         fitting_result = self._optimize_DE(
-            fit_choice_history=fit_choice_history,
-            fit_reward_history=fit_reward_history,
+            fit_choice_history_sessions=fit_choice_history_sessions,
+            fit_reward_history_sessions=fit_reward_history_sessions,
             fit_names=fit_names,
             lower_bounds=lower_bounds,
             upper_bounds=upper_bounds,
             clamp_params=clamp_params,
-            fit_trial_set=None,  # None means use all trials to fit
+            fit_session_set=None,  # None means use all sessions to fit
+            fit_trial_set=None,
             agent_kwargs=self.agent_kwargs,  # the class AND agent_kwargs fully define the agent
             DE_kwargs=DE_kwargs,
         )
+
+        # Preserve backward-compatible fit_settings format for single-session input
+        if input_was_multi_session:
+            fitting_result.fit_settings["fit_choice_history"] = fit_choice_history_sessions
+            fitting_result.fit_settings["fit_reward_history"] = fit_reward_history_sessions
+        else:
+            fitting_result.fit_settings["fit_choice_history"] = fit_choice_history_sessions[0]
+            fitting_result.fit_settings["fit_reward_history"] = fit_reward_history_sessions[0]
 
         # -- Save fitting results --
         self.fitting_result = fitting_result
@@ -400,12 +562,22 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         # -- Rerun the predictive simulation with the fitted params--
         # To fill in the latent variables like q_value and choice_prob
         self.set_params(**fitting_result.params)
-        self.perform_closed_loop(fit_choice_history, fit_reward_history)
-        # Compute prediction accuracy
-        predictive_choice = np.argmax(self.choice_prob, axis=0)
-        fitting_result.prediction_accuracy = (
-            np.sum(predictive_choice == fit_choice_history) / fitting_result.n_trials
-        )
+        if input_was_multi_session:
+            choice_prob_sessions = self.perform_closed_loop_multi_session(
+                fit_choice_history_sessions, fit_reward_history_sessions
+            )
+            correct_predictions = 0
+            for choice_prob, choices in zip(choice_prob_sessions, fit_choice_history_sessions):
+                predictive_choice = np.argmax(choice_prob, axis=0)
+                correct_predictions += np.sum(predictive_choice == choices)
+            fitting_result.prediction_accuracy = correct_predictions / fitting_result.n_trials
+        else:
+            self.perform_closed_loop(fit_choice_history_sessions[0], fit_reward_history_sessions[0])
+            predictive_choice = np.argmax(self.choice_prob, axis=0)
+            fitting_result.prediction_accuracy = (
+                np.sum(predictive_choice == fit_choice_history_sessions[0])
+                / fitting_result.n_trials
+            )
 
         if k_fold_cross_validation is None:  # Skip cross-validation
             return fitting_result, None
@@ -414,10 +586,6 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         logger.info(
             f"Cross-validating the model using {k_fold_cross_validation}-fold cross-validation..."
         )
-        n_trials = len(fit_choice_history)
-        trial_numbers_shuffled = np.arange(n_trials)
-        self.rng.shuffle(trial_numbers_shuffled)
-
         prediction_accuracy_fit = []
         LPT_fit = []
         prediction_accuracy_test = []
@@ -425,72 +593,187 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         prediction_accuracy_test_bias_only = []
         fitting_results_all_folds = []
 
-        for kk in range(k_fold_cross_validation):
-            logger.info(f"Cross-validation fold {kk+1}/{k_fold_cross_validation}...")
-            # -- Split the data --
-            test_idx_begin = int(kk * np.floor(n_trials / k_fold_cross_validation))
-            test_idx_end = int(
-                n_trials
-                if (kk == k_fold_cross_validation - 1)
-                else (kk + 1) * np.floor(n_trials / k_fold_cross_validation)
+        if not input_was_multi_session:
+            # ---- Single-session: trial-level CV (backward compatible) ----
+            logger.warning(
+                "Single-session trial-level cross-validation is theoretically incorrect "
+                "because trials within a session are autocorrelated. This introduces "
+                "data leakage between train and test sets, as the shuffling of trials "
+                "does not properly account for temporal dependencies. However, this "
+                "approach is commonly used in practice (e.g., Hattori et al., 2019). "
+                "For proper cross-validation, use multi-session input to enable "
+                "session-level CV, which holds out entire sessions."
             )
-            test_set_this = trial_numbers_shuffled[test_idx_begin:test_idx_end]
-            fit_set_this = np.hstack(
-                (trial_numbers_shuffled[:test_idx_begin], trial_numbers_shuffled[test_idx_end:])
-            )
+            fit_choice_history_single = fit_choice_history_sessions[0]
+            fit_reward_history_single = fit_reward_history_sessions[0]
+            n_trials = len(fit_choice_history_single)
+            trial_numbers_shuffled = np.arange(n_trials)
+            self.rng.shuffle(trial_numbers_shuffled)
 
-            # -- Fit data using fit_set_this --
-            fitting_result_this_fold = self._optimize_DE(
-                agent_kwargs=self.agent_kwargs,  # the class AND agent_kwargs fully define the agent
-                fit_choice_history=fit_choice_history,
-                fit_reward_history=fit_reward_history,
-                fit_names=fit_names,
-                lower_bounds=lower_bounds,
-                upper_bounds=upper_bounds,
-                clamp_params=clamp_params,
-                fit_trial_set=fit_set_this,
-                DE_kwargs=DE_kwargs,
-            )
-            fitting_results_all_folds.append(fitting_result_this_fold)
-
-            # -- Compute the prediction accuracy of testing set --
-            # Run PREDICTIVE simulation using temp_agent with the fitted parms of this fold
-            tmp_agent = self.__class__(params=fitting_result_this_fold.params, **self.agent_kwargs)
-            tmp_agent.perform_closed_loop(fit_choice_history, fit_reward_history)
-
-            # Compute prediction accuracy
-            predictive_choice_prob_this_fold = np.argmax(tmp_agent.choice_prob, axis=0)
-
-            correct_predicted = predictive_choice_prob_this_fold == fit_choice_history
-            prediction_accuracy_fit.append(
-                np.sum(correct_predicted[fit_set_this]) / len(fit_set_this)
-            )
-            prediction_accuracy_test.append(
-                np.sum(correct_predicted[test_set_this]) / len(test_set_this)
-            )
-            # Also return cross-validated prediction_accuracy_bias_only
-            if "biasL" in fitting_result_this_fold.params:
-                bias_this = fitting_result_this_fold.params["biasL"]
-                prediction_correct_bias_only = (
-                    int(bias_this <= 0) == fit_choice_history
-                )  # If bias_this < 0, bias predicts all rightward choices
-                prediction_accuracy_test_bias_only.append(
-                    sum(prediction_correct_bias_only[test_set_this]) / len(test_set_this)
+            for kk in range(k_fold_cross_validation):
+                logger.info(f"Cross-validation fold {kk+1}/{k_fold_cross_validation}...")
+                test_idx_begin = int(kk * np.floor(n_trials / k_fold_cross_validation))
+                test_idx_end = int(
+                    n_trials
+                    if (kk == k_fold_cross_validation - 1)
+                    else (kk + 1) * np.floor(n_trials / k_fold_cross_validation)
+                )
+                test_set_this = trial_numbers_shuffled[test_idx_begin:test_idx_end]
+                fit_set_this = np.hstack(
+                    (
+                        trial_numbers_shuffled[:test_idx_begin],
+                        trial_numbers_shuffled[test_idx_end:],
+                    )
                 )
 
-            # -- Compute LPT (Likelihood-Per-Trial) for both fit and test sets --
-            log_likelihood_fit = -negLL(
-                choice_prob=tmp_agent.choice_prob[:, fit_set_this],
-                fit_choice_history=fit_choice_history[fit_set_this],
-                fit_reward_history=fit_reward_history[fit_set_this],
-            )
-            LPT_fit.append(np.exp(log_likelihood_fit / len(fit_set_this)))
-            log_likelihood_test = -negLL(
-                choice_prob=tmp_agent.choice_prob[:, test_set_this],
-                fit_choice_history=fit_choice_history[test_set_this],
-                fit_reward_history=fit_reward_history[test_set_this],
-            )
-            LPT_test.append(np.exp(log_likelihood_test / len(test_set_this)))
+                fitting_result_this_fold = self._optimize_DE(
+                    agent_kwargs=self.agent_kwargs,
+                    fit_choice_history_sessions=fit_choice_history_sessions,
+                    fit_reward_history_sessions=fit_reward_history_sessions,
+                    fit_names=fit_names,
+                    lower_bounds=lower_bounds,
+                    upper_bounds=upper_bounds,
+                    clamp_params=clamp_params,
+                    fit_session_set=None,
+                    fit_trial_set=fit_set_this,
+                    DE_kwargs=DE_kwargs,
+                )
+                fitting_result_this_fold.fit_settings["fit_choice_history"] = (
+                    fit_choice_history_single
+                )
+                fitting_result_this_fold.fit_settings["fit_reward_history"] = (
+                    fit_reward_history_single
+                )
+                fitting_results_all_folds.append(fitting_result_this_fold)
+
+                tmp_agent = self.__class__(
+                    params=fitting_result_this_fold.params, **self.agent_kwargs
+                )
+                tmp_agent.perform_closed_loop(fit_choice_history_single, fit_reward_history_single)
+                predictive_choice = np.argmax(tmp_agent.choice_prob, axis=0)
+                correct_predicted = predictive_choice == fit_choice_history_single
+
+                prediction_accuracy_fit.append(
+                    np.sum(correct_predicted[fit_set_this]) / len(fit_set_this)
+                )
+                prediction_accuracy_test.append(
+                    np.sum(correct_predicted[test_set_this]) / len(test_set_this)
+                )
+
+                if "biasL" in fitting_result_this_fold.params:
+                    bias_this = fitting_result_this_fold.params["biasL"]
+                    prediction_correct_bias_only = int(bias_this <= 0) == fit_choice_history_single
+                    prediction_accuracy_test_bias_only.append(
+                        np.sum(prediction_correct_bias_only[test_set_this]) / len(test_set_this)
+                    )
+
+                log_likelihood_fit = -negLL(
+                    choice_prob=tmp_agent.choice_prob[:, fit_set_this],
+                    fit_choice_history=fit_choice_history_single[fit_set_this],
+                    fit_reward_history=fit_reward_history_single[fit_set_this],
+                )
+                LPT_fit.append(np.exp(log_likelihood_fit / len(fit_set_this)))
+                log_likelihood_test = -negLL(
+                    choice_prob=tmp_agent.choice_prob[:, test_set_this],
+                    fit_choice_history=fit_choice_history_single[test_set_this],
+                    fit_reward_history=fit_reward_history_single[test_set_this],
+                )
+                LPT_test.append(np.exp(log_likelihood_test / len(test_set_this)))
+
+        else:
+            # ---- Multi-session: session-level CV ----
+            session_indices = np.arange(n_sessions)
+            self.rng.shuffle(session_indices)
+
+            for kk in range(k_fold_cross_validation):
+                logger.info(f"Cross-validation fold {kk+1}/{k_fold_cross_validation}...")
+                test_idx_begin = int(kk * np.floor(n_sessions / k_fold_cross_validation))
+                test_idx_end = int(
+                    n_sessions
+                    if (kk == k_fold_cross_validation - 1)
+                    else (kk + 1) * np.floor(n_sessions / k_fold_cross_validation)
+                )
+                test_session_set = session_indices[test_idx_begin:test_idx_end]
+                fit_session_set = np.hstack(
+                    (
+                        session_indices[:test_idx_begin],
+                        session_indices[test_idx_end:],
+                    )
+                )
+
+                fitting_result_this_fold = self._optimize_DE(
+                    agent_kwargs=self.agent_kwargs,
+                    fit_choice_history_sessions=fit_choice_history_sessions,
+                    fit_reward_history_sessions=fit_reward_history_sessions,
+                    fit_names=fit_names,
+                    lower_bounds=lower_bounds,
+                    upper_bounds=upper_bounds,
+                    clamp_params=clamp_params,
+                    fit_session_set=fit_session_set,
+                    fit_trial_set=None,
+                    DE_kwargs=DE_kwargs,
+                )
+                fitting_result_this_fold.fit_settings["fit_choice_history"] = (
+                    fit_choice_history_sessions
+                )
+                fitting_result_this_fold.fit_settings["fit_reward_history"] = (
+                    fit_reward_history_sessions
+                )
+                fitting_results_all_folds.append(fitting_result_this_fold)
+
+                tmp_agent = self.__class__(
+                    params=fitting_result_this_fold.params, **self.agent_kwargs
+                )
+                choice_prob_sessions = tmp_agent.perform_closed_loop_multi_session(
+                    fit_choice_history_sessions, fit_reward_history_sessions
+                )
+
+                fit_choices_concat = np.concatenate(
+                    [fit_choice_history_sessions[i] for i in fit_session_set]
+                )
+                fit_probs_concat = np.concatenate(
+                    [choice_prob_sessions[i] for i in fit_session_set], axis=1
+                )
+                fit_predictive_choice = np.argmax(fit_probs_concat, axis=0)
+                prediction_accuracy_fit.append(
+                    np.sum(fit_predictive_choice == fit_choices_concat) / len(fit_choices_concat)
+                )
+
+                test_choices_concat = np.concatenate(
+                    [fit_choice_history_sessions[i] for i in test_session_set]
+                )
+                test_probs_concat = np.concatenate(
+                    [choice_prob_sessions[i] for i in test_session_set], axis=1
+                )
+                test_predictive_choice = np.argmax(test_probs_concat, axis=0)
+                prediction_accuracy_test.append(
+                    np.sum(test_predictive_choice == test_choices_concat) / len(test_choices_concat)
+                )
+
+                if "biasL" in fitting_result_this_fold.params:
+                    bias_this = fitting_result_this_fold.params["biasL"]
+                    prediction_correct_bias_only = int(bias_this <= 0) == test_choices_concat
+                    prediction_accuracy_test_bias_only.append(
+                        np.sum(prediction_correct_bias_only) / len(test_choices_concat)
+                    )
+
+                log_likelihood_fit = 0.0
+                for sess_idx in fit_session_set:
+                    log_likelihood_fit += -negLL(
+                        choice_prob=choice_prob_sessions[sess_idx],
+                        fit_choice_history=fit_choice_history_sessions[sess_idx],
+                        fit_reward_history=fit_reward_history_sessions[sess_idx],
+                    )
+                LPT_fit.append(np.exp(log_likelihood_fit / len(fit_choices_concat)))
+
+                log_likelihood_test = 0.0
+                for sess_idx in test_session_set:
+                    log_likelihood_test += -negLL(
+                        choice_prob=choice_prob_sessions[sess_idx],
+                        fit_choice_history=fit_choice_history_sessions[sess_idx],
+                        fit_reward_history=fit_reward_history_sessions[sess_idx],
+                    )
+                LPT_test.append(np.exp(log_likelihood_test / len(test_choices_concat)))
 
         # --- Save all cross_validation results, including raw fitting result of each fold ---
         fitting_result_cross_validation = dict(
@@ -507,12 +790,13 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
     def _optimize_DE(
         self,
         agent_kwargs,
-        fit_choice_history,
-        fit_reward_history,
+        fit_choice_history_sessions,
+        fit_reward_history_sessions,
         fit_names,
         lower_bounds,
         upper_bounds,
         clamp_params,
+        fit_session_set,
         fit_trial_set,
         DE_kwargs,
     ):
@@ -544,9 +828,10 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
             bounds=optimize.Bounds(lower_bounds, upper_bounds),
             args=(
                 agent_kwargs,  # Other kwargs to pass to the model
-                fit_choice_history,
-                fit_reward_history,
-                fit_trial_set,  # subset of trials to fit; if empty, use all trials)
+                fit_choice_history_sessions,
+                fit_reward_history_sessions,
+                fit_session_set,  # subset of sessions to fit; if empty, use all sessions)
+                fit_trial_set,  # subset of trials (single-session CV only)
                 fit_names,  # Pass names so that negLL_func_for_de knows which parameters to fit
                 clamp_params,  # Clamped parameters
             ),
@@ -555,8 +840,8 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
 
         # --- Post-processing ---
         fitting_result.fit_settings = dict(
-            fit_choice_history=fit_choice_history,
-            fit_reward_history=fit_reward_history,
+            fit_choice_history=fit_choice_history_sessions,
+            fit_reward_history=fit_reward_history_sessions,
             fit_names=fit_names,
             lower_bounds=lower_bounds,
             upper_bounds=upper_bounds,
@@ -567,14 +852,30 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         params = dict(zip(fit_names, fitting_result.x))
         params.update(clamp_params)
         fitting_result.params = params
-        fitting_result.k_model = len(fit_names)  # Number of free parameters of the model
+        fitting_result.k_model = len(fit_names)  # Number of free parameters of model
 
         # Total trial numbers for fitting
-        fitting_result.n_trials = (
-            len(fit_choice_history) if fit_trial_set is None else len(fit_trial_set)
-        )
-        # Also save the fit_trial_set
-        fitting_result.fit_trial_set = fit_trial_set
+        if fit_trial_set is not None:
+            # Single-session CV path: fit_trial_set selects within the (only) session.
+            fitting_result.n_trials = len(fit_trial_set)
+            fitting_result.fit_trial_set = fit_trial_set
+            fitting_result.fit_session_set = None
+            fitting_result.n_sessions = 1
+            fitting_result.session_lengths = [len(fit_choice_history_sessions[0])]
+        else:
+            # All trials in selected sessions
+            if fit_session_set is None:
+                n_sessions = len(fit_choice_history_sessions)
+                fitting_result.n_trials = sum(len(s) for s in fit_choice_history_sessions)
+            else:
+                n_sessions = len(fit_session_set)
+                fitting_result.n_trials = sum(
+                    len(fit_choice_history_sessions[i]) for i in fit_session_set
+                )
+            fitting_result.fit_trial_set = None
+            fitting_result.fit_session_set = fit_session_set
+            fitting_result.n_sessions = n_sessions
+            fitting_result.session_lengths = [len(s) for s in fit_choice_history_sessions]
 
         fitting_result.log_likelihood = -fitting_result.fun
         fitting_result.AIC = -2 * fitting_result.log_likelihood + 2 * fitting_result.k_model
@@ -607,9 +908,10 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         log_likelihood_without_polishing = -self._cost_func_for_DE(
             x_without_polishing,
             agent_kwargs,  # Other kwargs to pass to the model
-            fit_choice_history,
-            fit_reward_history,
-            fit_trial_set,  # subset of trials to fit; if empty, use all trials)
+            fit_choice_history_sessions,
+            fit_reward_history_sessions,
+            fit_session_set,  # subset of sessions to fit; if empty, use all sessions)
+            fit_trial_set,
             fit_names,  # Pass names so that negLL_func_for_de knows which parameters to fit
             clamp_params,
         )
@@ -624,11 +926,12 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
     @classmethod
     def _cost_func_for_DE(
         cls,
-        current_values,  # the current fitting values of params in fit_names (passed by DE)
+        current_values,  # current fitting values of params in fit_names (passed by DE)
         # ---- Below are the arguments passed by args. The order must be the same! ----
         agent_kwargs,
-        fit_choice_history,
-        fit_reward_history,
+        fit_choice_history_sessions,
+        fit_reward_history_sessions,
+        fit_session_set,
         fit_trial_set,
         fit_names,
         clamp_params,
@@ -645,14 +948,28 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         params.update(clamp_params)  # Add clamped params
         agent = cls(params=params, **agent_kwargs)
 
-        # -- Run **PREDICTIVE** simulation --
-        # (clamp the history and do only one forward step on each trial)
-        agent.perform_closed_loop(fit_choice_history, fit_reward_history)
-        choice_prob = agent.choice_prob
+        # Determine which sessions to fit
+        if fit_session_set is None:
+            sessions_to_fit = range(len(fit_choice_history_sessions))
+        else:
+            sessions_to_fit = fit_session_set
 
-        return negLL(
-            choice_prob, fit_choice_history, fit_reward_history, fit_trial_set
-        )  # Return total negative log likelihood of the fit_trial_set
+        # -- Run **PREDICTIVE** simulation --
+        # Iterate through sessions, resetting latent states at each session start
+        total_negLL = 0.0
+        for sess_idx in sessions_to_fit:
+            agent.perform_closed_loop(
+                fit_choice_history_sessions[sess_idx],
+                fit_reward_history_sessions[sess_idx],
+            )
+            total_negLL += negLL(
+                agent.choice_prob,
+                fit_choice_history_sessions[sess_idx],
+                fit_reward_history_sessions[sess_idx],
+                fit_trial_set=fit_trial_set if sess_idx == 0 else None,
+            )
+
+        return total_negLL  # Return total negative log likelihood of the selected data
 
     def plot_session(self, if_plot_latent=True):
         """Plot session after .perform(task)
@@ -710,21 +1027,78 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         self.set_params(**self.fitting_result.params)
         fit_choice_history = self.fitting_result.fit_settings["fit_choice_history"]
         fit_reward_history = self.fitting_result.fit_settings["fit_reward_history"]
-        self.perform_closed_loop(fit_choice_history, fit_reward_history)
+
+        # Check if multi-session or single-session format
+        is_multi_session = isinstance(fit_choice_history, list)
+        if is_multi_session and if_plot_latent:
+            # Latent state is only cached for the last perform_closed_loop() call.
+            # Avoid plotting it against concatenated trials.
+            logger.warning(
+                "plot_fitted_session(if_plot_latent=True) is not supported for multi-session fits. "
+                "Re-run per-session and plot latent variables session-by-session."
+            )
+            if_plot_latent = False
+
+        if is_multi_session:
+            # Multi-session format
+            # Concatenate all sessions for plotting
+            fit_choice_history_concat = np.concatenate(fit_choice_history)
+            fit_reward_history_concat = np.concatenate(fit_reward_history)
+            session_boundaries = np.cumsum([0] + [len(s) for s in fit_choice_history[:-1]])
+
+            # Run multi-session closed loop to get latent variables
+            choice_prob_sessions = self.perform_closed_loop_multi_session(
+                fit_choice_history, fit_reward_history
+            )
+            self.n_trials = len(fit_choice_history_concat)
+        else:
+            # Single session format (backward compatible)
+            fit_choice_history_concat = fit_choice_history
+            fit_reward_history_concat = fit_reward_history
+            session_boundaries = []
+            self.perform_closed_loop(fit_choice_history, fit_reward_history)
+            choice_prob_sessions = [self.choice_prob]
+            self.n_trials = len(fit_choice_history)
 
         # -- Plot the target choice and reward history
         # Note that the p_reward could be agnostic to the model fitting.
         fig, axes = plot_foraging_session(
-            choice_history=fit_choice_history,
-            reward_history=fit_reward_history,
-            p_reward=np.full((2, len(fit_choice_history)), np.nan),  # Dummy p_reward
+            choice_history=fit_choice_history_concat,
+            reward_history=fit_reward_history_concat,
+            p_reward=np.full((2, len(fit_choice_history_concat)), np.nan),  # Dummy p_reward
         )
+
+        # -- Add vertical lines for session boundaries (multi-session only) --
+        if is_multi_session:
+            for boundary in session_boundaries[1:]:  # Skip first (trial 0)
+                axes[0].axvline(
+                    x=boundary + 1, color="gray", linestyle="--", linewidth=1, alpha=0.7
+                )
 
         # -- Plot fitted latent variables and choice_prob --
         if if_plot_latent:
-            # Plot latent variables
-            self.plot_latent_variables(axes[0], if_fitted=True)
-            # Plot fitted choice_prob
+            if is_multi_session:
+                # Latent variables are agent-specific and only cached for the last
+                # perform_closed_loop() call, so plotting them across concatenated
+                # sessions is ambiguous.
+                logger.warning(
+                    "Skipping latent-variable plotting for multi-session fit; "
+                    "only per-session latent state is available."
+                )
+            else:
+                self.plot_latent_variables(axes[0], if_fitted=True)
+
+        if is_multi_session:
+            choice_prob_concat = np.concatenate(choice_prob_sessions, axis=1)
+            axes[0].plot(
+                np.arange(self.n_trials) + 1,
+                choice_prob_concat[1] / choice_prob_concat.sum(axis=0),
+                lw=2,
+                color="green",
+                ls=":",
+                label="fitted_choice_prob(R/R+L)",
+            )
+        else:
             axes[0].plot(
                 np.arange(self.n_trials) + 1,
                 self.choice_prob[1] / self.choice_prob.sum(axis=0),
@@ -769,8 +1143,19 @@ class DynamicForagingAgentMLEBase(DynamicForagingAgentBase):
         # -- fit_settings --
         fit_settings = fitting_result_object.fit_settings.copy()
         if if_include_choice_reward_history:
-            fit_settings["fit_choice_history"] = fit_settings["fit_choice_history"].tolist()
-            fit_settings["fit_reward_history"] = fit_settings["fit_reward_history"].tolist()
+            # Handle both single session (array) and multi-session (list) formats
+            if isinstance(fit_settings["fit_choice_history"], list):
+                # Multi-session format
+                fit_settings["fit_choice_history"] = [
+                    s.tolist() for s in fit_settings["fit_choice_history"]
+                ]
+                fit_settings["fit_reward_history"] = [
+                    s.tolist() for s in fit_settings["fit_reward_history"]
+                ]
+            else:
+                # Single session format (backward compatible)
+                fit_settings["fit_choice_history"] = fit_settings["fit_choice_history"].tolist()
+                fit_settings["fit_reward_history"] = fit_settings["fit_reward_history"].tolist()
         else:
             fit_settings.pop("fit_choice_history")
             fit_settings.pop("fit_reward_history")

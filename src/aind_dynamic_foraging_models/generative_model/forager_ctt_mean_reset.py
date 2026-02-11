@@ -4,18 +4,17 @@ from typing import Literal
 
 import numpy as np
 from aind_behavior_gym.dynamic_foraging.task import L, R
-from numpy.typing import NDArray
 
 from .base import DynamicForagingAgentMLEBase
 from .learn_functions import learn_choice_kernel
-from .params.forager_ctt_avg_params import generate_pydantic_ctt_avg_params
+from .params.forager_ctt_mean_reset_params import generate_pydantic_ctt_mean_reset_params
 
 
-class ForagerCTTAvg(DynamicForagingAgentMLEBase):
-    """Compare-to-threshold with 2 Qs foraging model.
+class ForagerCTTMeanReset(DynamicForagingAgentMLEBase):
+    """Compare-to-threshold foraging model.
 
-    This model tracks both values and
-    makes decisions by comparing the currently exploited value to a threshold.
+    This model only tracks a single value (for exploiting the current option) and
+    makes decisions by comparing this value to a threshold.
     """
 
     def __init__(
@@ -50,14 +49,14 @@ class ForagerCTTAvg(DynamicForagingAgentMLEBase):
         """Implement the base class method to dynamically generate Pydantic models
         for parameters and fitting bounds for the compare-to-threshold foraging model.
         """
-        return generate_pydantic_ctt_avg_params(**agent_kwargs)
+        return generate_pydantic_ctt_mean_reset_params(**agent_kwargs)
 
     def get_agent_alias(self):
         """Get the agent alias"""
         _ck = {"none": "", "one_step": "_CK1", "full": "_CKfull"}[
             self.agent_kwargs["choice_kernel"]
         ]
-        return "CTTAvg" + _ck
+        return "CTTMeanReset" + _ck
 
     def _reset(self):
         """Reset the agent"""
@@ -66,11 +65,8 @@ class ForagerCTTAvg(DynamicForagingAgentMLEBase):
 
         # --- Agent family specific variables ---
         # Initialize a single value (for the exploit option) for all trials
-        self.q_value = np.full([self.n_actions, self.n_trials + 1], np.nan)
-        self.q_avg = np.full(self.n_trials + 1, np.nan)
-
-        self.q_value[:, 0] = 0  # Initial Q values as 0
-        self.q_avg[0] = np.mean(self.q_value[:, 0])  # Initial average Q value as avg of initial Q values
+        self.value = np.full(self.n_trials + 1, np.nan)
+        self.value[0] = 0  # Initialize to 0
 
         # Track which option is currently active (True for exploit, False for explore)
         self.exploiting = np.full(self.n_trials, False)
@@ -83,14 +79,10 @@ class ForagerCTTAvg(DynamicForagingAgentMLEBase):
 
     def act(self, _):  # noqa: C901
         """Action selection using the options framework"""
-        threshold_offset = self.params.threshold_offset
+        value = self.value[self.trial]
+        threshold = self.params.threshold
         beta = self.params.softmax_inverse_temperature
 
-        q_value = self.q_value[:, self.trial]
-        q_avg = self.q_avg[self.trial]
-        if self.trial > 0:
-            prev_choice = self.choice_history[self.trial - 1]
-        
         # prepare p_choice_given_explore
         base_prob = np.array([0.5, 0.5])
         # base_prob[L] += self.params.biasL
@@ -100,15 +92,15 @@ class ForagerCTTAvg(DynamicForagingAgentMLEBase):
         # compute p(exploit) using softmax with comparison with threshold
         # p(exploit) = 1 / (1 + e^(-β(v-ρ)))
         if self.trial == 0:
-            p_exploit = 1 / (1 + np.exp(-beta * (q_value[0] - q_avg - threshold_offset)))
-        
+            p_exploit = 1 / (1 + np.exp(-beta * (value - threshold)))
+        # introduce sided bias
         else:
             # a_{t-1} is L
-            if prev_choice == 0:
-                p_exploit = 1 / (1 + np.exp(-beta * (q_value[0] - q_avg - threshold_offset) - self.params.biasL))
+            if self.choice_history[self.trial - 1] == 0:
+                p_exploit = 1 / (1 + np.exp(-beta * (value - threshold) - self.params.biasL))
             # a_{t-1} is R
-            elif prev_choice == 1:
-                p_exploit = 1 / (1 + np.exp(-beta * (q_value[1] - q_avg - threshold_offset)))
+            elif self.choice_history[self.trial - 1] == 1:
+                p_exploit = 1 / (1 + np.exp(-beta * (value - threshold)))
             else:
                 raise ValueError(f"incompatible choice type: {self.choice_history[self.trial - 1]}")
 
@@ -185,17 +177,23 @@ class ForagerCTTAvg(DynamicForagingAgentMLEBase):
     def learn(self, _observation, choice, reward, _next_observation, done):
         """Update value based on whether exploring or exploiting"""
 
-        # update value based on choice history
-        # chosen action: delta rule
-        self.q_value[choice, self.trial] = self.q_value[choice, self.trial - 1] + self.params.learn_rate * (
-            reward - self.q_value[choice, self.trial - 1]
-        )
-        # unchosen action: forget, decay towards average value
-        self.q_value[1 - choice, self.trial] = (1 - self.params.forget_rate_unchosen) * self.q_value[1 - choice, self.trial - 1] + self.params.forget_rate_unchosen * self.q_avg[self.trial - 1]
+        # update value based on wheteher exploiting
+        # if not self.exploiting[self.trial-1]:
+        #     # If we were exploring, reset value to threshold
+        #     self.value[self.trial] = self.params.threshold
+        # else:
+        #     # If we were exploiting, update value using delta rule
+        #     self.value[self.trial] = self.value[self.trial-1] + self.params.learn_rate *
+        #         (reward - self.value[self.trial-1])
 
-        # update average value
-        self.q_avg[self.trial] = np.mean(self.q_value[:, self.trial])
-    
+        # update value based on choice history
+        if (self.trial == 1) or (choice != self.choice_history[self.trial - 2]):
+            self.value[self.trial] = 0.5 * self.value[self.trial - 1]
+
+        else:
+            self.value[self.trial] = self.value[self.trial - 1] + self.params.learn_rate * (
+                reward - self.value[self.trial - 1]
+            )
 
         # Update choice kernel, if used
         if self.agent_kwargs["choice_kernel"] != "none":
@@ -208,12 +206,19 @@ class ForagerCTTAvg(DynamicForagingAgentMLEBase):
     def get_latent_variables(self):
         """Return latent variables for analysis"""
         return {
-            "q_value": self.q_value.tolist(),
-            "q_avg": self.q_avg.tolist(),
-            "threshold_offset": [self.params.threshold_offset] * (self.n_trials + 1),
+            "value": self.value.tolist(),
+            "threshold": [self.params.threshold] * (self.n_trials + 1),
             "exploiting": self.exploiting.tolist(),
             "choice_kernel": self.choice_kernel.tolist(),
             "choice_prob": self.choice_prob.tolist(),
+            "p_exploit": [
+                1
+                / (
+                    1
+                    + np.exp(-self.params.softmax_inverse_temperature * (v - self.params.threshold))
+                )
+                for v in self.value
+            ],
         }
 
     def plot_latent_variables(self, ax, if_fitted=False):
@@ -228,24 +233,23 @@ class ForagerCTTAvg(DynamicForagingAgentMLEBase):
         x = np.arange(self.n_trials + 1) + 1  # When plotting, we start from 1
 
         # Plot value
-        ax.plot(x, self.q_value[L, :], label=f"{prefix}Q(L)", color="red", **style)
-        ax.plot(x, self.q_value[R, :], label=f"{prefix}Q(R)", color="blue", **style)
+        ax.plot(x, self.value, label=f"{prefix}value", color="purple", **style)
 
         # Plot threshold as a horizontal line
         ax.axhline(
-            y=self.params.threshold_offset,
+            y=self.params.threshold,
             color="black",
             linestyle="--",
-            label=f"{prefix}threshold_offset",
+            label=f"{prefix}threshold",
             **style,
         )
 
-        # # Calculate and plot p(exploit)
-        # p_exploit = [
-        #     1 / (1 + np.exp(-self.params.softmax_inverse_temperature * (v - self.params.threshold)))
-        #     for v in self.value
-        # ]
-        # ax.plot(x, p_exploit, label=f"{prefix}p(exploit)", color="cyan", **style)
+        # Calculate and plot p(exploit)
+        p_exploit = [
+            1 / (1 + np.exp(-self.params.softmax_inverse_temperature * (v - self.params.threshold)))
+            for v in self.value
+        ]
+        ax.plot(x, p_exploit, label=f"{prefix}p(exploit)", color="cyan", **style)
 
         # Plot exploitation/exploration decisions on a secondary y-axis if not fitted
         # if not if_fitted:

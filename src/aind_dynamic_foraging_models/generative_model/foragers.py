@@ -17,7 +17,8 @@ class ForagerCollection:
         "ForagerLossCounting",
         "ForagerCompareThreshold",
         "ForagerCTTDualQ",
-        "ForagerCTTAvg"
+        "ForagerCTTAvg",
+        "ForagerCTTMeanReset"
     ]
 
     FORAGER_PRESETS = {
@@ -76,6 +77,13 @@ class ForagerCollection:
         "CTTAvg": dict(
             description="CTT average foraging model",
             agent_class="ForagerCTTAvg",
+            agent_kwargs=dict(
+                choice_kernel="none",
+            ),
+        ),
+        "CTTMeanReset": dict(
+            description="CTT mean reset foraging model",
+            agent_class="ForagerCTTMeanReset",
             agent_kwargs=dict(
                 choice_kernel="none",
             ),

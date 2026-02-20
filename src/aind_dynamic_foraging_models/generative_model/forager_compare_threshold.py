@@ -27,7 +27,7 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
         self,
         choice_kernel: Literal["none", "one_step", "full"] = "none",
         params: dict = {},
-        reset_to_threshold: bool = True,
+        reset_to_threshold: Literal[True, False] = True,
         **kwargs,
     ):
         """Initialize the compare-to-threshold foraging agent.
@@ -58,11 +58,19 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
         # -- Initialize the model parameters --
         super().__init__(agent_kwargs=self.agent_kwargs, params=params, **kwargs)
 
+    def set_agent_kwargs(self, **agent_kwargs):
+        """Update agent hyperparameters (agent_kwargs) after initialization."""
+        self.agent_kwargs.update(agent_kwargs)
+        return self.agent_kwargs
+
+
     def _get_params_model(self, agent_kwargs):
         """Implement the base class method to dynamically generate Pydantic models
         for parameters and fitting bounds for the compare-to-threshold foraging model.
         """
-        return generate_pydantic_compare_threshold_params(**agent_kwargs)
+        return generate_pydantic_compare_threshold_params(
+            choice_kernel=agent_kwargs["choice_kernel"]
+        )
 
     def get_agent_alias(self):
         """Get the agent alias"""

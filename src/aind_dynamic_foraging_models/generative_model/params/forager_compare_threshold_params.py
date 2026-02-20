@@ -24,6 +24,12 @@ def generate_pydantic_compare_threshold_params(
         If "one_step", choice_kernel_step_size will be set to 1.0, i.e., only the previous choice
             affects the choice kernel.
         If "full", both choice_kernel_step_size and choice_kernel_relative_weight will be included
+    reset_to_threshold : bool, optional
+        If True, the agent uses a reset-like value update after a switch:
+            v_t = threshold + alpha * (reward - threshold)
+        If False, the agent never resets and always uses the standard delta update:
+            v_t = v_{t-1} + alpha * (reward - v_{t-1})
+        Note: This is a structural (non-fitted) option, not a continuous fitted parameter.
     """
 
     # ====== Define common fields and constraints ======
@@ -58,7 +64,7 @@ def generate_pydantic_compare_threshold_params(
         Field(default=0.0, description="Sticky bias for action selection"),
     )
     fitting_bounds["biasL"] = (-5.0, 5.0)
-    # fitting_bounds["biasL"] = (-0.5, 0.5)
+
 
     # -- Add choice kernel fields if specified --
     _add_choice_kernel_fields(params_fields, fitting_bounds, choice_kernel)

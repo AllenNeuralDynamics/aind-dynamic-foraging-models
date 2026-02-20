@@ -1,12 +1,13 @@
 """Compare-to-threshold foraging model implementation"""
+
 from __future__ import annotations
 
 from typing import Any, Literal
 
 import numpy as np
+from aind_behavior_gym.dynamic_foraging.task import L, R
 from numpy import float64
 from numpy._typing._array_like import NDArray
-from aind_behavior_gym.dynamic_foraging.task import L, R
 
 from .base import DynamicForagingAgentMLEBase
 from .learn_functions import learn_choice_kernel
@@ -187,7 +188,7 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
         if terminate:
             self.current_option = "explore" if self.current_option == "exploit" else "exploit"
 
-        self.exploiting[self.trial] = (self.current_option == "exploit")
+        self.exploiting[self.trial] = self.current_option == "exploit"
 
         # ------------------------------------------------------------
         # Step C: sample an action given the current option
@@ -264,7 +265,9 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
             return float(self.params.learn_rate)
         if n_lr == 2:
             is_rewarded = float(reward) > 0.0
-            return float(self.params.learn_rate_rew if is_rewarded else self.params.learn_rate_unrew)
+            return float(
+                self.params.learn_rate_rew if is_rewarded else self.params.learn_rate_unrew
+            )
         raise ValueError(f"number_of_learning_rate must be 1 or 2, got {n_lr}")
 
     def learn(self, _observation, choice, reward, _next_observation, done):
@@ -288,7 +291,7 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
             switched = True
         elif self.trial >= 2:
             # Compare current choice (from trial-1) to the choice at trial-2
-            switched = (choice != self.choice_history[self.trial - 2])
+            switched = choice != self.choice_history[self.trial - 2]
 
         # ------------------------------------------------------------
         # Value update
@@ -376,7 +379,14 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
 
         # Plot p(exploit) based on value-threshold (without bias term for quick visualization)
         p_exploit = [
-            1.0 / (1.0 + np.exp(-float(self.params.softmax_inverse_temperature) * (float(v) - float(self.params.threshold))))
+            1.0
+            / (
+                1.0
+                + np.exp(
+                    -float(self.params.softmax_inverse_temperature)
+                    * (float(v) - float(self.params.threshold))
+                )
+            )
             for v in self.value
         ]
         ax.plot(x, p_exploit, label=f"{prefix}p(exploit)", color="cyan", **style)

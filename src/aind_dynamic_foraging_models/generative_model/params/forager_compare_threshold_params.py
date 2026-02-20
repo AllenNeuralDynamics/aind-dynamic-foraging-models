@@ -93,9 +93,7 @@ def generate_pydantic_compare_threshold_params(
     else:
         # Defensive programming: should never happen because of Literal typing,
         # but this protects against misuse.
-        raise ValueError(
-            f"number_of_learning_rate must be 1 or 2, got {number_of_learning_rate}"
-        )
+        raise ValueError(f"number_of_learning_rate must be 1 or 2, got {number_of_learning_rate}")
 
     # -------------------------------------------------------------------------
     # Threshold (ρ): the comparison reference value
@@ -135,7 +133,6 @@ def generate_pydantic_compare_threshold_params(
         ),
     )
     fitting_bounds["biasL"] = (-5.0, 5.0)
-
 
     # -- Add choice kernel fields if specified --
     _add_choice_kernel_fields(params_fields, fitting_bounds, choice_kernel)

@@ -1,6 +1,8 @@
 """Compare-to-threshold foraging model implementation"""
 
-from typing import Literal
+from numpy._typing._array_like import NDArray
+from numpy import float64
+from typing import Any, Literal
 
 import numpy as np
 from aind_behavior_gym.dynamic_foraging.task import L, R
@@ -15,12 +17,17 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
 
     This model only tracks a single value (for exploiting the current option) and
     makes decisions by comparing this value to a threshold.
+
+    Key behavioral assumption (2 actions):
+      - "exploit" means repeat the previous choice (stay)
+      - "explore" means switch to the other side (leave)
     """
 
     def __init__(
         self,
         choice_kernel: Literal["none", "one_step", "full"] = "none",
         params: dict = {},
+        reset_to_threshold: bool = True,
         **kwargs,
     ):
         """Initialize the compare-to-threshold foraging agent.
@@ -36,10 +43,16 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
             will be included
         params : dict, optional
             Initial parameters of the model, by default {}.
+        reset_to_threshold : bool, optional
+            If True, when a switch is detected the value update is "reset-like" toward threshold:
+                v_t = threshold + alpha * (reward - threshold)
+            If False, never reset; always do a standard delta update:
+                v_t = v_{t-1} + alpha * (reward - v_{t-1})
         """
         # -- Pack the agent_kwargs --
         self.agent_kwargs = dict(
             choice_kernel=choice_kernel,
+            reset_to_threshold=reset_to_threshold,
         )  # Note that the class and self.agent_kwargs fully define the agent
 
         # -- Initialize the model parameters --
@@ -56,7 +69,8 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
         _ck = {"none": "", "one_step": "_CK1", "full": "_CKfull"}[
             self.agent_kwargs["choice_kernel"]
         ]
-        return "ForagingCompareThreshold" + _ck
+        _rt = "" if self.agent_kwargs.get("reset_to_threshold", True) else "_NoReset"
+        return "ForagingCompareThreshold" + _ck + _rt
 
     def _reset(self):
         """Reset the agent"""
@@ -77,127 +91,129 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
         self.choice_kernel = np.full([self.n_actions, self.n_trials + 1], np.nan)
         self.choice_kernel[:, 0] = 0  # Initial choice kernel as 0
 
-    def act(self, _):  # noqa: C901
-        """Action selection using the options framework"""
+    def act(self, _) -> tuple[Any, NDArray[Any] | Any | NDArray[float64]]:  # noqa: C901
+        """Action selection using the options framework."""
         value = self.value[self.trial]
         threshold = self.params.threshold
         beta = self.params.softmax_inverse_temperature
 
-        # prepare p_choice_given_explore
-        base_prob = np.array([0.5, 0.5])
-        # base_prob[L] += self.params.biasL
-        # base_prob[R] -= self.params.biasL
-        # base_prob = base_prob / np.sum(base_prob)  # Normalize
+        # Uniform base probabilities for trial 0
+        base_prob = np.array([0.5, 0.5], dtype=float)
 
-        # compute p(exploit) using softmax with comparison with threshold
-        # p(exploit) = 1 / (1 + e^(-β(v-ρ)))
+        # ------------------------------------------------------------
+        # Step A: compute p_exploit = P(stay) from value vs threshold
+        # ------------------------------------------------------------
+        # p_exploit = 1 / (1 + exp(-beta * (value - threshold))) [+ optional bias term]
         if self.trial == 0:
-            p_exploit = 1 / (1 + np.exp(-beta * (value - threshold)))
-        # introduce sided bias
+            logit = beta * (value - threshold)
         else:
-            # a_{t-1} is L
-            if self.choice_history[self.trial - 1] == 0:
-                p_exploit = 1 / (1 + np.exp(-beta * (value - threshold) - self.params.biasL))
-            # a_{t-1} is R
-            elif self.choice_history[self.trial - 1] == 1:
-                p_exploit = 1 / (1 + np.exp(-beta * (value - threshold)))
+            last_choice = self.choice_history[self.trial - 1]
+            if last_choice == L:
+                # Bias is applied only when last action was Left (as in your original code)
+                logit = beta * (value - threshold) + self.params.biasL
+            elif last_choice == R:
+                logit = beta * (value - threshold)
             else:
-                raise ValueError(f"incompatible choice type: {self.choice_history[self.trial - 1]}")
+                raise ValueError(f"incompatible choice type: {last_choice}")
 
-        # termination probabilities for each option
-        beta_exploit = 1 - p_exploit  # Probability of terminating exploit
-        beta_explore = p_exploit  # Probability of terminating explore
+        p_exploit = 1.0 / (1.0 + np.exp(-logit))
+        p_exploit = float(np.clip(p_exploit, 1e-12, 1.0 - 1e-12))
 
-        # Check if current option should terminate
-        terminate = False
+        # ------------------------------------------------------------
+        # Step B: option termination (exploit <-> explore) using p_exploit
+        # ------------------------------------------------------------
+        # - If currently exploiting, terminate with probability (1 - p_exploit)
+        # - If currently exploring, terminate with probability (p_exploit)
         if self.current_option == "exploit":
-            terminate = self.rng.random() < beta_exploit
+            terminate = self.rng.random() < (1.0 - p_exploit)
         elif self.current_option == "explore":
-            terminate = self.rng.random() < beta_explore
+            terminate = self.rng.random() < p_exploit
         else:
             raise ValueError(f"unrecognized current_option: {self.current_option}")
-        # If terminating, switch to the other option
+
         if terminate:
             self.current_option = "explore" if self.current_option == "exploit" else "exploit"
-        # Record if we're currently exploiting
-        self.exploiting[self.trial] = self.current_option == "exploit"
 
-        # select choice
+        self.exploiting[self.trial] = (self.current_option == "exploit")
+
+        # ------------------------------------------------------------
+        # Step C: choose an action given the current option
+        # ------------------------------------------------------------
         if self.trial == 0:
             choice = self.rng.choice([L, R], p=base_prob)
-        elif self.current_option == "exploit":
-            # use the previous choice
-            choice = self.choice_history[self.trial - 1]
-        elif self.current_option == "explore":
-            # variant 1: explore means switch
-            choice = 1 - self.choice_history[self.trial - 1]
-            # # variant 2: explore means uniformly random choice
-            # choice = self.rng.choice([L, R], p=base_prob))
         else:
-            raise ValueError(f"unrecognized current_option: {self.current_option}")
+            last_choice = self.choice_history[self.trial - 1]
+            if self.current_option == "exploit":
+                choice = last_choice  # stay
+            elif self.current_option == "explore":
+                choice = 1 - last_choice  # switch
+            else:
+                raise ValueError(f"unrecognized current_option: {self.current_option}")
 
-        # compute likelihood of the choice
+        # ------------------------------------------------------------
+        # Step D (clarified): compute P(action) from "stay vs switch" probabilities
+        # ------------------------------------------------------------
+        # Because there are only 2 actions and:
+        #   - exploit == repeat last action (stay)
+        #   - explore == switch to the other action (switch)
+        #
+        # We have the direct mapping:
+        #   P(a_t = last_choice)     = p_exploit
+        #   P(a_t != last_choice)    = 1 - p_exploit
+        #
+        # This is exactly equivalent to the mixture form:
+        #   P(a_t) = p_exploit * P(a_t|exploit) + (1-p_exploit) * P(a_t|explore)
         if self.trial == 0:
-            choice_prob = base_prob
+            choice_prob = base_prob.copy()
         else:
-            choice_prob = np.zeros(self.n_actions)
+            last_choice = self.choice_history[self.trial - 1]
+            other_choice = 1 - last_choice
 
-            # --- choice probability under exploitation: repeat the previous choice
-            p_choice_given_exploit = np.zeros(self.n_actions)
-            p_choice_given_exploit[self.choice_history[self.trial - 1]] = 1
+            choice_prob = np.zeros(self.n_actions, dtype=float)
+            choice_prob[last_choice] = p_exploit
+            choice_prob[other_choice] = 1.0 - p_exploit
 
-            # --- choice probability under exploration: choose randomly among other options
-            p_choice_given_explore = np.zeros(self.n_actions)
-            # variant 1: explore means switch
-            p_choice_given_explore[1 - self.choice_history[self.trial - 1]] = 1
-            # # variant 2: explore means uniformly random choice
-            # p_choice_given_explore = base_prob
+        # ------------------------------------------------------------
+        # Optional: apply choice kernel influence (if enabled)
+        # ------------------------------------------------------------
+        if (self.trial > 0) and (self.agent_kwargs["choice_kernel"] != "none"):
+            ck = self.choice_kernel[:, self.trial]
+            ck_weight = float(self.params.choice_kernel_relative_weight)
 
-            for action in range(self.n_actions):
-                choice_prob[action] = (
-                    p_exploit * p_choice_given_exploit[action]
-                    + (1 - p_exploit) * p_choice_given_explore[action]
-                )
+            # Mix choice probability with choice kernel and normalize
+            choice_prob = (1.0 - ck_weight) * choice_prob + ck_weight * ck
+            s = float(np.sum(choice_prob))
+            if s <= 0 or (not np.isfinite(s)):
+                raise ValueError(f"choice_prob normalization failed: sum={s}")
+            choice_prob = choice_prob / s
 
-            # --- Apply choice kernel influence if enabled
-            if self.agent_kwargs["choice_kernel"] != "none":
-                ck = self.choice_kernel[:, self.trial]
-                ck_weight = self.params.choice_kernel_relative_weight
-
-                # Mix choice probability with choice kernel
-                choice_prob = (1 - ck_weight) * choice_prob + ck_weight * ck
-                choice_prob = choice_prob / np.sum(choice_prob)  # Normalize
-
-                # Re-sample choice based on adjusted probabilities
-                if np.sum(choice_prob > 0) > 1:  # Only re-sample if there are multiple options
-                    choice = self.rng.choice([L, R], p=choice_prob)
+            # Re-sample choice based on adjusted probabilities only if not deterministic
+            if np.sum(choice_prob > 0) > 1:
+                choice = self.rng.choice([L, R], p=choice_prob)
 
         return choice, choice_prob
 
     def learn(self, _observation, choice, reward, _next_observation, done):
-        """Update value based on whether exploring or exploiting"""
+        """Update value and (optionally) choice kernel."""
+        alpha = float(self.params.learn_rate)
+        reset_to_threshold = bool(self.agent_kwargs.get("reset_to_threshold", True))
 
-        # update value based on wheteher exploiting
-        # if not self.exploiting[self.trial-1]:
-        #     # If we were exploring, reset value to threshold
-        #     self.value[self.trial] = self.params.threshold
-        # else:
-        #     # If we were exploiting, update value using delta rule
-        #     self.value[self.trial] = self.value[self.trial-1] + self.params.learn_rate *
-        #         (reward - self.value[self.trial-1])
+        # Decide whether a switch occurred (using your original switch-detection logic)
+        switched = False
+        if self.trial == 1:
+            switched = True
+        elif self.trial >= 2:
+            switched = (choice != self.choice_history[self.trial - 2])
 
-        # update value based on choice history
-        if (self.trial == 1) or (choice != self.choice_history[self.trial - 2]):
-            self.value[self.trial] = self.params.threshold + self.params.learn_rate * (
-                reward - self.params.threshold
-            )
-            # print(f'reset value: {self.trial}')
-            # self.value[self.trial] = self.params.threshold
-
+        # Update value
+        if reset_to_threshold and switched:
+            # Reset-like update toward threshold (original behavior)
+            thr = float(self.params.threshold)
+            self.value[self.trial] = thr + alpha * (reward - thr)
         else:
-            self.value[self.trial] = self.value[self.trial - 1] + self.params.learn_rate * (
-                reward - self.value[self.trial - 1]
-            )
+            # Standard delta rule from previous value (no reset)
+            v_prev = float(self.value[self.trial - 1])
+            self.value[self.trial] = v_prev + alpha * (reward - v_prev)
 
         # Update choice kernel, if used
         if self.agent_kwargs["choice_kernel"] != "none":
@@ -208,22 +224,35 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
             )
 
     def get_latent_variables(self):
-        """Return latent variables for analysis"""
+        """Return latent variables for analysis (consistent with actual decision rule)."""
+
+        beta = self.params.softmax_inverse_temperature
+        threshold = self.params.threshold
+        biasL = getattr(self.params, "biasL", 0.0)
+
+        p_exploit_all = []
+
+        for t, v in enumerate(self.value):
+            if t == 0:
+                logit = beta * (v - threshold)
+            else:
+                last_choice = self.choice_history[t - 1]
+                if last_choice == L:
+                    logit = beta * (v - threshold) + biasL
+                else:
+                    logit = beta * (v - threshold)
+
+            p = 1.0 / (1.0 + np.exp(-logit))
+            p_exploit_all.append(float(p))
+
         return {
             "value": self.value.tolist(),
-            "threshold": [self.params.threshold] * (self.n_trials + 1),
+            "threshold": [threshold] * (self.n_trials + 1),
             "exploiting": self.exploiting.tolist(),
             "choice_kernel": self.choice_kernel.tolist(),
             "choice_prob": self.choice_prob.tolist(),
-            "p_exploit": [
-                1
-                / (
-                    1
-                    + np.exp(-self.params.softmax_inverse_temperature * (v - self.params.threshold))
-                )
-                for v in self.value
-            ],
-        }
+            "p_exploit": p_exploit_all   
+     }
 
     def plot_latent_variables(self, ax, if_fitted=False):
         """Plot latent variables"""

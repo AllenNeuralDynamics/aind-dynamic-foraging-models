@@ -1,6 +1,6 @@
 """Generate pydantic models for Compare-to-threshold foraging agent parameters."""
 
-from typing import Literal, Tuple, Type
+from typing import Literal, Optional, Tuple, Type
 
 from pydantic import BaseModel, Field
 
@@ -12,6 +12,8 @@ def generate_pydantic_compare_threshold_params(
     *,
     number_of_learning_rate: Literal[1, 2] = 1,
     choice_kernel: Literal["none", "one_step", "full"] = "none",
+    include_stay_bias: Literal[True, False] = False,
+    fix_threshold: Literal[True, False] = False,
 ) -> Tuple[Type[BaseModel], Type[BaseModel]]:
     """Generate Pydantic models for Compare-to-threshold foraging agent parameters.
 
@@ -30,6 +32,13 @@ def generate_pydantic_compare_threshold_params(
         - "none": no choice kernel parameters
         - "one_step": include choice_kernel_relative_weight and set step size to 1.0 (fixed)
         - "full": include both choice_kernel_step_size and choice_kernel_relative_weight
+    include_stay_bias : bool, optional
+        If True, include an additive stay/perseveration bias term `stay_bias` in the
+        stay (exploit) logit.
+    fix_threshold : bool, optional
+        If True, threshold is fixed (not learnable) and should NOT be included as a
+        fitted/free parameter. In this case, `threshold_fixed` is stored externally
+        (agent_kwargs) and used by the agent code.
 
     Returns
     -------
@@ -48,12 +57,6 @@ def generate_pydantic_compare_threshold_params(
 
     # -------------------------------------------------------------------------
     # Learning rate(s) for value update
-    #
-    # Design matches ForagerQLearning style:
-    #   - If number_of_learning_rate == 1 -> learn_rate
-    #   - If number_of_learning_rate == 2 -> learn_rate_rew / learn_rate_unrew
-    #
-    # All learning rates are constrained to [0, 1].
     # -------------------------------------------------------------------------
     if number_of_learning_rate == 1:
         params_fields["learn_rate"] = (
@@ -91,26 +94,25 @@ def generate_pydantic_compare_threshold_params(
         fitting_bounds["learn_rate_unrew"] = (0.0, 1.0)
 
     else:
-        # Defensive programming: should never happen because of Literal typing,
-        # but this protects against misuse.
         raise ValueError(f"number_of_learning_rate must be 1 or 2, got {number_of_learning_rate}")
 
     # -------------------------------------------------------------------------
-    # Threshold (ρ): the comparison reference value
+    # Threshold (ρ): include ONLY when threshold is learnable
     # -------------------------------------------------------------------------
-    params_fields["threshold"] = (
-        float,
-        Field(
-            default=0.4,
-            description="Threshold value for comparison (ρ).",
-        ),
-    )
-    fitting_bounds["threshold"] = (-1.0, 1.0)
+    # Your requirement: "only add params_fields['threshold'] when it's true"
+    # Interpreting "it's" as "threshold is learnable", i.e., when fix_threshold is False.
+    if not fix_threshold:
+        params_fields["threshold"] = (
+            float,
+            Field(
+                default=0.4,
+                description="Threshold value for comparison (ρ).",
+            ),
+        )
+        fitting_bounds["threshold"] = (-1.0, 1.0)
 
     # -------------------------------------------------------------------------
-    # Softmax inverse temperature (β): controls steepness of the exploit probability
-    #
-    # NOTE: lower bound uses a small positive number to avoid degeneracy at 0.
+    # Softmax inverse temperature (β)
     # -------------------------------------------------------------------------
     params_fields["softmax_inverse_temperature"] = (
         float,
@@ -123,7 +125,7 @@ def generate_pydantic_compare_threshold_params(
     fitting_bounds["softmax_inverse_temperature"] = (1e-11, 100.0)
 
     # -------------------------------------------------------------------------
-    # Left bias term: a sticky bias used in the logit when last_choice is Left
+    # Left bias term
     # -------------------------------------------------------------------------
     params_fields["biasL"] = (
         float,
@@ -133,6 +135,19 @@ def generate_pydantic_compare_threshold_params(
         ),
     )
     fitting_bounds["biasL"] = (-5.0, 5.0)
+
+    # -------------------------------------------------------------------------
+    # Optional: stay bias (perseveration)
+    # -------------------------------------------------------------------------
+    if include_stay_bias:
+        params_fields["stay_bias"] = (
+            float,
+            Field(
+                default=0.0,
+                description="Additive stay/perseveration bias on logit(P(stay)) (t>0).",
+            ),
+        )
+        fitting_bounds["stay_bias"] = (-5.0, 5.0)
 
     # -- Add choice kernel fields if specified --
     _add_choice_kernel_fields(params_fields, fitting_bounds, choice_kernel)

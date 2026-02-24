@@ -22,3 +22,4 @@ class ParamsSymbols(str, Enum):
     epsilon = R"$\epsilon$"
     threshold = R"$\rho$"  # Adding the threshold parameter with symbol ρ (rho)
     reset_to_threshold = R"$\mathrm{reset}$"
+    stay_bias = R"$b_{stay}$"

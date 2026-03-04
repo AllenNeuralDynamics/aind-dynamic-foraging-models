@@ -466,13 +466,18 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
             p_exploit_all.append(float(p_exploit))
             pR_all.append(float(pR))
 
+        # Export choice_prob in trial-major order WITHOUT using .T
+        # Build a list length n_trials where each element is [P(L), P(R)].
+        choice_prob_trials: list[list[float]] = []
+        for t in range(self.n_trials):
+            choice_prob_trials.append([float(self.choice_prob[L, t]), float(self.choice_prob[R, t])])
+
         out: dict[str, Any] = {
             "value": self.value.tolist(),
             "threshold": [threshold] * (self.n_trials + 1),
             "exploiting": self.exploiting.tolist(),
             "choice_kernel": self.choice_kernel.tolist(),
-            # Store choice_prob as (n_trials, n_actions) for user-friendly export
-            "choice_prob": self.choice_prob.T.tolist(),
+            "choice_prob": choice_prob_trials,
             "p_exploit": p_exploit_all,
             "p_right": pR_all,
         }

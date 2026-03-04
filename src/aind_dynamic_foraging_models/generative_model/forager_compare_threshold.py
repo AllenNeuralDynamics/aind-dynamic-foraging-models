@@ -14,11 +14,26 @@ from .learn_functions import learn_choice_kernel
 from .params.forager_compare_threshold_params import generate_pydantic_compare_threshold_params
 
 
+def _sigmoid_stable(x: float) -> float:
+    """Numerically stable sigmoid."""
+    if x >= 0:
+        z = np.exp(-x)
+        return float(1.0 / (1.0 + z))
+    z = np.exp(x)
+    return float(z / (1.0 + z))
+
+
+def _logit(p: float, eps: float = 1e-12) -> float:
+    """Stable logit with clipping."""
+    p = float(np.clip(p, eps, 1.0 - eps))
+    return float(np.log(p) - np.log(1.0 - p))
+
+
 class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
     """Compare-to-threshold foraging model.
 
     This model tracks a single latent variable `value` and selects actions by comparing
-    `value` to a threshold using a logistic (sigmoid) mapping (soft decision rule).
+    `value` to a threshold using a logistic (sigmoid) mapping.
 
     Key behavioral assumption (2 actions):
       - "exploit" means repeat the previous choice (stay)
@@ -27,13 +42,13 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
     Extensions:
       1) stay bias option:
          - If enabled, add an additive bias term on the *stay / exploit* logit.
-         - This corresponds to a "perseveration" tendency beyond value/threshold.
 
-      2) fixed threshold option:
+      2) side bias option (NEW, outside stay-logit):
+         - If enabled, apply `biasL` as an additive term on logit(P(Left))
+           AFTER constructing the base side probabilities.
+
+      3) fixed threshold option:
          - If enabled, threshold is a fixed constant (NOT learnable).
-         - Implementation: threshold lives only in `agent_kwargs` and is accessed via
-           `_get_threshold_value()`. When fixed, `threshold` is NOT included in ParamModel,
-           so it will NOT show up in free params / n_free_params / ρ symbol lists.
     """
 
     def __init__(
@@ -42,47 +57,14 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
         choice_kernel: Literal["none", "one_step", "full"] = "none",
         params: dict = {},
         reset_to_threshold: Literal[True, False] = True,
-        # New options
+        # Options
         include_stay_bias: Literal[True, False] = False,
+        include_side_bias: Literal[True, False] = True,  # NEW
         fix_threshold: Literal[True, False] = False,
         threshold_fixed: Optional[float] = None,
         **kwargs,
     ):
-        """Initialize the compare-to-threshold foraging agent.
-
-        Parameters
-        ----------
-        number_of_learning_rate : Literal[1, 2], optional
-            Controls whether learning rate is symmetric (1) or asymmetric (2).
-            - 1: include `learn_rate`
-            - 2: include `learn_rate_rew` and `learn_rate_unrew`
-            This is a structural hyperparameter (agent_kwargs), not a fitted parameter.
-        choice_kernel : Literal["none", "one_step", "full"], optional
-            Choice kernel type, by default "none".
-        params : dict, optional
-            Initial parameters of the model, by default {}.
-            NOTE: This should only contain Pydantic parameters (fitted parameters), e.g.
-              - softmax_inverse_temperature, biasL, learn_rate (or learn_rate_rew/unrew)
-              - stay_bias (if include_stay_bias=True)
-              - threshold ONLY if fix_threshold=False
-        reset_to_threshold : Literal[True, False], optional
-            Hyperparameter controlling value update rule at a switch.
-        include_stay_bias : bool, optional
-            If True, include a fitted parameter `stay_bias` that adds to the logit of P(stay).
-        fix_threshold : bool, optional
-            If True, the threshold is fixed (not learnable). Use `threshold_fixed`.
-        threshold_fixed : Optional[float], optional
-            Fixed threshold value when fix_threshold=True.
-            If None, we will try to use:
-              - params["threshold"] if present, otherwise
-              - 0 (match generator default)
-        **kwargs
-            Passed to the base class (e.g., seed for rng).
-        """
-
-        # ---------------------------------------------------------------------
-        # Resolve fixed threshold (if enabled)
-        # ---------------------------------------------------------------------
+        """Initialize the compare-to-threshold foraging agent."""
         params = dict(params)  # defensive copy
 
         if fix_threshold:
@@ -90,45 +72,29 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
                 if "threshold" in params:
                     threshold_fixed = float(params["threshold"])
                 else:
-                    threshold_fixed = 0  # keep consistent with generator default
-
-            # IMPORTANT: threshold is NOT a fitted parameter when fixed
+                    threshold_fixed = 0
             params.pop("threshold", None)
 
-        # ---------------------------------------------------------------------
-        # Pack the agent hyperparameters (agent_kwargs).
-        # ---------------------------------------------------------------------
         self.agent_kwargs = dict(
             number_of_learning_rate=number_of_learning_rate,
             choice_kernel=choice_kernel,
             reset_to_threshold=reset_to_threshold,
             include_stay_bias=bool(include_stay_bias),
+            include_side_bias=bool(include_side_bias),  # NEW
             fix_threshold=bool(fix_threshold),
             threshold_fixed=float(threshold_fixed) if (fix_threshold and threshold_fixed is not None) else None,
         )
 
-        # Initialize the model parameters (Pydantic) via the base class
         super().__init__(agent_kwargs=self.agent_kwargs, params=params, **kwargs)
 
     def set_agent_kwargs(self, **agent_kwargs):
-        """Update agent hyperparameters (agent_kwargs) after initialization.
-
-        NOTE:
-        - This does NOT rebuild ParamModel/ParamFitBoundModel.
-        - Therefore, do NOT change hyperparameters that affect the parameter set
-          (e.g., number_of_learning_rate, choice_kernel, include_stay_bias, fix_threshold)
-          after initialization. If you need a different structure, instantiate a new agent.
-        """
+        """Update agent hyperparameters (agent_kwargs) after initialization."""
         self.agent_kwargs.update(agent_kwargs)
         return self.agent_kwargs
 
     def _get_params_model(self, agent_kwargs):
-        """Dynamically generate Pydantic models for parameters and fitting bounds.
-
-        IMPORTANT:
-        - We DO NOT pass threshold_fixed into the generator (not part of learnable params).
-        - When fix_threshold=True, the generator must NOT include a 'threshold' field.
-        """
+        """Dynamically generate Pydantic models for parameters and fitting bounds."""
+        # Minimal-change: do not modify generator signature; biasL remains a parameter.
         ParamModel, ParamFitBoundModel = generate_pydantic_compare_threshold_params(
             number_of_learning_rate=agent_kwargs["number_of_learning_rate"],
             choice_kernel=agent_kwargs["choice_kernel"],
@@ -140,11 +106,8 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
     def get_agent_alias(self):
         """Get the agent alias string used in tables/plots."""
         parts = ["ForagingCompareThreshold"]
-
-        # Learning rate structure
         parts.append(f"_L{self.agent_kwargs.get('number_of_learning_rate', 1)}")
 
-        # Choice kernel
         ck = self.agent_kwargs["choice_kernel"]
         if ck == "one_step":
             parts.append("_CK1")
@@ -153,19 +116,18 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
         else:
             parts.append("_CKnone")
 
-        # Reset flag (explicit)
         reset_flag = self.agent_kwargs.get("reset_to_threshold", True)
         parts.append(f"_Reset{'T' if reset_flag else 'F'}")
 
-        # Stay bias flag (explicit)
         stay_flag = self.agent_kwargs.get("include_stay_bias", False)
         parts.append(f"_StayBias{'T' if stay_flag else 'F'}")
 
-        # Fixed threshold flag (explicit)
+        side_flag = self.agent_kwargs.get("include_side_bias", True)
+        parts.append(f"_SideBias{'T' if side_flag else 'F'}")
+
         fix_flag = self.agent_kwargs.get("fix_threshold", False)
         parts.append(f"_FixThr{'T' if fix_flag else 'F'}")
 
-        # If fixed threshold is True, include value
         if fix_flag:
             thr = self.agent_kwargs.get("threshold_fixed", None)
             if thr is not None:
@@ -180,8 +142,6 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
             if thr_fixed is None:
                 raise ValueError("fix_threshold=True but threshold_fixed is None.")
             return float(thr_fixed)
-
-        # Learnable threshold must exist in ParamModel
         return float(self.params.threshold)
 
     def _get_stay_bias_value(self) -> float:
@@ -194,17 +154,14 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
         """Reset the agent state before running a session (generative or predictive)."""
         super()._reset()
 
-        # ---------------------------------------------------------------------
-        # Agent-family state variables
-        # ---------------------------------------------------------------------
         self.value = np.full(self.n_trials + 1, np.nan)
-        self.value[0] = float(self._get_threshold_value())  # start at threshold
+        self.value[0] = float(self._get_threshold_value())
 
         self.exploiting = np.full(self.n_trials, False)
-        self.current_option = "explore"  # start exploring at first trial
+        self.current_option = "explore"
 
         self.choice_kernel = np.full([self.n_actions, self.n_trials + 1], np.nan)
-        self.choice_kernel[:, 0] = 0.0  # initial kernel
+        self.choice_kernel[:, 0] = 0.0
 
     def act(self, _) -> tuple[Any, NDArray[Any] | Any | NDArray[float64]]:  # noqa: C901
         """Select an action and return (choice, choice_prob)."""
@@ -213,30 +170,20 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
         beta = float(self.params.softmax_inverse_temperature)
 
         stay_bias = float(self._get_stay_bias_value())
+        include_side_bias = bool(self.agent_kwargs.get("include_side_bias", True))
 
         base_prob = np.array([0.5, 0.5], dtype=float)
 
         # ------------------------------------------------------------
-        # Step A: compute p_exploit = P(stay)
+        # Step A: compute p_exploit = P(stay) (stable sigmoid)
+        #   NOTE: side bias is NOT inside this logit anymore.
         # ------------------------------------------------------------
         if self.trial == 0:
             logit = beta * (value - threshold)
         else:
-            last_choice = int(self.choice_history[self.trial - 1])
+            logit = beta * (value - threshold) + stay_bias
 
-            # Side bias convention: biasL applied only when last action was Left
-            side_bias_term = 0.0
-            if last_choice == L:
-                side_bias_term = float(self.params.biasL)
-            elif last_choice == R:
-                side_bias_term = 0.0
-            else:
-                raise ValueError(f"incompatible choice type: {last_choice}")
-
-            # Stay bias biases toward staying (exploit) on t>0
-            logit = beta * (value - threshold) + side_bias_term + stay_bias
-
-        p_exploit = 1.0 / (1.0 + np.exp(-logit))
+        p_exploit = _sigmoid_stable(float(logit))
         p_exploit = float(np.clip(p_exploit, 1e-12, 1.0 - 1e-12))
 
         # ------------------------------------------------------------
@@ -255,7 +202,7 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
         self.exploiting[self.trial] = self.current_option == "exploit"
 
         # ------------------------------------------------------------
-        # Step C: sample an action given the current option
+        # Step C: sample an action given the current option (unchanged)
         # ------------------------------------------------------------
         if self.trial == 0:
             choice = self.rng.choice([L, R], p=base_prob)
@@ -269,7 +216,7 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
                 raise ValueError(f"unrecognized current_option: {self.current_option}")
 
         # ------------------------------------------------------------
-        # Step D: implied action probabilities
+        # Step D: implied action probabilities (base, unchanged)
         # ------------------------------------------------------------
         if self.trial == 0:
             choice_prob = base_prob.copy()
@@ -279,6 +226,17 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
             choice_prob = np.zeros(self.n_actions, dtype=float)
             choice_prob[last_choice] = p_exploit
             choice_prob[other_choice] = 1.0 - p_exploit
+
+            # ------------------------------------------------------------
+            # Apply side bias OUTSIDE the stay-logit: logit(P(Left)) += biasL
+            # ------------------------------------------------------------
+            if include_side_bias:
+                biasL = float(getattr(self.params, "biasL", 0.0))
+                pL_base = float(choice_prob[L])
+                pL = _sigmoid_stable(_logit(pL_base) + biasL)
+                pL = float(np.clip(pL, 1e-12, 1.0 - 1e-12))
+                choice_prob[L] = pL
+                choice_prob[R] = 1.0 - pL
 
         # ------------------------------------------------------------
         # Optional: apply choice kernel influence
@@ -337,26 +295,17 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
         """Return latent variables for analysis (consistent with decision rule)."""
         beta = float(self.params.softmax_inverse_temperature)
         threshold = float(self._get_threshold_value())
-        biasL = float(getattr(self.params, "biasL", 0.0))
         stay_bias = float(self._get_stay_bias_value())
+        include_side_bias = bool(self.agent_kwargs.get("include_side_bias", True))
+        biasL = float(getattr(self.params, "biasL", 0.0))
 
         p_exploit_all = []
         for t, v in enumerate(self.value):
             if t == 0:
                 logit = beta * (float(v) - threshold)
             else:
-                last_choice = int(self.choice_history[t - 1])
-                if last_choice == L:
-                    side_bias_term = biasL
-                elif last_choice == R:
-                    side_bias_term = 0.0
-                else:
-                    raise ValueError(f"incompatible choice type: {last_choice}")
-
-                logit = beta * (float(v) - threshold) + side_bias_term + stay_bias
-
-            p = 1.0 / (1.0 + np.exp(-logit))
-            p_exploit_all.append(float(p))
+                logit = beta * (float(v) - threshold) + stay_bias
+            p_exploit_all.append(float(_sigmoid_stable(float(logit))))
 
         out = {
             "value": self.value.tolist(),
@@ -368,6 +317,8 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
         }
         if self.agent_kwargs.get("include_stay_bias", False):
             out["stay_bias"] = [stay_bias] * (self.n_trials + 1)
+        if include_side_bias:
+            out["biasL"] = [biasL] * (self.n_trials + 1)
         return out
 
     def plot_latent_variables(self, ax, if_fitted=False):
@@ -392,16 +343,17 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
             **style,
         )
 
-        p_exploit = [
-            1.0
-            / (
-                1.0
-                + np.exp(
-                    -float(self.params.softmax_inverse_temperature) * (float(v) - threshold)
-                )
-            )
-            for v in self.value
-        ]
+        beta = float(self.params.softmax_inverse_temperature)
+        stay_bias = float(self._get_stay_bias_value())
+
+        p_exploit = []
+        for t, v in enumerate(self.value):
+            if t == 0:
+                logit = beta * (float(v) - threshold)
+            else:
+                logit = beta * (float(v) - threshold) + stay_bias
+            p_exploit.append(_sigmoid_stable(float(logit)))
+
         ax.plot(x, p_exploit, label=f"{prefix}p(exploit)", color="cyan", **style)
 
         if self.agent_kwargs["choice_kernel"] != "none":

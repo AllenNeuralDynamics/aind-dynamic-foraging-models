@@ -245,7 +245,9 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
         self.choice_kernel[:, 0] = 0.5
 
         # Record the final choice probabilities used to sample the action per trial
-        self.choice_prob: NDArray[np.float64] = np.full((self.n_trials, self.n_actions), np.nan, dtype=float)
+        # IMPORTANT: Base class expects shape (n_actions, n_trials) because it assigns:
+        #   self.choice_prob[:, self.trial] = choice_prob
+        self.choice_prob: NDArray[np.float64] = np.full((self.n_actions, self.n_trials), np.nan, dtype=float)
 
     def act(self, _) -> tuple[Any, NDArray[np.float64]]:  # noqa: C901
         """Select an action and return (choice, choice_prob)."""
@@ -316,7 +318,6 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
                 choice_prob = choice_prob / s
 
             choice = self.rng.choice([L, R], p=choice_prob)
-            self.choice_prob[t, :] = choice_prob
             return choice, choice_prob
 
         # After trial 0, we can map stay/switch to L/R based on last_choice.
@@ -367,9 +368,6 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
 
         # Sample choice from final choice_prob
         choice = self.rng.choice([L, R], p=choice_prob)
-
-        # Store for analysis
-        self.choice_prob[t, :] = choice_prob
 
         return choice, choice_prob
 
@@ -473,7 +471,8 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
             "threshold": [threshold] * (self.n_trials + 1),
             "exploiting": self.exploiting.tolist(),
             "choice_kernel": self.choice_kernel.tolist(),
-            "choice_prob": self.choice_prob.tolist(),
+            # Store choice_prob as (n_trials, n_actions) for user-friendly export
+            "choice_prob": self.choice_prob.T.tolist(),
             "p_exploit": p_exploit_all,
             "p_right": pR_all,
         }

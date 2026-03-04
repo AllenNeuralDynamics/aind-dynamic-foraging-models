@@ -71,7 +71,7 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
         reset_to_threshold: Literal[True, False] = True,
         # Options
         include_stay_bias: Literal[True, False] = False,
-        include_side_bias: Literal[True, False] = False,
+        include_side_bias: Literal[True, False] = True,
         fix_threshold: Literal[True, False] = False,
         threshold_fixed: Optional[float] = None,
         **kwargs: Any,

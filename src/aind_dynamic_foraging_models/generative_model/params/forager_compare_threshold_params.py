@@ -1,6 +1,6 @@
 """Generate pydantic models for Compare-to-threshold foraging agent parameters."""
 
-from typing import Literal, Optional, Tuple, Type
+from typing import Literal, Tuple, Type
 
 from pydantic import BaseModel, Field
 
@@ -13,6 +13,7 @@ def generate_pydantic_compare_threshold_params(
     number_of_learning_rate: Literal[1, 2] = 1,
     choice_kernel: Literal["none", "one_step", "full"] = "none",
     include_stay_bias: Literal[True, False] = False,
+    include_side_bias: Literal[True, False] = False,  # NEW
     fix_threshold: Literal[True, False] = False,
 ) -> Tuple[Type[BaseModel], Type[BaseModel]]:
     """Generate Pydantic models for Compare-to-threshold foraging agent parameters.
@@ -27,14 +28,21 @@ def generate_pydantic_compare_threshold_params(
         Controls whether learning rate is symmetric or asymmetric.
         - 1: include a single learning rate parameter `learn_rate`
         - 2: include `learn_rate_rew` and `learn_rate_unrew`
+
     choice_kernel : Literal["none", "one_step", "full"], optional
         Choice kernel type.
         - "none": no choice kernel parameters
         - "one_step": include choice_kernel_relative_weight and set step size to 1.0 (fixed)
         - "full": include both choice_kernel_step_size and choice_kernel_relative_weight
+
     include_stay_bias : bool, optional
-        If True, include an additive stay/perseveration bias term `stay_bias` in the
-        stay (exploit) logit.
+        If True, include an additive stay/perseveration bias term `stay_bias`
+        in the stay (exploit) logit.
+
+    include_side_bias : bool, optional
+        If True, include an additive side bias term `biasL`, which will be applied
+        in logit space to P(R) after mapping stay/switch -> side probability.
+
     fix_threshold : bool, optional
         If True, threshold is fixed (not learnable) and should NOT be included as a
         fitted/free parameter. In this case, `threshold_fixed` is stored externally
@@ -45,6 +53,7 @@ def generate_pydantic_compare_threshold_params(
     (ParamModel, ParamFitBoundModel) : Tuple[Type[BaseModel], Type[BaseModel]]
         ParamModel:
             A Pydantic model defining valid parameter names, defaults, and constraints.
+
         ParamFitBoundModel:
             A Pydantic model defining default fitting bounds for each parameter.
     """
@@ -99,8 +108,6 @@ def generate_pydantic_compare_threshold_params(
     # -------------------------------------------------------------------------
     # Threshold (ρ): include ONLY when threshold is learnable
     # -------------------------------------------------------------------------
-    # Your requirement: "only add params_fields['threshold'] when it's true"
-    # Interpreting "it's" as "threshold is learnable", i.e., when fix_threshold is False.
     if not fix_threshold:
         params_fields["threshold"] = (
             float,
@@ -125,16 +132,17 @@ def generate_pydantic_compare_threshold_params(
     fitting_bounds["softmax_inverse_temperature"] = (1e-11, 100.0)
 
     # -------------------------------------------------------------------------
-    # Left bias term
+    # Optional: side bias (Right-vs-Left bias in logit(P(R)))
     # -------------------------------------------------------------------------
-    params_fields["biasL"] = (
-        float,
-        Field(
-            default=0.0,
-            description="Sticky bias for action selection (applied when last choice is Left).",
-        ),
-    )
-    fitting_bounds["biasL"] = (-5.0, 5.0)
+    if include_side_bias:
+        params_fields["biasL"] = (
+            float,
+            Field(
+                default=0.0,
+                description="Side bias parameter applied to logit(P(R)).",
+            ),
+        )
+        fitting_bounds["biasL"] = (-5.0, 5.0)
 
     # -------------------------------------------------------------------------
     # Optional: stay bias (perseveration)

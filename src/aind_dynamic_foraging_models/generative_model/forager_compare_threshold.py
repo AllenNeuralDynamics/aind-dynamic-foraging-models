@@ -99,6 +99,7 @@ class ForagerCompareThreshold(DynamicForagingAgentMLEBase):
             number_of_learning_rate=agent_kwargs["number_of_learning_rate"],
             choice_kernel=agent_kwargs["choice_kernel"],
             include_stay_bias=agent_kwargs.get("include_stay_bias", False),
+            include_side_bias=agent_kwargs.get("include_side_bias", False),  # <-- ADD THIS
             fix_threshold=agent_kwargs.get("fix_threshold", False),
         )
         return ParamModel, ParamFitBoundModel

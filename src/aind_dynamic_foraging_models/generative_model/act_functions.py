@@ -1,6 +1,8 @@
 """Functions for action selection in generative models"""
 
-from typing import Optional
+from numpy._typing._array_like import NDArray
+from numpy import floating
+from typing import Any, Optional
 
 import numpy as np
 from aind_behavior_gym.dynamic_foraging.task import L, R
@@ -223,13 +225,23 @@ def softmax(x, rng=None):
     """
     rng = rng or np.random.default_rng()
 
-    if np.max(x) > 700:  # To prevent explosion of EXP
+    x = np.asarray(x, dtype=float)
+
+    if not np.all(np.isfinite(x)):
+        return np.array([0.5, 0.5])
+
+    # Use numerically stable softmax.
+    x = x - np.max(x)
+    exp_x = np.exp(x)
+    sum_exp_x = np.sum(exp_x)
+
+    if sum_exp_x <= 0 or not np.isfinite(sum_exp_x):
         argmax_x = np.argmax(rng.permutation(x))  # Randomly choose one of the max values
         greedy = np.zeros(len(x))
         greedy[argmax_x] = 1
         return greedy
-    else:  # Normal softmax
-        return np.exp(x) / np.sum(np.exp(x))
+
+    return exp_x / sum_exp_x
 
 
 def choose_ps(ps, rng=None):
@@ -238,5 +250,10 @@ def choose_ps(ps, rng=None):
     """
     rng = rng or np.random.default_rng()
 
-    ps = ps / np.sum(ps)
+    ps = np.asarray(ps, dtype=float)
+    if not np.all(np.isfinite(ps)) or np.sum(ps) <= 0:
+        ps: NDArray[floating[Any]] = np.ones_like(ps) / len(ps)
+    else:
+        ps = ps / np.sum(ps)
+
     return np.max(np.argwhere(np.hstack([-1e-16, np.cumsum(ps)]) < rng.random()))

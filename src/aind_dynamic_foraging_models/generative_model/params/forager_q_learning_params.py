@@ -87,7 +87,7 @@ def _add_forget_rate_fields(params_fields, fitting_bounds, number_of_forget_rate
     if number_of_forget_rate == 1:
         params_fields["forget_rate_unchosen"] = (
             float,
-            Field(default=0.2, ge=0.0, le=1.0, description="Forgetting rate for unchosen side"),
+            Field(default=0.2, ge=0.0, le=10.0, description="Forgetting rate for unchosen side"),
         )
         fitting_bounds["forget_rate_unchosen"] = (0.0, 1.0)
 

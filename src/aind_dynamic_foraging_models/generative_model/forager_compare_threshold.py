@@ -12,7 +12,7 @@ from numpy._typing._array_like import NDArray
 from .base import DynamicForagingAgentMLEBase
 from .learn_functions import learn_choice_kernel
 from .params.forager_compare_threshold_params import (
-    generate_pydantic_compare_threshold_param,
+    generate_pydantic_compare_threshold_params,
 )
 
 

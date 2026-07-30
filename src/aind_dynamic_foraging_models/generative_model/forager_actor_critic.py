@@ -34,9 +34,10 @@ class ForagerActorCritic(DynamicForagingAgentMLEBase):
     def __init__(
         self,
         choice_kernel: Literal["none", "one_step", "full"] = "none",
-        params: dict = {},
+        params: dict | None = None,
         **kwargs,
     ):
+        params = {} if params is None else params
         """Init
 
         Parameters

@@ -227,3 +227,161 @@ def pointwise_log_predictive_density(choice_prob, choices, valid_mask=None):
         return float(np.sum(np.log(observed))), int(len(choices))
     valid_mask = np.asarray(valid_mask, dtype=bool)
     return float(np.sum(np.log(observed[valid_mask]))), int(valid_mask.sum())
+
+
+def adapt_subjects_batched(
+    choice_history,
+    reward_history,
+    population,
+    session_mask=None,
+    valid_mask=None,
+    beta_max=10.0,
+):
+    """Condition many held-out subjects at once, as one batched model.
+
+    Held-out subjects are independent given the frozen population, so scoring them one at a
+    time pays the scan-depth cost once per subject on a device where extra lanes are nearly
+    free. Batching pays it once for all of them.
+
+    The approximation this makes is that a single sampler adapts one step size across every
+    subject's block, rather than each subject getting its own. The blocks here are small and
+    similarly shaped, so the cost should be modest -- but it is a real difference from
+    sequential fitting and is worth measuring rather than assuming
+    (see ``tests/test_hb_heldout_batched.py``).
+
+    Parameters
+    ----------
+    choice_history, reward_history : array_like, shape (n_subjects, n_context, n_trials)
+        Context sessions, padded on the session and trial axes.
+    population : mapping
+        Point estimates for :data:`POPULATION_SITES`.
+    session_mask : array_like of bool, shape (n_subjects, n_context), optional
+        Which context slots are real. Subjects with fewer context sessions pad here.
+    valid_mask : array_like of bool, same shape as ``choice_history``, optional
+        Trials to include.
+    beta_max : float, optional
+        Upper bound of ``softmax_inverse_temperature``.
+    """
+    from .model import _session_log_likelihoods
+
+    choice_history = jnp.asarray(choice_history, dtype=jnp.int32)
+    reward_history = jnp.asarray(reward_history, dtype=jnp.float32)
+    n_subjects, n_context, n_trials = choice_history.shape
+    n_params = len(HATTORI2019_PARAMS)
+
+    if session_mask is None:
+        session_mask = jnp.ones((n_subjects, n_context), dtype=bool)
+    session_mask = jnp.asarray(session_mask, dtype=bool)
+    if valid_mask is None:
+        valid_mask = jnp.ones_like(choice_history, dtype=bool)
+    valid_mask = jnp.asarray(valid_mask, dtype=bool)
+
+    mu_raw = numpyro.sample(
+        "mu_raw", dist.Normal(0.0, 1.0).expand([n_subjects, n_params]).to_event(2)
+    )
+    mu_p = numpyro.deterministic(
+        "mu_p", population["population_mean"] + population["population_scale"] * mu_raw
+    )
+    log_sigma_raw = numpyro.sample(
+        "log_sigma_raw", dist.Normal(0.0, 1.0).expand([n_subjects, n_params]).to_event(2)
+    )
+    log_sigma = numpyro.deterministic(
+        "log_sigma",
+        population["log_sigma_mean"] + population["log_sigma_spread"] * log_sigma_raw,
+    )
+    sigma = jnp.exp(log_sigma)
+
+    if n_context == 0:  # zero-shot for every subject at once
+        return
+
+    theta_raw = numpyro.sample(
+        "theta_raw",
+        dist.Normal(0.0, 1.0).expand([n_subjects, n_context, n_params]).to_event(3),
+    )
+    params = hattori2019_session_params(
+        mu_p[:, None, :] + sigma[:, None, :] * theta_raw, beta_max=beta_max
+    )
+
+    n_units = n_subjects * n_context
+    flat = {name: value.reshape(n_units) for name, value in params.items()}
+    log_lik = _session_log_likelihoods(
+        choice_history.reshape(n_units, n_trials),
+        reward_history.reshape(n_units, n_trials),
+        valid_mask.reshape(n_units, n_trials),
+        flat,
+    ).reshape(n_subjects, n_context)
+
+    numpyro.factor("context", jnp.sum(jnp.where(session_mask, log_lik, 0.0)))
+
+
+def fit_adaptation_batched(
+    context_choices,
+    context_rewards,
+    population,
+    *,
+    rng_key,
+    session_mask=None,
+    valid_mask=None,
+    num_warmup=500,
+    num_samples=500,
+    beta_max=10.0,
+    progress_bar=False,
+):
+    """Sample adapted posteriors for many held-out subjects in one run.
+
+    Returns
+    -------
+    dict of str to jnp.ndarray
+        Draws with a leading subject axis: ``mu_p`` and ``log_sigma`` are
+        ``(n_draws, n_subjects, n_params)``.
+    """
+    mcmc = MCMC(
+        NUTS(adapt_subjects_batched),
+        num_warmup=num_warmup,
+        num_samples=num_samples,
+        num_chains=1,
+        progress_bar=progress_bar,
+    )
+    mcmc.run(
+        rng_key, context_choices, context_rewards, population,
+        session_mask, valid_mask, beta_max=beta_max,
+    )
+    return mcmc.get_samples()
+
+
+def batched_choice_prob(
+    batched_samples,
+    subject_index,
+    test_choices,
+    test_rewards,
+    *,
+    rng_key,
+    beta_max=10.0,
+):
+    """Posterior-predictive choice probabilities for one subject out of a batched fit.
+
+    Parameters
+    ----------
+    batched_samples : mapping
+        Draws from :func:`fit_adaptation_batched`.
+    subject_index : int
+        Which subject's slice to score.
+    test_choices, test_rewards : array_like, shape (n_trials,)
+        One held-out session for that subject.
+    rng_key : jax.Array
+        Key for the fresh session-level draws.
+    beta_max : float, optional
+        Upper bound of ``softmax_inverse_temperature``.
+
+    Returns
+    -------
+    np.ndarray, shape (2, n_trials)
+        Draw-averaged probabilities, as :func:`posterior_predictive_choice_prob`.
+    """
+    single = {
+        "mu_p": jnp.asarray(batched_samples["mu_p"])[:, subject_index, :],
+        "log_sigma": jnp.asarray(batched_samples["log_sigma"])[:, subject_index, :],
+    }
+    return posterior_predictive_choice_prob(
+        single, test_choices, test_rewards, rng_key=rng_key, beta_max=beta_max
+    )

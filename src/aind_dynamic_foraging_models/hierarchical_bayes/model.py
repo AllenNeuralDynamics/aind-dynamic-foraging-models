@@ -94,7 +94,8 @@ def hattori2019_two_level(
     reward_history,
     valid_mask=None,
     beta_max=10.0,
-    sigma_prior_scale=0.2,
+    log_sigma_loc=-1.0,
+    log_sigma_scale=1.0,
 ):
     """Two-level model for one subject: subject hyperparameters over session parameters.
 
@@ -113,9 +114,10 @@ def hattori2019_two_level(
         Trials to include. Defaults to all trials.
     beta_max : float, optional
         Upper bound of ``softmax_inverse_temperature``.
-    sigma_prior_scale : float, optional
-        Scale of the half-Cauchy prior on the subject-level spread. The published model
-        uses 0.2.
+    log_sigma_loc, log_sigma_scale : float, optional
+        Location and scale of the log-normal prior on the subject-level spread. The prior
+        is placed on ``log sigma`` because that is the quantity the population level pools
+        across subjects in the two-stage fit.
     """
     choice_history = jnp.asarray(choice_history, dtype=jnp.int32)
     reward_history = jnp.asarray(reward_history, dtype=jnp.float32)
@@ -129,8 +131,10 @@ def hattori2019_two_level(
     # -- Subject-level hyperparameters, on the unconstrained scale --
     mu_p = numpyro.sample("mu_p", dist.Normal(0.0, 1.0).expand([n_params]).to_event(1))
     sigma = numpyro.sample(
-        "sigma", dist.HalfCauchy(sigma_prior_scale).expand([n_params]).to_event(1)
+        "sigma",
+        dist.LogNormal(log_sigma_loc, log_sigma_scale).expand([n_params]).to_event(1),
     )
+    numpyro.deterministic("log_sigma", jnp.log(sigma))
 
     # -- Session-level parameters, non-centred --
     theta_raw = numpyro.sample(

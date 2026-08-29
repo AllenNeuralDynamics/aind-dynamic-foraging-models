@@ -12,7 +12,7 @@ cd /home/han.hou/code/aind-dynamic-foraging-models
 echo "=== node $(hostname) ==="
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader || true
 $B/python -c "import jax; print('jax devices:', jax.devices())"
-$B/python benchmarks/benchmark_stan_vs_numpyro.py \
+$B/python src/aind_dynamic_foraging_models/hierarchical_bayes/benchmarks/benchmark_stan_vs_numpyro.py \
   --n-sessions 40 --n-trials 650 --num-chains 16 \
   --num-samples 500 --num-warmup 500 --skip-stan \
   --output /home/han.hou/.claude/jobs/2bc6425b/tmp/bench/gpu.json

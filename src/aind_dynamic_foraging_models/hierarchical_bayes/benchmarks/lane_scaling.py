@@ -11,7 +11,8 @@ holds. Time growing linearly with lanes means throughput-bound, and batching buy
 
 Run from the repository root::
 
-    python benchmarks/lane_scaling.py
+    cd src/aind_dynamic_foraging_models/hierarchical_bayes/benchmarks
+    python lane_scaling.py
 """
 
 import argparse

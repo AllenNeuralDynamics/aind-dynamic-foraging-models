@@ -11,7 +11,7 @@ export PATH="$B:$PATH" CXX="$B/g++" CC="$B/gcc"
 export XLA_FLAGS="--xla_force_host_platform_device_count=16"
 cd /home/han.hou/code/aind-dynamic-foraging-models
 echo "=== node $(hostname)  cores $SLURM_CPUS_ON_NODE ==="
-$B/python benchmarks/benchmark_stan_vs_numpyro.py \
+$B/python src/aind_dynamic_foraging_models/hierarchical_bayes/benchmarks/benchmark_stan_vs_numpyro.py \
   --n-sessions 40 --n-trials 650 --num-chains 16 \
   --num-samples 500 --num-warmup 500 \
   --output /home/han.hou/.claude/jobs/2bc6425b/tmp/bench/cpu16.json

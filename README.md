@@ -239,6 +239,6 @@ the per-session MLE fitting in `generative_model`.
 
     pip install aind-dynamic-foraging-models[bayes]
 
-- Design decisions and their rationale: [`docs/hierarchical-bayes.md`](docs/hierarchical-bayes.md)
+- Design decisions and their rationale: [`src/aind_dynamic_foraging_models/hierarchical_bayes/docs/design-decisions.md`](src/aind_dynamic_foraging_models/hierarchical_bayes/docs/design-decisions.md)
 - Validation against the reference Stan implementation, and performance measurements:
-  [`benchmarks/RESULTS.md`](benchmarks/RESULTS.md)
+  [`src/aind_dynamic_foraging_models/hierarchical_bayes/benchmarks/RESULTS.md`](src/aind_dynamic_foraging_models/hierarchical_bayes/benchmarks/RESULTS.md)

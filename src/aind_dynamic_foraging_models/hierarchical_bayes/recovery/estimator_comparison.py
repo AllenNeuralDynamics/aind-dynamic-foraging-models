@@ -10,7 +10,8 @@ data cannot provide.
 
 Run from the repository root::
 
-    python recovery/estimator_comparison.py --n-subjects 30
+    cd src/aind_dynamic_foraging_models/hierarchical_bayes/recovery
+    python estimator_comparison.py --n-subjects 30
 """
 
 import argparse

@@ -3,7 +3,8 @@
 Fits the same synthetic sessions with both implementations and reports posterior agreement
 alongside sampling cost. Run from the repository root::
 
-    python benchmarks/benchmark_stan_vs_numpyro.py --n-sessions 8 --n-trials 300
+    cd src/aind_dynamic_foraging_models/hierarchical_bayes/benchmarks
+    python benchmark_stan_vs_numpyro.py --n-sessions 8 --n-trials 300
 
 Wall-clock alone is a misleading comparison here. Stan runs its chains as separate
 processes, so its throughput scales with available cores, while NumPyro vectorises chains

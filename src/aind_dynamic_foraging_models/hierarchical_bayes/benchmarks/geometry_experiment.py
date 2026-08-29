@@ -18,7 +18,8 @@ This sweeps the three knobs that plausibly explain the gap:
 
 Run from the repository root::
 
-    python benchmarks/geometry_experiment.py --n-sessions 8 --n-trials 300
+    cd src/aind_dynamic_foraging_models/hierarchical_bayes/benchmarks
+    python geometry_experiment.py --n-sessions 8 --n-trials 300
 """
 
 import argparse

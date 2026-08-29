@@ -1,6 +1,6 @@
 # Benchmark results
 
-Measured 2026-08-28/29 on the Allen HPC. Reproduce with `benchmarks/slurm/*.sbatch`.
+Measured 2026-08-28/29 on the Allen HPC. Reproduce with `slurm/*.sbatch`.
 
 ## Validation: the reimplementation is correct
 
@@ -64,7 +64,7 @@ these knobs.
 
 ## Batching: the workload is latency-bound on GPU
 
-One gradient at fixed depth 650, widening the batch (`benchmarks/lane_scaling.py`):
+One gradient at fixed depth 650, widening the batch (`lane_scaling.py`):
 
 | lanes | A100 sec/grad | vs 640 lanes | sec per 1k lanes |
 |---|---|---|---|

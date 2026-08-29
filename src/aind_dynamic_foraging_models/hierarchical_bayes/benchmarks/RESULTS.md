@@ -18,7 +18,7 @@ Agreement to three decimals on every parameter, from two independent implementat
 also confirms empirically that the reference's retention parameterisation and this package's
 decay one are the same model.
 
-## Speed: Stan wins for per-subject fits
+## Speed: Stan wins for per-subject fits (but see the section after it)
 
 Same configuration as above. ESS is mean bulk effective sample size over the four pooled
 parameters, out of 8000 draws.
@@ -38,6 +38,36 @@ slightly exceeds 1.0, meaning its draws are effectively independent.
 compute-bound one. Each gradient is 650 sequential scan steps over only ~640 lanes
 (40 sessions x 16 chains), each step doing a handful of scalar operations. Wall time is
 dominated by per-step dispatch overhead, which does not improve with GPU generation.
+
+## Where NumPyro wins: cost is flat in cohort size, Stan's is not
+
+The section above is the honest per-subject result and it favours Stan. It is also the
+configuration this package should never run in production, so it needs its complement.
+
+**Measured.** Widening one gradient from 640 to 20,480 lanes costs 1.0x the time on an A100
+(see "Batching" below). Adding subjects to a fit is therefore close to free here. The same
+holds for held-out scoring: 16x the subjects for 1.64x the time.
+
+**Inferred, not measured.** Stan has no equivalent path for this likelihood. Its per-gradient
+work is a sequential loop over every trial of every session, so cohort cost grows with total
+trials; `reduce_sum` can split that across threads but the work itself does not shrink, and
+Stan's GPU support does not cover a user-written recurrent scan. We have not benchmarked Stan
+at several cohort sizes, so treat the linearity as a property of the implementation rather
+than a measurement.
+
+**The consequence.** Per subject, Stan is 3.7x faster. Across a cohort, NumPyro's cost barely
+moves while Stan's accumulates:
+
+| workload | Stan | NumPyro (batched, GPU) |
+|---|---|---|
+| 1 subject, 40 sessions x 650 trials, 16 chains | 1084 s (measured) | slower (measured, 3.7x on ESS/s) |
+| ~30 subjects, one joint fit | ~9 h projected from per-subject core-seconds | 3 h 32 m measured |
+| 614 subjects, two-stage on 128 cores | ~23 h projected | ~1 subject's cost projected |
+| 153 held-out subjects, one conditioning rung | not applicable | ~20 s measured, from ~4 h sequential |
+
+So the framework choice is not "NumPyro is faster" -- it is not, per subject. It is that
+**the cohort is the unit of work, and only one of the two can treat it that way.** A build
+that fits subjects one at a time has chosen the slower framework for no benefit.
 
 ## Sampler geometry: the default is already best
 

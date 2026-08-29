@@ -87,6 +87,39 @@ overhead dominates completely; 640 lanes is slower per gradient than 1280.
 On CPU the same sweep is throughput-bound and worse than linear (32x lanes cost 102x time,
 3.2x of linear), so batching helps only on GPU.
 
+## Depth, not total work, sets the wall clock
+
+The lane-scaling probe above is a microbenchmark. The same behaviour appears on a real
+one-stage cohort fit, which is stronger evidence:
+
+| cohort | subjects | sessions | trials | wall |
+|---|---|---|---|---|
+| synthetic | 30 | 25 | 500 | 4745 s |
+| real (study 01 D~30) | 29 | up to 49 | up to 1238 | 12706 s |
+
+Total work grew 4.85x (1.96x sessions x 2.48x depth); wall time grew 2.68x, tracking the
+depth ratio of 2.48x. The extra sessions were nearly free.
+
+## Two-stage is the expensive estimator on GPU
+
+The same fact read the other way. A one-stage joint fit places every subject in a single
+batched gradient and pays the depth cost **once**. Two-stage runs one sequential NUTS fit
+per subject and pays it **once per subject**. On a latency-bound device that is the worst
+possible layout.
+
+Measured on the study 01 D~30 cohort, 29 subjects:
+
+| estimator | fit wall |
+|---|---|
+| one-stage (batched) | 3 h 32 m |
+| two-stage (sequential) | > 5 h 45 m |
+
+Two-stage was adopted as the cheap approximation to a joint fit assumed unaffordable. On GPU
+it is both more expensive and statistically inferior. The qualification is that this compares
+a batched implementation against a sequential one: a two-stage fit that vmapped the sampler
+across subjects would be competitive. That work was deferred on an estimate of ~25 minutes
+for D~30, which the run above overshot by more than tenfold.
+
 ## What has not been tested
 
 - `chain_method="vectorized"` runs all chains in lockstep, so every chain pays for the

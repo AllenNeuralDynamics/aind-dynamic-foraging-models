@@ -20,6 +20,7 @@ try:
 
     from aind_dynamic_foraging_models.hierarchical_bayes.heldout import (
         batched_choice_prob,
+        batched_heldout_log_lik,
         fit_adaptation,
         fit_adaptation_batched,
         pointwise_log_predictive_density,
@@ -143,3 +144,74 @@ class TestBatchedAdaptation(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(HAS_JAX, "requires the 'bayes' extra (jax, numpyro)")
+class TestBatchedScoring(unittest.TestCase):
+    """Scoring every held-out session in one vmapped pass."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Adapt a small cohort, then hold out several sessions per subject."""
+        cls.n_subjects, n_context, cls.n_score, n_trials = 5, 3, 3, 180
+        choices, rewards = _simulate_cohort(
+            cls.n_subjects, n_context + cls.n_score, n_trials, seed=3
+        )
+        cls.context_c, cls.context_r = choices[:, :n_context], rewards[:, :n_context]
+        cls.score_c, cls.score_r = choices[:, n_context:], rewards[:, n_context:]
+        cls.samples = fit_adaptation_batched(
+            cls.context_c, cls.context_r, POPULATION,
+            rng_key=jax.random.PRNGKey(0), num_warmup=250, num_samples=250,
+        )
+        # flatten (subject, session) into a session list, as the trainer does
+        cls.subject_indices = np.repeat(np.arange(cls.n_subjects), cls.n_score)
+        cls.flat_c = cls.score_c.reshape(-1, n_trials)
+        cls.flat_r = cls.score_r.reshape(-1, n_trials)
+
+    def test_matches_per_session_scoring(self):
+        """One vmapped pass agrees with scoring each session on its own."""
+        key = jax.random.PRNGKey(11)
+        batched_ll, batched_n = batched_heldout_log_lik(
+            self.samples, self.subject_indices, self.flat_c, self.flat_r,
+            rng_key=key, session_chunk=4,
+        )
+
+        per_session_total = 0.0
+        for position in range(len(self.subject_indices)):
+            subject = int(self.subject_indices[position])
+            prob = batched_choice_prob(
+                self.samples, subject, self.flat_c[position], self.flat_r[position],
+                rng_key=key,
+            )
+            total, _ = pointwise_log_predictive_density(prob, self.flat_c[position])
+            per_session_total += total
+
+        # Fresh session latents are redrawn, so agreement is statistical, not exact.
+        batched_lik = float(np.exp(batched_ll.sum() / batched_n.sum()))
+        per_session_lik = float(np.exp(per_session_total / batched_n.sum()))
+        self.assertAlmostEqual(batched_lik, per_session_lik, delta=0.01)
+
+    def test_counts_respect_the_mask(self):
+        """Masked trials are excluded from both the likelihood and the trial count."""
+        mask = np.ones_like(self.flat_c, dtype=bool)
+        mask[:, ::2] = False
+        _, counts = batched_heldout_log_lik(
+            self.samples, self.subject_indices, self.flat_c, self.flat_r,
+            valid_mask=mask, rng_key=jax.random.PRNGKey(0), session_chunk=4,
+        )
+        np.testing.assert_array_equal(counts, mask.sum(axis=1))
+
+    def test_chunking_does_not_change_the_result(self):
+        """Chunk size caps memory without altering the answer."""
+        key = jax.random.PRNGKey(5)
+        small, _ = batched_heldout_log_lik(
+            self.samples, self.subject_indices, self.flat_c, self.flat_r,
+            rng_key=key, session_chunk=2,
+        )
+        large, _ = batched_heldout_log_lik(
+            self.samples, self.subject_indices, self.flat_c, self.flat_r,
+            rng_key=key, session_chunk=64,
+        )
+        # Different chunking redraws latents differently; totals stay close.
+        self.assertAlmostEqual(float(small.sum()), float(large.sum()),
+                               delta=abs(float(large.sum())) * 0.02)

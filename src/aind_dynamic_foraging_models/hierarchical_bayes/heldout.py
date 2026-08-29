@@ -385,3 +385,106 @@ def batched_choice_prob(
     return posterior_predictive_choice_prob(
         single, test_choices, test_rewards, rng_key=rng_key, beta_max=beta_max
     )
+
+
+def batched_heldout_log_lik(
+    batched_samples,
+    subject_indices,
+    choices,
+    rewards,
+    valid_mask=None,
+    *,
+    rng_key,
+    beta_max=10.0,
+    n_draws=None,
+    session_chunk=128,
+):
+    """Score many held-out sessions at once, one vmapped pass per chunk.
+
+    Batching the adaptation fits removed one bottleneck and exposed the next: replaying each
+    held-out session in its own call means thousands of small dispatches, which on a
+    latency-bound device costs far more than the arithmetic does. Session replays are
+    independent, so they vectorise the same way everything else here does.
+
+    Draws are reduced inside each chunk rather than materialised, since keeping every
+    per-trial probability for every draw and session at once would run to gigabytes.
+
+    Parameters
+    ----------
+    batched_samples : mapping
+        Draws from :func:`fit_adaptation_batched`, with a subject axis.
+    subject_indices : array_like of int, shape (n_sessions,)
+        Which subject each session belongs to, indexing into the batched fit.
+    choices, rewards : array_like, shape (n_sessions, n_trials)
+        Sessions to score, padded on the trial axis.
+    valid_mask : array_like of bool, same shape, optional
+        Trials to include. Defaults to all trials.
+    rng_key : jax.Array
+        Key for the fresh session-level draws.
+    beta_max : float, optional
+        Upper bound of ``softmax_inverse_temperature``.
+    n_draws : int, optional
+        Subsample this many posterior draws. The posterior-predictive average converges
+        quickly, so fewer draws here trade a little noise for a lot of time.
+    session_chunk : int, optional
+        Sessions per vmapped pass. Caps peak memory.
+
+    Returns
+    -------
+    tuple of np.ndarray
+        Per-session summed log likelihood and trial count, both shape ``(n_sessions,)``.
+    """
+    choices = jnp.asarray(choices, dtype=jnp.int32)
+    rewards = jnp.asarray(rewards, dtype=jnp.float32)
+    subject_indices = jnp.asarray(subject_indices, dtype=jnp.int32)
+    n_sessions, n_trials = choices.shape
+    if valid_mask is None:
+        valid_mask = jnp.ones_like(choices, dtype=bool)
+    valid_mask = jnp.asarray(valid_mask, dtype=bool)
+
+    mu_p = jnp.asarray(batched_samples["mu_p"])
+    sigma = jnp.exp(jnp.asarray(batched_samples["log_sigma"]))
+    if n_draws is not None and n_draws < mu_p.shape[0]:
+        mu_p, sigma = mu_p[:n_draws], sigma[:n_draws]
+
+    trial_index = jnp.arange(n_trials)
+
+    def _observed_prob(theta, session_choices, session_rewards):
+        """Probability the model assigned to the observed action, per trial."""
+        params = hattori2019_session_params(theta, beta_max=beta_max)
+        prob = hattori2019_choice_prob(
+            session_choices, session_rewards,
+            learn_rate_rew=params["learn_rate_rew"],
+            learn_rate_unrew=params["learn_rate_unrew"],
+            forget_rate_unchosen=params["forget_rate_unchosen"],
+            softmax_inverse_temperature=params["softmax_inverse_temperature"],
+            bias_l=params["bias_l"],
+        )
+        return prob[session_choices, trial_index]
+
+    over_sessions = jax.vmap(_observed_prob, in_axes=(0, 0, 0))
+    over_draws = jax.jit(jax.vmap(over_sessions, in_axes=(0, None, None)))
+
+    log_lik = np.zeros(n_sessions)
+    counts = np.zeros(n_sessions, dtype=int)
+
+    for start in range(0, n_sessions, session_chunk):
+        stop = min(start + session_chunk, n_sessions)
+        idx = subject_indices[start:stop]
+        chunk_key, rng_key = jax.random.split(rng_key)
+
+        mu_chunk = mu_p[:, idx, :]          # (draws, chunk, params)
+        sigma_chunk = sigma[:, idx, :]
+        theta = mu_chunk + sigma_chunk * jax.random.normal(chunk_key, mu_chunk.shape)
+
+        probs = over_draws(theta, choices[start:stop], rewards[start:stop])
+        averaged = jnp.mean(probs, axis=0)   # probability space, before the log
+        averaged = jnp.clip(averaged, 1e-10, 1.0)
+
+        mask = valid_mask[start:stop]
+        log_lik[start:stop] = np.asarray(
+            jnp.sum(jnp.where(mask, jnp.log(averaged), 0.0), axis=-1)
+        )
+        counts[start:stop] = np.asarray(jnp.sum(mask, axis=-1))
+
+    return log_lik, counts

@@ -62,15 +62,37 @@ right choice. A dense mass matrix gives the best ESS per draw but costs 4-5x the
 The per-draw gap against Stan is therefore not a geometry problem and is not fixable by
 these knobs.
 
+## Batching: the workload is latency-bound on GPU
+
+One gradient at fixed depth 650, widening the batch (`benchmarks/lane_scaling.py`):
+
+| lanes | A100 sec/grad | vs 640 lanes | sec per 1k lanes |
+|---|---|---|---|
+| 640 | 0.0515 | 1.00x | 0.0804 |
+| 1280 | 0.0339 | 0.66x | 0.0264 |
+| 2560 | 0.0348 | 0.68x | 0.0136 |
+| 5120 | 0.0319 | 0.62x | 0.0062 |
+| 10240 | 0.0547 | 1.06x | 0.0053 |
+| 20480 | 0.0496 | 0.96x | 0.0024 |
+
+**32x the lanes costs 1.0x the time**, and per-lane cost falls 33x. Batching across subjects
+is therefore nearly free on GPU, and the whole cohort costs about what one subject costs
+today.
+
+This explains the results above. At 640 lanes (40 sessions x 16 chains) the GPU runs at a
+few percent utilisation, so those benchmarks measured dispatch overhead rather than compute
+-- which is why an A100 lost to a 2017 TITAN Xp and to Stan. Below ~1000 lanes fixed
+overhead dominates completely; 640 lanes is slower per gradient than 1280.
+
+On CPU the same sweep is throughput-bound and worse than linear (32x lanes cost 102x time,
+3.2x of linear), so batching helps only on GPU.
+
 ## What has not been tested
 
 - `chain_method="vectorized"` runs all chains in lockstep, so every chain pays for the
-  deepest tree in the batch. `parallel` may recover part of the gap.
-- **Batching across subjects.** Two-stage subject fits are independent, so all subjects
-  could occupy one vmapped computation. Since the workload is latency-bound, widening from
-  ~640 to ~10,000 lanes should cost little, which would make the whole cohort roughly as
-  cheap as one subject is today. This is the only route by which NumPyro wins, and it is
-  unmeasured.
+  deepest tree in the batch. `parallel` may recover part of the per-draw gap.
+- Whether the flat regime extends past ~20k lanes. A 16-chain cohort fit would need
+  ~400k lanes, well beyond what was measured.
 - **Ragged session lengths.** These runs use uniform 650-trial sessions. Real data are
   long-tailed, and Stan loops to each session's true length while JAX must pad to the
   maximum and mask, so real data will widen the gap further unless sessions are bucketed or

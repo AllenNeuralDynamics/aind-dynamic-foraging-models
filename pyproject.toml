@@ -42,6 +42,11 @@ rl = [
     'aind_dynamic_foraging_basic_analysis',
 ]
 
+bayes = [
+    'jax',
+    'numpyro',
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

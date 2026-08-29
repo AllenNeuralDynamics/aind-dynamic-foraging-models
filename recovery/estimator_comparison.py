@@ -209,6 +209,12 @@ def main():
         for k, value in scores.items():
             print(f"  k={k}: heldout likelihood {value:.5f}", flush=True)
 
+        # Write after each estimator: these fits run for hours, and a wall-clock kill
+        # partway through should not discard the arm that already finished.
+        if args.output:
+            with open(args.output, "w") as handle:
+                json.dump(summary, handle, indent=2)
+
     one, two = summary["estimators"]["one_stage"], summary["estimators"]["two_stage"]
     print(f"\n{'k':>4}{'one_stage':>12}{'two_stage':>12}{'difference':>13}")
     for k in FEW_SHOT_K:

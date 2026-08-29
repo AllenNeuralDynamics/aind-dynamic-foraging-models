@@ -168,12 +168,13 @@ def hattori2019_two_level(
     numpyro.factor("likelihood", jnp.sum(log_lik))
 
 
-# Number of parameters the published model pools across sessions: the two learning rates,
-# the forgetting rate and the inverse temperature. Its side bias is deliberately excluded.
-N_PUBLISHED_POOLED_PARAMS = 4
+# Number of parameters the reference Stan model pools across sessions: the two learning
+# rates, the forgetting rate and the inverse temperature. Its side bias is deliberately
+# excluded.
+N_STAN_REFERENCE_POOLED_PARAMS = 4
 
 
-def hattori2019_published(
+def hattori2019_stan_reference(
     choice_history,
     reward_history,
     valid_mask=None,
@@ -181,7 +182,11 @@ def hattori2019_published(
     sigma_prior_scale=0.2,
     bias_prior_scale=20.0,
 ):
-    """Faithful port of the published Stan model, for validating against it.
+    """Faithful port of the AIND reference Stan model, for validating against it.
+
+    "Reference" here means the Stan implementation in
+    ``AllenNeuralDynamics/aind_stan_fit_sim`` that this package is validated against --
+    not the original Hattori et al. 2019 model, whose dynamics both share.
 
     Differs from :func:`hattori2019_two_level` in exactly two ways, both inherited from the
     reference implementation: the subject-level spread carries a half-Cauchy prior rather
@@ -204,7 +209,7 @@ def hattori2019_published(
     beta_max : float, optional
         Upper bound of ``softmax_inverse_temperature``. The published model uses 10.
     sigma_prior_scale : float, optional
-        Scale of the half-Cauchy prior on subject-level spread. The published model uses 0.2.
+        Scale of the half-Cauchy prior on subject-level spread. The reference uses 0.2.
     bias_prior_scale : float, optional
         Scale of the per-session normal prior on the side bias. The reference uses 20, which
         is effectively flat on the logit scale.
@@ -219,15 +224,15 @@ def hattori2019_published(
 
     # -- Pooled subject-level hyperparameters (bias is excluded, as in the reference) --
     mu_p = numpyro.sample(
-        "mu_p", dist.Normal(0.0, 1.0).expand([N_PUBLISHED_POOLED_PARAMS]).to_event(1)
+        "mu_p", dist.Normal(0.0, 1.0).expand([N_STAN_REFERENCE_POOLED_PARAMS]).to_event(1)
     )
     sigma = numpyro.sample(
         "sigma",
-        dist.HalfCauchy(sigma_prior_scale).expand([N_PUBLISHED_POOLED_PARAMS]).to_event(1),
+        dist.HalfCauchy(sigma_prior_scale).expand([N_STAN_REFERENCE_POOLED_PARAMS]).to_event(1),
     )
     theta_raw = numpyro.sample(
         "theta_raw",
-        dist.Normal(0.0, 1.0).expand([n_sessions, N_PUBLISHED_POOLED_PARAMS]).to_event(2),
+        dist.Normal(0.0, 1.0).expand([n_sessions, N_STAN_REFERENCE_POOLED_PARAMS]).to_event(2),
     )
     theta_unconstrained = mu_p + sigma * theta_raw
 

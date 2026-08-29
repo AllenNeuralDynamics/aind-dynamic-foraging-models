@@ -9,8 +9,7 @@ validated and benchmarked against, so any edit would undermine the comparison.
 
 ## Parameter mapping
 
-The reference and this package parameterise the same model differently. See
-`hattori2019_published` for the full argument; in short:
+The reference and this package parameterise the same model differently. See `hattori2019_stan_reference` for the full argument; in short:
 
 | reference | this package |
 |---|---|

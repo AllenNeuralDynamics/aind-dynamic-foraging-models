@@ -136,12 +136,12 @@ def run_numpyro(choices, rewards, num_chains, num_samples, num_warmup, seed=0):
     import numpyro
     from numpyro.infer import MCMC, NUTS
 
-    from aind_dynamic_foraging_models.hierarchical_bayes.model import hattori2019_published
+    from aind_dynamic_foraging_models.hierarchical_bayes.model import hattori2019_stan_reference
 
     numpyro.set_host_device_count(num_chains)
 
     mcmc = MCMC(
-        NUTS(hattori2019_published),
+        NUTS(hattori2019_stan_reference),
         num_warmup=num_warmup,
         num_samples=num_samples,
         num_chains=num_chains,

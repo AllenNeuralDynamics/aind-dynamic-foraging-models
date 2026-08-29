@@ -15,7 +15,7 @@ try:
 
     from aind_dynamic_foraging_models.hierarchical_bayes.model import (
         HATTORI2019_PARAMS,
-        hattori2019_published,
+        hattori2019_stan_reference,
         hattori2019_session_params,
         hattori2019_two_level,
     )
@@ -174,7 +174,7 @@ class TestHattoriPublishedVariant(unittest.TestCase):
         cls.n_sessions = choices.shape[0]
 
         mcmc = MCMC(
-            NUTS(hattori2019_published),
+            NUTS(hattori2019_stan_reference),
             num_warmup=300,
             num_samples=300,
             num_chains=1,

@@ -5,7 +5,7 @@ Measured 2026-08-28/29 on the Allen HPC. Reproduce with `slurm/*.sbatch`.
 ## Validation: the reimplementation is correct
 
 Fitting identical synthetic data (40 sessions x 650 trials, 16 chains, 500 warmup + 500
-samples) with the reference Stan model and with `hattori2019_published`:
+samples) with the reference Stan model and with `hattori2019_stan_reference`:
 
 | parameter | truth | numpyro | stan |
 |---|---|---|---|

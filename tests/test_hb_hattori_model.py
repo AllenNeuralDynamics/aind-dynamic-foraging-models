@@ -15,6 +15,7 @@ try:
 
     from aind_dynamic_foraging_models.hierarchical_bayes.model import (
         HATTORI2019_PARAMS,
+        hattori2019_published,
         hattori2019_session_params,
         hattori2019_two_level,
     )
@@ -157,3 +158,47 @@ class TestHattoriTwoLevelFit(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(HAS_JAX, "requires the 'bayes' extra (jax, numpyro)")
+class TestHattoriPublishedVariant(unittest.TestCase):
+    """The paper-faithful variant used for validating against the reference Stan model."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Simulate one subject and fit the published-priors model once."""
+        rng = np.random.default_rng(0)
+        cls.true_mu_p = np.array([0.3, -0.6, -0.8, 0.2, 0.0])
+        theta = cls.true_mu_p + 0.25 * rng.standard_normal((6, len(HATTORI2019_PARAMS)))
+        choices, rewards = _simulate_subject(theta, n_trials=250)
+        cls.n_sessions = choices.shape[0]
+
+        mcmc = MCMC(
+            NUTS(hattori2019_published),
+            num_warmup=300,
+            num_samples=300,
+            num_chains=1,
+            progress_bar=False,
+        )
+        mcmc.run(jax.random.PRNGKey(0), choices, rewards)
+        cls.mcmc = mcmc
+        cls.samples = mcmc.get_samples()
+
+    def test_bias_is_not_pooled(self):
+        """The side bias is per-session with no subject-level counterpart, as in the reference."""
+        self.assertIn("bias_l_raw", self.samples)
+        self.assertEqual(np.asarray(self.samples["bias_l_raw"]).shape[1], self.n_sessions)
+        self.assertNotIn("subject_bias_l", self.samples)
+
+    def test_pools_four_parameters_only(self):
+        """Only the two learning rates, the forgetting rate and beta are pooled."""
+        self.assertEqual(np.asarray(self.samples["mu_p"]).shape[1], 4)
+        self.assertEqual(np.asarray(self.samples["sigma"]).shape[1], 4)
+
+    def test_recovers_subject_level_parameters(self):
+        """Subject-level posterior means land near the generating values."""
+        truth = _to_bounded(self.true_mu_p)
+        for name in ("learn_rate_rew", "learn_rate_unrew", "forget_rate_unchosen"):
+            with self.subTest(param=name):
+                posterior_mean = float(self.samples[f"subject_{name}"].mean())
+                self.assertAlmostEqual(posterior_mean, float(truth[name]), delta=0.25)

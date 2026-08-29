@@ -154,3 +154,95 @@ def hattori2019_two_level(
     log_lik = _session_log_likelihoods(choice_history, reward_history, valid_mask, params)
     numpyro.deterministic("session_log_lik", log_lik)
     numpyro.factor("likelihood", jnp.sum(log_lik))
+
+
+# Number of parameters the published model pools across sessions: the two learning rates,
+# the forgetting rate and the inverse temperature. Its side bias is deliberately excluded.
+N_PUBLISHED_POOLED_PARAMS = 4
+
+
+def hattori2019_published(
+    choice_history,
+    reward_history,
+    valid_mask=None,
+    beta_max=10.0,
+    sigma_prior_scale=0.2,
+    bias_prior_scale=20.0,
+):
+    """Faithful port of the published Stan model, for validating against it.
+
+    Differs from :func:`hattori2019_two_level` in exactly two ways, both inherited from the
+    reference implementation: the subject-level spread carries a half-Cauchy prior rather
+    than a log-normal, and the side bias is a per-session parameter with a broad fixed prior
+    rather than a pooled one.
+
+    **On the forgetting rate.** The reference parameterises retention,
+    ``aF = Phi(mu + sigma * raw)``, where ``aF = 1`` means no forgetting. This function
+    parameterises decay, as the rest of the package does. The two are the same model: since
+    ``1 - Phi(x) = Phi(-x)`` and the raw draws are symmetric, decay equals retention with
+    the location negated. So comparing posteriors against the reference requires flipping
+    the sign of that parameter's ``mu_p``; ``sigma`` is unchanged.
+
+    Parameters
+    ----------
+    choice_history, reward_history : array_like, shape (n_sessions, n_trials)
+        Observed sessions for one subject.
+    valid_mask : array_like of bool, shape (n_sessions, n_trials), optional
+        Trials to include. Defaults to all trials.
+    beta_max : float, optional
+        Upper bound of ``softmax_inverse_temperature``. The published model uses 10.
+    sigma_prior_scale : float, optional
+        Scale of the half-Cauchy prior on subject-level spread. The published model uses 0.2.
+    bias_prior_scale : float, optional
+        Scale of the per-session normal prior on the side bias. The reference uses 20, which
+        is effectively flat on the logit scale.
+    """
+    choice_history = jnp.asarray(choice_history, dtype=jnp.int32)
+    reward_history = jnp.asarray(reward_history, dtype=jnp.float32)
+    n_sessions = choice_history.shape[0]
+
+    if valid_mask is None:
+        valid_mask = jnp.ones_like(choice_history, dtype=bool)
+    valid_mask = jnp.asarray(valid_mask, dtype=bool)
+
+    # -- Pooled subject-level hyperparameters (bias is excluded, as in the reference) --
+    mu_p = numpyro.sample(
+        "mu_p", dist.Normal(0.0, 1.0).expand([N_PUBLISHED_POOLED_PARAMS]).to_event(1)
+    )
+    sigma = numpyro.sample(
+        "sigma",
+        dist.HalfCauchy(sigma_prior_scale).expand([N_PUBLISHED_POOLED_PARAMS]).to_event(1),
+    )
+    theta_raw = numpyro.sample(
+        "theta_raw",
+        dist.Normal(0.0, 1.0).expand([n_sessions, N_PUBLISHED_POOLED_PARAMS]).to_event(2),
+    )
+    theta_unconstrained = mu_p + sigma * theta_raw
+
+    # -- Unpooled per-session side bias --
+    bias_l = numpyro.sample(
+        "bias_l_raw", dist.Normal(0.0, bias_prior_scale).expand([n_sessions]).to_event(1)
+    )
+
+    params = {
+        "learn_rate_rew": _phi(theta_unconstrained[..., 0]),
+        "learn_rate_unrew": _phi(theta_unconstrained[..., 1]),
+        "forget_rate_unchosen": _phi(theta_unconstrained[..., 2]),
+        "softmax_inverse_temperature": _phi(theta_unconstrained[..., 3]) * beta_max,
+        "bias_l": bias_l,
+    }
+    for name in HATTORI2019_PARAMS:
+        numpyro.deterministic(name, params[name])
+
+    subject_means = {
+        "learn_rate_rew": _phi(mu_p[0]),
+        "learn_rate_unrew": _phi(mu_p[1]),
+        "forget_rate_unchosen": _phi(mu_p[2]),
+        "softmax_inverse_temperature": _phi(mu_p[3]) * beta_max,
+    }
+    for name, value in subject_means.items():
+        numpyro.deterministic(f"subject_{name}", value)
+
+    log_lik = _session_log_likelihoods(choice_history, reward_history, valid_mask, params)
+    numpyro.deterministic("session_log_lik", log_lik)
+    numpyro.factor("likelihood", jnp.sum(log_lik))

@@ -258,3 +258,104 @@ def hattori2019_published(
     log_lik = _session_log_likelihoods(choice_history, reward_history, valid_mask, params)
     numpyro.deterministic("session_log_lik", log_lik)
     numpyro.factor("likelihood", jnp.sum(log_lik))
+
+
+def hattori2019_three_level(
+    choice_history,
+    reward_history,
+    valid_mask=None,
+    session_mask=None,
+    beta_max=10.0,
+    log_sigma_loc=-1.0,
+    log_sigma_scale=1.0,
+):
+    """One-stage joint model: population over subjects over sessions.
+
+    This is the estimator the two-stage fit approximates. Everything is inferred at once, so
+    information flows in both directions: a subject with few sessions is pulled toward the
+    cohort, and that shrinkage in turn reaches its session-level parameters. The two-stage
+    fit cannot do the latter, because its subject fits finish before the population exists.
+
+    Both levels are non-centred, and the population pools **both** the location ``mu_p`` and
+    the log of the session-level spread, so a held-out subject inherits a cohort-informed
+    prior for how variable its sessions are likely to be, not merely where they sit.
+
+    Subjects with unequal session counts are padded along the session axis and excluded via
+    ``session_mask``; padded trials are excluded via ``valid_mask``.
+
+    Parameters
+    ----------
+    choice_history, reward_history : array_like, shape (n_subjects, n_sessions, n_trials)
+        Observed sessions, padded on both the session and trial axes.
+    valid_mask : array_like of bool, same shape, optional
+        Trials to include. Defaults to all trials.
+    session_mask : array_like of bool, shape (n_subjects, n_sessions), optional
+        Which session slots are real. Defaults to all sessions.
+    beta_max : float, optional
+        Upper bound of ``softmax_inverse_temperature``.
+    log_sigma_loc, log_sigma_scale : float, optional
+        Prior on the population mean of ``log sigma``.
+    """
+    choice_history = jnp.asarray(choice_history, dtype=jnp.int32)
+    reward_history = jnp.asarray(reward_history, dtype=jnp.float32)
+    n_subjects, n_sessions, n_trials = choice_history.shape
+    n_params = len(HATTORI2019_PARAMS)
+
+    if valid_mask is None:
+        valid_mask = jnp.ones_like(choice_history, dtype=bool)
+    valid_mask = jnp.asarray(valid_mask, dtype=bool)
+    if session_mask is None:
+        session_mask = jnp.ones((n_subjects, n_sessions), dtype=bool)
+    session_mask = jnp.asarray(session_mask, dtype=bool)
+
+    # -- Population level --
+    population_mean = numpyro.sample(
+        "population_mean", dist.Normal(0.0, 1.0).expand([n_params]).to_event(1)
+    )
+    population_scale = numpyro.sample(
+        "population_scale", dist.HalfNormal(1.0).expand([n_params]).to_event(1)
+    )
+    log_sigma_mean = numpyro.sample(
+        "log_sigma_mean",
+        dist.Normal(log_sigma_loc, log_sigma_scale).expand([n_params]).to_event(1),
+    )
+    log_sigma_spread = numpyro.sample(
+        "log_sigma_spread", dist.HalfNormal(1.0).expand([n_params]).to_event(1)
+    )
+
+    # -- Subject level, non-centred --
+    mu_raw = numpyro.sample(
+        "mu_raw", dist.Normal(0.0, 1.0).expand([n_subjects, n_params]).to_event(2)
+    )
+    mu_p = numpyro.deterministic("mu_p", population_mean + population_scale * mu_raw)
+
+    log_sigma_raw = numpyro.sample(
+        "log_sigma_raw", dist.Normal(0.0, 1.0).expand([n_subjects, n_params]).to_event(2)
+    )
+    log_sigma = numpyro.deterministic(
+        "log_sigma", log_sigma_mean + log_sigma_spread * log_sigma_raw
+    )
+    sigma = jnp.exp(log_sigma)
+
+    # -- Session level, non-centred --
+    theta_raw = numpyro.sample(
+        "theta_raw",
+        dist.Normal(0.0, 1.0).expand([n_subjects, n_sessions, n_params]).to_event(3),
+    )
+    theta_unconstrained = mu_p[:, None, :] + sigma[:, None, :] * theta_raw
+
+    params = hattori2019_session_params(theta_unconstrained, beta_max=beta_max)
+
+    # Flatten (subject, session) so the likelihood vmaps over one axis.
+    n_units = n_subjects * n_sessions
+    flat_params = {name: value.reshape(n_units) for name, value in params.items()}
+    log_lik = _session_log_likelihoods(
+        choice_history.reshape(n_units, n_trials),
+        reward_history.reshape(n_units, n_trials),
+        valid_mask.reshape(n_units, n_trials),
+        flat_params,
+    ).reshape(n_subjects, n_sessions)
+
+    log_lik = jnp.where(session_mask, log_lik, 0.0)
+    numpyro.deterministic("session_log_lik", log_lik)
+    numpyro.factor("likelihood", jnp.sum(log_lik))

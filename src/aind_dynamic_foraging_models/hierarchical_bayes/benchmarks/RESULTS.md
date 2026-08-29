@@ -60,10 +60,18 @@ moves while Stan's accumulates:
 
 | workload | Stan | NumPyro (batched, GPU) |
 |---|---|---|
-| 1 subject, 40 sessions x 650 trials, 16 chains | 1084 s (measured) | slower (measured, 3.7x on ESS/s) |
-| ~30 subjects, one joint fit | ~9 h projected from per-subject core-seconds | 3 h 32 m measured |
-| 614 subjects, two-stage on 128 cores | ~23 h projected | ~1 subject's cost projected |
-| 153 held-out subjects, one conditioning rung | not applicable | ~20 s measured, from ~4 h sequential |
+| 1 subject, 40 sessions x 650 trials, 16 chains | **1084 s measured** | 3.7x slower, **measured** |
+| 30 subjects as 30 separate per-subject fits | ~9 h, *projected* as 30 x the row above | not the mode this package runs in |
+| 30 subjects, one joint three-level fit | **not possible with the reference model** -- it is two-level per subject, so this would need a Stan model that does not exist and has never been written or run | 79 min **measured** (synthetic, 25 sessions x 500 trials); 3 h 32 m on real data with sessions up to 1238 trials, that figure including the k=0 scoring pass |
+| 614 subjects as separate per-subject fits, 128 cores | ~23 h, *projected* from measured core-seconds | ~1 subject's cost, *projected* from flat lane scaling |
+| 153 held-out subjects, one conditioning rung | not applicable | ~20 s **measured**, from ~4 h sequential |
+
+**Read the middle row carefully.** The comparison there is not Stan-slower-than-NumPyro; it
+is that Stan cannot express the estimator at all without a new model. Extending it to three
+levels is possible in principle -- it is an ordinary hierarchical model -- but would also
+need `reduce_sum` to use more than 16 cores, and would carry a trajectory-length penalty from
+the higher dimension. None of that has been attempted, so no Stan joint-fit number exists
+anywhere in this document.
 
 So the framework choice is not "NumPyro is faster" -- it is not, per subject. It is that
 **the cohort is the unit of work, and only one of the two can treat it that way.** A build

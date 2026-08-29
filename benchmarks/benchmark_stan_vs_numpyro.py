@@ -111,6 +111,9 @@ def run_stan(choices, rewards, num_chains, num_samples, num_warmup, seed=1):
         num_chains=num_chains, num_samples=num_samples, num_warmup=num_warmup
     )
     sample_seconds = time.time() - started
+    # No warm re-run here: httpstan caches fits by model, data and sampling arguments, so a
+    # second identical call returns the cached draws in milliseconds rather than resampling.
+    # Compilation is already excluded, having happened in stan.build above.
 
     draws = {name: np.asarray(fit[name]) for name, _, _ in SHARED_PARAMS}
     draws["compile_seconds"] = compile_seconds
@@ -144,9 +147,16 @@ def run_numpyro(choices, rewards, num_chains, num_samples, num_warmup, seed=0):
         chain_method="vectorized",
         progress_bar=False,
     )
-    # Compile and sample are fused in JAX, so time a warm run separately from the first.
+    # JAX fuses tracing, compilation and execution, so the first run carries the JIT cost.
+    # Timing only that would compare NumPyro's compile against Stan's cached binary, so
+    # both a cold and a warm run are timed and reported.
     started = time.time()
     mcmc.run(jax.random.PRNGKey(seed), choices, rewards)
+    mcmc.get_samples()["mu_p"].block_until_ready()
+    cold_seconds = time.time() - started
+
+    started = time.time()
+    mcmc.run(jax.random.PRNGKey(seed + 1), choices, rewards)
     mcmc.get_samples()["mu_p"].block_until_ready()
     total_seconds = time.time() - started
 
@@ -155,6 +165,7 @@ def run_numpyro(choices, rewards, num_chains, num_samples, num_warmup, seed=0):
         this_name: np.asarray(samples[this_name])
         for _, this_name, _ in SHARED_PARAMS
     }
+    draws["cold_seconds"] = cold_seconds
     draws["sample_seconds"] = total_seconds
     draws["num_chains"] = num_chains
     draws["num_samples"] = num_samples
@@ -166,7 +177,7 @@ def effective_sample_size(draws):
     """Bulk effective sample size of a flat draw vector, via ArviZ."""
     import arviz as az
 
-    return float(az.ess(np.asarray(draws).reshape(1, -1), method="bulk").to_array().values)
+    return float(az.ess(np.asarray(draws).reshape(1, -1), method="bulk"))
 
 
 def main():
@@ -190,7 +201,11 @@ def main():
     numpyro_draws = run_numpyro(
         choices, rewards, args.num_chains, args.num_samples, args.num_warmup
     )
-    print(f"numpyro: {numpyro_draws['sample_seconds']:.1f}s on {numpyro_draws['device']}")
+    print(
+        f"numpyro: {numpyro_draws['sample_seconds']:.1f}s warm "
+        f"({numpyro_draws['cold_seconds']:.1f}s cold, incl. JIT) "
+        f"on {numpyro_draws['device']}"
+    )
 
     stan_draws = None
     if not args.skip_stan:
@@ -199,7 +214,7 @@ def main():
         )
         print(
             f"stan   : {stan_draws['sample_seconds']:.1f}s sampling "
-            f"(+{stan_draws['compile_seconds']:.1f}s compile)\n"
+            f"(+{stan_draws['compile_seconds']:.1f}s compile, cached across runs)\n"
         )
 
     header = f"{'parameter':<32}{'truth':>9}{'numpyro':>10}"
@@ -230,6 +245,7 @@ def main():
     print(f"{'numpyro':<32}{ours_rate:>10.1f}   ({ours_ess:.0f} ESS of {total_draws} draws)")
     summary["numpyro"] = {
         "seconds": numpyro_draws["sample_seconds"],
+        "cold_seconds": numpyro_draws["cold_seconds"],
         "ess": float(ours_ess),
         "ess_per_second": float(ours_rate),
         "device": numpyro_draws["device"],

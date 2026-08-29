@@ -120,6 +120,29 @@ a batched implementation against a sequential one: a two-stage fit that vmapped 
 across subjects would be competitive. That work was deferred on an estimate of ~25 minutes
 for D~30, which the run above overshot by more than tenfold.
 
+## Batched adaptation for held-out scoring
+
+Held-out subjects are independent given a frozen population, so the same batching argument
+applies to scoring as to fitting. One batched adaptation fit, widening the subject count:
+
+| subjects | seconds | seconds per subject |
+|---|---|---|
+| 6 | 10.4 | 1.73 |
+| 24 | 17.8 | 0.74 |
+| 96 | 17.1 | 0.18 |
+
+16x the subjects costs 1.64x the time, and going from 24 to 96 is free. Measured on CPU;
+per-subject cost falls tenfold.
+
+Sequential adaptation over the real 153-subject held-out cohort measured **about four hours
+per conditioning rung**, which had forced production runs down from five k rungs to one.
+Batched, a rung is tens of seconds and the full sweep is affordable again.
+
+The approximation is that one sampler adapts a single step size across every subject's
+block rather than one per subject. That is measured rather than assumed: per-subject
+posterior means agree with sequential fitting, and so do the held-out likelihoods that
+actually get reported (within 0.01).
+
 ## What has not been tested
 
 - `chain_method="vectorized"` runs all chains in lockstep, so every chain pays for the

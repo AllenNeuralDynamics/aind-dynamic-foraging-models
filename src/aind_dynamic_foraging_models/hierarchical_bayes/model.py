@@ -96,6 +96,7 @@ def hattori2019_two_level(
     beta_max=10.0,
     log_sigma_loc=-1.0,
     log_sigma_scale=1.0,
+    centered=False,
 ):
     """Two-level model for one subject: subject hyperparameters over session parameters.
 
@@ -118,6 +119,12 @@ def hattori2019_two_level(
         Location and scale of the log-normal prior on the subject-level spread. The prior
         is placed on ``log sigma`` because that is the quantity the population level pools
         across subjects in the two-stage fit.
+    centered : bool, optional
+        Whether to sample session parameters directly from their subject distribution
+        rather than as standardised offsets. The non-centred form (the default) avoids the
+        funnel geometry that appears when the data constrain a session weakly; the centred
+        form is often better sampled when each session carries many trials, so which one
+        wins is an empirical question for the data at hand.
     """
     choice_history = jnp.asarray(choice_history, dtype=jnp.int32)
     reward_history = jnp.asarray(reward_history, dtype=jnp.float32)
@@ -136,11 +143,16 @@ def hattori2019_two_level(
     )
     numpyro.deterministic("log_sigma", jnp.log(sigma))
 
-    # -- Session-level parameters, non-centred --
-    theta_raw = numpyro.sample(
-        "theta_raw", dist.Normal(0.0, 1.0).expand([n_sessions, n_params]).to_event(2)
-    )
-    theta_unconstrained = mu_p + sigma * theta_raw
+    # -- Session-level parameters --
+    if centered:
+        theta_unconstrained = numpyro.sample(
+            "theta", dist.Normal(mu_p, sigma).expand([n_sessions, n_params]).to_event(2)
+        )
+    else:
+        theta_raw = numpyro.sample(
+            "theta_raw", dist.Normal(0.0, 1.0).expand([n_sessions, n_params]).to_event(2)
+        )
+        theta_unconstrained = mu_p + sigma * theta_raw
 
     params = hattori2019_session_params(theta_unconstrained, beta_max=beta_max)
     for name in HATTORI2019_PARAMS:

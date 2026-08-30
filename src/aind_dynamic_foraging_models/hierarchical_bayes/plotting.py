@@ -61,7 +61,7 @@ def plot_population_recovery(population_draws, subject_means, truth=None,
     param_names : sequence of str, optional
         Names for the panels.
     beta_max : float, optional
-        Unused here; kept so callers can pass one signature everywhere.
+        Upper bound of ``softmax_inverse_temperature``, used by the scale transform.
     path : str, optional
         Where to save. Returns the figure regardless.
     """
@@ -78,18 +78,20 @@ def plot_population_recovery(population_draws, subject_means, truth=None,
     axes = np.atleast_1d(axes)
 
     for i, ax in enumerate(axes):
-        draws = population_draws[:, i]
+        draws = to_bounded(population_draws[:, i], i, beta_max)
         ax.hist(draws, bins=36, density=True, color=HB, alpha=0.75,
                 edgecolor=SURFACE, linewidth=0.5)
 
         # Subjects as rug ticks: shows the spread the population is summarising.
         lo, hi = ax.get_ylim()
-        ax.plot(subject_means[:, i], np.full(subject_means.shape[0], hi * 0.045),
+        ax.plot(to_bounded(subject_means[:, i], i, beta_max),
+                np.full(subject_means.shape[0], hi * 0.045),
                 marker="|", linestyle="none", color=HB, alpha=0.65,
                 markersize=8, markeredgewidth=1.1)
 
         if truth is not None:
-            ax.axvline(np.asarray(truth)[i], color=INK, linewidth=1.6,
+            ax.axvline(float(to_bounded(np.asarray(truth)[i], i, beta_max)),
+                       color=INK, linewidth=1.6,
                        linestyle=(0, (4, 2)), zorder=5)
 
         _style(ax)
@@ -161,45 +163,86 @@ def plot_conditioning_curve(scores, references=None, path=None, title=None):
     return fig
 
 
+def to_bounded(unconstrained, param_index, beta_max=10.0):
+    """Map one parameter from the sampler's scale to the one it is named for.
+
+    Figures are read in the model's own units -- a learn rate between 0 and 1, an inverse
+    temperature up to ``beta_max`` -- not the unconstrained coordinates the sampler works
+    in. Plotting the latter under the former's label misstates every value.
+
+    Parameters
+    ----------
+    unconstrained : array_like
+        Values on the sampler's scale.
+    param_index : int
+        Position in :data:`~.model.HATTORI2019_PARAMS`.
+    beta_max : float, optional
+        Upper bound of ``softmax_inverse_temperature``.
+
+    Returns
+    -------
+    np.ndarray
+        Values on the parameter's own scale.
+    """
+    from scipy.stats import norm
+
+    values = np.asarray(unconstrained)
+    if param_index == 4:      # side bias is unbounded; no transform
+        return values
+    if param_index == 3:      # inverse temperature
+        return norm.cdf(values) * beta_max
+    return norm.cdf(values)   # the three rates, on [0, 1]
+
+
 def plot_shrinkage(subject_means, population_mean, unpooled=None,
-                   param_index=0, param_name=None, path=None):
+                   param_index=0, param_name=None, path=None, beta_max=10.0):
     """Each subject's pooled estimate against its unpooled one.
 
     Partial pooling pulls subjects toward the cohort; how far each moves is the whole
     argument for the hierarchy, and it should be largest for subjects with least data.
+    Without the unpooled arm this figure shows only where subjects ended up, not that
+    pooling moved them, so the comparison is the point rather than an optional extra.
+
+    Values are drawn on the parameter's own scale, not the sampler's.
 
     Parameters
     ----------
     subject_means : np.ndarray, shape (n_subjects, n_params)
-        Pooled posterior means.
+        Pooled posterior means, on the unconstrained scale.
     population_mean : float or np.ndarray
-        The cohort location the subjects shrink toward.
+        The cohort location the subjects shrink toward, same scale.
     unpooled : np.ndarray, optional
-        Per-subject estimates with no pooling, same shape.
+        Per-subject estimates fitted without any cohort prior, same scale and shape.
     param_index : int, optional
         Which parameter to draw.
     param_name : str, optional
         Label for it.
     path : str, optional
         Where to save.
+    beta_max : float, optional
+        Upper bound of ``softmax_inverse_temperature``.
     """
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    pooled = np.asarray(subject_means)[:, param_index]
-    centre = float(np.atleast_1d(population_mean)[param_index])
+    pooled = to_bounded(np.asarray(subject_means)[:, param_index], param_index, beta_max)
+    centre = float(to_bounded(
+        np.atleast_1d(population_mean)[param_index], param_index, beta_max))
     order = np.argsort(pooled)
 
     fig, ax = plt.subplots(figsize=(6.0, 3.9), facecolor=SURFACE)
     y = np.arange(len(order))
 
     if unpooled is not None:
-        raw = np.asarray(unpooled)[:, param_index][order]
+        raw = to_bounded(
+            np.asarray(unpooled)[:, param_index], param_index, beta_max
+        )[order]
         for i, (a, b) in enumerate(zip(raw, pooled[order])):
             ax.plot([a, b], [i, i], color=MUTED, linewidth=0.9, alpha=0.7, zorder=1)
         ax.plot(raw, y, marker="o", linestyle="none", markersize=4.5, color=MLE,
-                markeredgecolor=SURFACE, markeredgewidth=1, zorder=3, label="no pooling")
+                markeredgecolor=SURFACE, markeredgewidth=1, zorder=3,
+                label="fitted alone (no pooling)")
 
     ax.plot(pooled[order], y, marker="o", linestyle="none", markersize=4.5, color=HB,
             markeredgecolor=SURFACE, markeredgewidth=1, zorder=4, label="partially pooled")

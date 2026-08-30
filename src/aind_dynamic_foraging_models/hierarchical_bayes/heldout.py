@@ -181,7 +181,6 @@ def posterior_predictive_choice_prob(
     sigma = jnp.exp(jnp.asarray(adapted_samples["log_sigma"]))
     if n_draws is not None and n_draws < mu_p.shape[0]:
         mu_p, sigma = mu_p[:n_draws], sigma[:n_draws]
-
     noise = jax.random.normal(rng_key, mu_p.shape)
     theta = mu_p + sigma * noise  # fresh session latent per draw
     params = hattori2019_session_params(theta, beta_max=beta_max)
@@ -387,6 +386,52 @@ def batched_choice_prob(
     )
 
 
+def auto_session_chunk(n_trials, n_draws, memory_fraction=0.25, floor=8, ceiling=4096):
+    """Choose how many sessions to score per pass, from the device's actual memory.
+
+    A fixed chunk size is wrong in both directions: it wastes a large GPU and can exhaust a
+    small one, since the working set scales with draws and trial count as well as sessions.
+
+    On CPU this deliberately returns a small chunk. Widening the batch is a win only while
+    the device is latency-bound; on CPU the same sweep that is flat on an A100 measured
+    *worse* than linear (32x the lanes for 102x the time), so batching there is
+    counterproductive and the chunk stays small.
+
+    Parameters
+    ----------
+    n_trials : int
+        Padded trial count per session.
+    n_draws : int
+        Posterior draws used for scoring.
+    memory_fraction : float, optional
+        Share of the device's memory limit to spend on one pass.
+    floor, ceiling : int, optional
+        Bounds on the returned chunk size.
+
+    Returns
+    -------
+    int
+        Sessions per vmapped pass.
+    """
+    import jax
+
+    device = jax.devices()[0]
+    stats = None
+    try:
+        stats = device.memory_stats()
+    except Exception:  # pragma: no cover - platform dependent
+        stats = None
+
+    if not stats or not stats.get("bytes_limit"):
+        return floor * 4  # CPU or an unknown device: stay small, see the docstring
+
+    # Per session: the per-draw choice probabilities plus the intermediates the vmapped
+    # scan holds alive. Six float32 copies is deliberately conservative.
+    per_session = max(1, n_draws * n_trials * 4 * 6)
+    budget = float(stats["bytes_limit"]) * memory_fraction
+    return int(min(ceiling, max(floor, budget // per_session)))
+
+
 def batched_heldout_log_lik(
     batched_samples,
     subject_indices,
@@ -397,7 +442,7 @@ def batched_heldout_log_lik(
     rng_key,
     beta_max=10.0,
     n_draws=None,
-    session_chunk=128,
+    session_chunk=None,
 ):
     """Score many held-out sessions at once, one vmapped pass per chunk.
 
@@ -427,7 +472,9 @@ def batched_heldout_log_lik(
         Subsample this many posterior draws. The posterior-predictive average converges
         quickly, so fewer draws here trade a little noise for a lot of time.
     session_chunk : int, optional
-        Sessions per vmapped pass. Caps peak memory.
+        Sessions per vmapped pass, which caps peak memory. Defaults to a size derived from
+        the device's own memory limit, so the same code neither wastes a large GPU nor
+        exhausts a small one.
 
     Returns
     -------
@@ -446,6 +493,12 @@ def batched_heldout_log_lik(
     sigma = jnp.exp(jnp.asarray(batched_samples["log_sigma"]))
     if n_draws is not None and n_draws < mu_p.shape[0]:
         mu_p, sigma = mu_p[:n_draws], sigma[:n_draws]
+
+    if session_chunk is None:
+        session_chunk = auto_session_chunk(n_trials, int(mu_p.shape[0]))
+
+    if session_chunk is None:
+        session_chunk = auto_session_chunk(n_trials, int(mu_p.shape[0]))
 
     trial_index = jnp.arange(n_trials)
 

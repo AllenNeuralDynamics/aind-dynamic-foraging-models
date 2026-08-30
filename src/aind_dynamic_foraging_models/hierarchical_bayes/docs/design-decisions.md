@@ -95,13 +95,32 @@ The approximation is one step size adapted across all subject blocks rather than
 That is measured, not assumed: per-subject posterior means and the held-out likelihoods that
 actually get reported both match sequential fitting.
 
-## 8. Fits are persisted in full
+## 8. Batch sizes come from the device, and batching is a GPU-only win
+
+Scoring sizes its own batches from the device's memory limit rather than a fixed constant.
+A constant is wrong in both directions -- it wastes an H200 and can exhaust a 12 GB card --
+because the working set scales with draws and trial count as well as sessions. At production
+draw counts that lands near 200 sessions per pass on a 12 GB card, ~670 on a 40 GB A100 and
+~2400 on an H200.
+
+**Batching is a GPU strategy, not a universal one.** The lane sweep that is flat on an A100
+measured *worse than linear* on CPU: 32x the lanes for 102x the time. So on CPU the auto-sized
+chunk stays deliberately small, and a CPU-only run should be expected to behave like the
+sequential code it replaced rather than better.
+
+**Known limit.** The adaptation fit itself is not chunked: every held-out subject enters one
+sampler, and its memory grows with subjects x context sessions x trials, with an autodiff tape
+on top. That has been exercised at 153 subjects on a 40 GB A100. A smaller card, or a
+substantially larger cohort, may need the subjects split across several fits -- which is safe,
+since they are independent, and only widens the step-size sharing already discussed in section 7.
+
+## 9. Fits are persisted in full
 
 A cohort fit costs hours; scoring and figures cost minutes. Keeping only summary statistics
 forces a refit for every new question, so `artifacts.save_fit` writes posterior draws,
 sampler diagnostics and provenance rather than posterior means alone.
 
-## 9. NumPyro sits behind an optional extra
+## 10. NumPyro sits behind an optional extra
 
 The package core is numpy/scipy at `requires-python >= 3.9`; JAX needs `>= 3.10`. NumPyro is
 behind the `bayes` extra with its own CI job on 3.11, so the core matrix is unaffected.

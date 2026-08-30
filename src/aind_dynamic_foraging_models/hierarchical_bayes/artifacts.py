@@ -39,6 +39,17 @@ def _git_sha(repo_path):
         return None
 
 
+def _as_dataset(group):
+    """Return an InferenceData group as an xarray Dataset.
+
+    ArviZ >= 1.0 builds an ``xarray.DataTree``, whose nodes reject both the list-of-names
+    indexing used to select sites and the ``in`` test used to look for a diagnostic.
+    Earlier versions hand back a Dataset already, so this normalises the two.
+    """
+    to_dataset = getattr(group, "to_dataset", None)
+    return to_dataset() if callable(to_dataset) else group
+
+
 def summarise_diagnostics(idata):
     """Reduce an InferenceData to the diagnostics worth checking before trusting a fit.
 
@@ -64,6 +75,7 @@ def summarise_diagnostics(idata):
 
     stats = getattr(idata, "sample_stats", None)
     if stats is not None:
+        stats = _as_dataset(stats)
         if "diverging" in stats:
             out["divergences"] = int(np.sum(np.asarray(stats["diverging"])))
         if "tree_depth" in stats:
@@ -108,10 +120,10 @@ def save_fit(mcmc, output_dir, *, name="fit", include_session_sites=False, meta=
     present = [site for site in keep if site in available]
 
     netcdf_path = output_dir / f"{name}.nc"
-    idata.posterior[present].to_netcdf(str(netcdf_path))
+    _as_dataset(idata.posterior)[present].to_netcdf(str(netcdf_path))
     stats_path = output_dir / f"{name}_sample_stats.nc"
     if getattr(idata, "sample_stats", None) is not None:
-        idata.sample_stats.to_netcdf(str(stats_path))
+        _as_dataset(idata.sample_stats).to_netcdf(str(stats_path))
 
     diagnostics = summarise_diagnostics(idata)
     record = {

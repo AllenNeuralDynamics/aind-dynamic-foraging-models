@@ -47,6 +47,8 @@ bayes = [
     'numpyro',
     'arviz',      # posterior persistence and sampler diagnostics
     'xarray',     # reading the persisted netCDF back
+    'h5netcdf',   # netCDF engine; without one xarray falls back to scipy's netCDF3
+                  # writer, which cannot store the string attributes ArviZ attaches
 ]
 
 [tool.setuptools.packages.find]

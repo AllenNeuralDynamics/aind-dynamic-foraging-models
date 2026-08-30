@@ -158,6 +158,31 @@ a batched implementation against a sequential one: a two-stage fit that vmapped 
 across subjects would be competitive. That work was deferred on an estimate of ~25 minutes
 for D~30, which the run above overshot by more than tenfold.
 
+## Two-stage costs nothing statistically, and 5.3x more compute
+
+Both estimators fitted on one synthetic cohort drawn from the full three-level structure
+(30 training subjects, 10 held out, 25 sessions x 500 trials), then scored on the held-out
+subjects at every conditioning rung:
+
+| k | one-stage | two-stage | difference |
+|---|---|---|---|
+| 0 | 0.69521 | 0.69494 | -0.00027 |
+| 1 | 0.71410 | 0.71423 | +0.00013 |
+| 2 | 0.72114 | 0.72111 | -0.00004 |
+| 4 | 0.72197 | 0.72212 | +0.00016 |
+| 8 | 0.72424 | 0.72425 | +0.00001 |
+
+Largest gap **0.00027**, below the 0.0004 spread between GRU seed replicates. The two-stage
+approximation is statistically free on data where the true population is known.
+
+It is not free in compute: **79 minutes against 6 h 57 m**, a 5.3x difference, for the reason
+in the section above -- a joint fit pays the scan depth once for the cohort while sequential
+per-subject fitting pays it once per subject.
+
+So two-stage is a sound approximation with no remaining reason to use it. One-stage is both
+the reference estimator and the cheaper one; two-stage survives only as a fallback for scales
+where the joint fit will not converge.
+
 ## Batched adaptation for held-out scoring
 
 Held-out subjects are independent given a frozen population, so the same batching argument

@@ -45,6 +45,8 @@ rl = [
 bayes = [
     'jax',
     'numpyro',
+    'arviz',      # posterior persistence and sampler diagnostics
+    'xarray',     # reading the persisted netCDF back
 ]
 
 [tool.setuptools.packages.find]
@@ -76,7 +78,14 @@ exclude = '''
 '''
 
 [tool.coverage.run]
-omit = ["*__init__*"]
+# hierarchical_bayes needs the `bayes` extra, which the core 3.9/3.10 matrix does not
+# install (JAX requires >= 3.10), so its modules and tests cannot execute there and would
+# otherwise count as wholly uncovered. The dedicated 3.11 job measures them instead.
+omit = [
+    "*__init__*",
+    "*/hierarchical_bayes/*",
+    "*/tests/test_hb_*",
+]
 source = ["aind_dynamic_foraging_models", "tests"]
 
 [tool.coverage.report]

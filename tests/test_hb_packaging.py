@@ -7,6 +7,7 @@ locally and failed on a clean install. This test closes that gap by construction
 
 import ast
 import pathlib
+import re
 import sys
 import unittest
 
@@ -41,7 +42,10 @@ def _declared_dependencies():
     project = config["project"]
     names = set(project.get("dependencies", []))
     names |= set(project.get("optional-dependencies", {}).get("bayes", []))
-    return {n.split()[0].split(">")[0].split("=")[0].split("#")[0].strip() for n in names}
+    # A requirement string is name + optional extras + optional version specifier; take
+    # the leading name. Splitting on a hand-listed set of operators misses one sooner or
+    # later -- this test failed on `numpyro<0.20` for exactly that reason.
+    return {re.match(r"[A-Za-z0-9._-]+", n.strip()).group(0) for n in names if n.strip()}
 
 
 class TestDeclaredDependencies(unittest.TestCase):

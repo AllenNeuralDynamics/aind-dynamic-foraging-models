@@ -423,7 +423,9 @@ def auto_session_chunk(n_trials, n_draws, memory_fraction=0.25, floor=8, ceiling
         stats = None
 
     if not stats or not stats.get("bytes_limit"):
-        return floor * 4  # CPU or an unknown device: stay small, see the docstring
+        # CPU or an unknown device: stay small, see the docstring. Still respect the
+        # caller's bounds -- an explicit ceiling means they know something we do not.
+        return int(min(ceiling, max(floor, floor * 4)))
 
     # Per session: the per-draw choice probabilities plus the intermediates the vmapped
     # scan holds alive. Six float32 copies is deliberately conservative.

@@ -19,6 +19,7 @@ try:
     import jax
 
     from aind_dynamic_foraging_models.hierarchical_bayes.heldout import (
+        auto_session_chunk,
         batched_choice_prob,
         batched_heldout_log_lik,
         fit_adaptation,
@@ -215,3 +216,43 @@ class TestBatchedScoring(unittest.TestCase):
         # Different chunking redraws latents differently; totals stay close.
         self.assertAlmostEqual(float(small.sum()), float(large.sum()),
                                delta=abs(float(large.sum())) * 0.02)
+
+
+@unittest.skipUnless(HAS_JAX, "requires the 'bayes' extra (jax, numpyro)")
+class TestAutoSessionChunk(unittest.TestCase):
+    """Sizing the scoring batch from the device rather than a constant."""
+
+    def test_returns_a_usable_size_on_this_device(self):
+        """Whatever the device, the chunk is a positive int within its bounds."""
+        chunk = auto_session_chunk(n_trials=1238, n_draws=500)
+        self.assertIsInstance(chunk, int)
+        self.assertGreaterEqual(chunk, 8)
+        self.assertLessEqual(chunk, 4096)
+
+    def test_shrinks_as_the_working_set_grows(self):
+        """More draws or longer sessions mean fewer sessions per pass.
+
+        The working set scales with draws and trials as well as sessions, which is exactly
+        why a fixed chunk size is wrong in both directions.
+        """
+        import jax
+
+        if jax.devices()[0].platform == "cpu":
+            self.skipTest("CPU returns a fixed small chunk by design")
+        base = auto_session_chunk(n_trials=500, n_draws=100)
+        self.assertLessEqual(auto_session_chunk(n_trials=500, n_draws=1000), base)
+        self.assertLessEqual(auto_session_chunk(n_trials=5000, n_draws=100), base)
+
+    def test_cpu_stays_small(self):
+        """On CPU the chunk stays small, because batching there is counterproductive."""
+        import jax
+
+        if jax.devices()[0].platform != "cpu":
+            self.skipTest("only meaningful on CPU")
+        self.assertLessEqual(auto_session_chunk(n_trials=1238, n_draws=500), 64)
+
+    def test_respects_explicit_bounds(self):
+        """Callers can pin the range when they know better than the heuristic."""
+        self.assertEqual(
+            auto_session_chunk(n_trials=100, n_draws=1, floor=64, ceiling=64), 64
+        )

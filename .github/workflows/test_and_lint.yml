@@ -44,6 +44,5 @@ jobs:
       run: flake8 src/aind_dynamic_foraging_models/hierarchical_bayes tests/test_hb_*.py && interrogate --verbose src/aind_dynamic_foraging_models/hierarchical_bayes
     - name: Run hierarchical Bayes tests with coverage
       run: |
-        coverage run --source=aind_dynamic_foraging_models.hierarchical_bayes \
-          -m unittest discover -s tests -p "test_hb_*.py" -v
-        coverage report --fail-under=80
+        coverage run --rcfile=.coveragerc-hb -m unittest discover -s tests -p "test_hb_*.py" -v
+        coverage report --rcfile=.coveragerc-hb

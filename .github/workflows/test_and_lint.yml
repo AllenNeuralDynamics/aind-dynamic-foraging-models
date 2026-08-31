@@ -43,6 +43,11 @@ jobs:
     - name: Run linter checks
       run: flake8 src/aind_dynamic_foraging_models/hierarchical_bayes tests/test_hb_*.py && interrogate --verbose src/aind_dynamic_foraging_models/hierarchical_bayes
     - name: Run hierarchical Bayes tests with coverage
+      # AIND_HB_REQUIRE_DEPS=1: this job installs [bayes], so a failed import is a bug,
+      # not a reason to skip. Without it a broken extra reports OK with every sampler
+      # test silently skipped, and only the coverage number gives it away.
+      env:
+        AIND_HB_REQUIRE_DEPS: "1"
       run: |
         coverage run --rcfile=.coveragerc-hb -m unittest discover -s tests -p "test_hb_*.py" -v
         coverage report --rcfile=.coveragerc-hb

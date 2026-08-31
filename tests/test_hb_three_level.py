@@ -2,6 +2,8 @@
 
 import unittest
 
+from tests._hb_deps import assert_deps_present
+
 import numpy as np
 from aind_behavior_gym.dynamic_foraging.task import CoupledBlockTask
 from scipy.stats import norm
@@ -19,6 +21,11 @@ try:
     HAS_JAX = True
 except ImportError:  # pragma: no cover - exercised only without the bayes extra
     HAS_JAX = False
+
+# A broken extra must not report OK by skipping every test that touches it. With
+# AIND_HB_REQUIRE_DEPS=1 -- which the CI job that installs [bayes] sets -- a failed
+# import becomes an error here instead of a run of silent skips.
+assert_deps_present(HAS_JAX)
 
 BETA_MAX = 10.0
 N_PARAMS = 5

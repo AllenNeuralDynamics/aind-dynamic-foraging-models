@@ -43,7 +43,10 @@ rl = [
 ]
 
 bayes = [
-    'jax',
+    # jax and numpyro must be bounded together. numpyro < 0.20 imports
+    # jax.interpreters.pxla.xla_pmap_p, which jax removed after 0.6, so an unbounded
+    # 'jax' here resolves to a version numpyro cannot import at all.
+    'jax>=0.4.25,<0.7',
     # Ceiling, not caution: numpyro >= 0.20 requires jax >= 0.7, while the disRNN
     # wrapper pins jax[cuda12]==0.6.1 for the GRU and disRNN models. Raising this
     # would move jax underneath models validated at 0.6.1 for no benefit here --

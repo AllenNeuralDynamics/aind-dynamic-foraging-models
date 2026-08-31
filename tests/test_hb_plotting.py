@@ -4,6 +4,8 @@ import pathlib
 import tempfile
 import unittest
 
+from tests._hb_deps import assert_deps_present
+
 import numpy as np
 from scipy.stats import norm
 
@@ -18,6 +20,11 @@ try:
     HAS_MPL = True
 except ImportError:  # pragma: no cover - exercised only without matplotlib
     HAS_MPL = False
+
+# A broken extra must not report OK by skipping every test that touches it. With
+# AIND_HB_REQUIRE_DEPS=1 -- which the CI job that installs [bayes] sets -- a failed
+# import becomes an error here instead of a run of silent skips.
+assert_deps_present(HAS_MPL)
 
 N_PARAMS = 5
 

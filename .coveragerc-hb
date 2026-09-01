@@ -1,0 +1,14 @@
+# Coverage config for the hierarchical-bayes CI job only.
+#
+# The root pyproject omits */hierarchical_bayes/* because the core 3.9/3.10 matrix cannot
+# import it without the `bayes` extra. That omit would also silence this job, which exists
+# precisely to measure those modules, so this job uses its own config rather than inheriting.
+[run]
+source = aind_dynamic_foraging_models.hierarchical_bayes
+omit = *__init__*
+
+[report]
+exclude_lines =
+    if __name__ == .__main__.:
+    pragma: no cover
+fail_under = 80

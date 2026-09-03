@@ -160,7 +160,7 @@ def save_fit(mcmc, output_dir, *, name="fit", include_session_sites=False, meta=
 
     return {
         "netcdf": str(netcdf_path),
-        "sample_stats": str(stats_path),
+        "sample_stats": str(stats_path) if sample_stats is not None else None,
         "json": str(json_path),
         "diagnostics": diagnostics,
     }

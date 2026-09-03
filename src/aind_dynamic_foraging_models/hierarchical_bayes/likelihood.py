@@ -95,6 +95,96 @@ def hattori2019_choice_prob(
     return choice_prob.T
 
 
+def hattori2019_value_trajectory(
+    choice_history,
+    reward_history,
+    learn_rate_rew,
+    learn_rate_unrew,
+    forget_rate_unchosen,
+    softmax_inverse_temperature,
+    bias_l,
+):
+    """Per-trial Q values for the Hattori2019 forager -- the model's decision variable.
+
+    :func:`hattori2019_choice_prob` computes these inside its scan and throws them away as
+    the carry, because a likelihood only needs the probabilities. They are what a decision
+    variable analysis wants: the latent quantity the animal is claimed to be tracking, for
+    regression against neural activity or for showing the dynamics behind a fit.
+
+    This replays the identical recursion and emits Q instead. It is a separate function so
+    that the likelihood evaluated on every leapfrog step of every chain stays untouched --
+    the recursion is deterministic, so nothing is lost by recomputing it after the fact.
+
+    Duplicating an update rule invites the two copies to drift apart. What prevents that
+    here is a test, not discipline: ``test_value_trajectory_reproduces_choice_prob``
+    asserts that pushing this trajectory back through the softmax reproduces
+    :func:`hattori2019_choice_prob` exactly, so a change to either rule alone fails CI.
+
+    **This conditions on the session's own choices, by design.** That is correct for asking
+    what the animal's internal state was during a session it actually performed, and it is
+    exactly what the held-out likelihood must never do -- there, conditioning on the target
+    session's choices would be using the targets to fit the latent. The same operation is
+    right in one setting and leakage in the other; see ``batched_heldout_log_lik``.
+
+    Parameters
+    ----------
+    choice_history : array_like of int, shape (n_trials,)
+        Observed actions, 0 for left and 1 for right.
+    reward_history : array_like of float, shape (n_trials,)
+        Observed outcomes; any positive value counts as rewarded.
+    learn_rate_rew, learn_rate_unrew, forget_rate_unchosen : float
+        Value-update parameters, as in :func:`hattori2019_choice_prob`.
+    softmax_inverse_temperature, bias_l : float
+        Action-selection parameters. Accepted so that one call carries the full session
+        parameter set, and because the decision variable usually wanted is the biased,
+        temperature-scaled difference rather than raw Q.
+
+    Returns
+    -------
+    q_values : jnp.ndarray, shape (N_ACTIONS, n_trials)
+        Q value of each action on each trial, **before** that trial's update -- the same
+        alignment :func:`hattori2019_choice_prob` uses, so the two index the same trial.
+        Initial Q is zero, so ``q_values[:, 0]`` is all zeros.
+    decision_variable : jnp.ndarray, shape (n_trials,)
+        ``softmax_inverse_temperature * (Q_left - Q_right) + bias_l``: the quantity the
+        softmax actually sees, positive meaning left-preferring. This is the scalar to
+        regress against neural data, since raw ``Q_left - Q_right`` omits the gain and
+        offset the model applies to it.
+
+    Notes
+    -----
+    Trailing padding is safe to leave in the inputs, exactly as for
+    :func:`hattori2019_choice_prob`: padded trials only affect Q *after* the real trials.
+    Mask the padding before plotting or regressing.
+    """
+    choice_history = jnp.asarray(choice_history, dtype=jnp.int32)
+    reward_history = jnp.asarray(reward_history, dtype=jnp.float32)
+
+    def _step(q_value, trial):
+        """Advance one trial: emit the pre-update Q values, then update them."""
+        choice, reward = trial
+
+        # -- Learn: identical to hattori2019_choice_prob's update, deliberately --
+        chosen = jax.nn.one_hot(choice, N_ACTIONS)
+        learn_rate = jnp.where(reward > 0, learn_rate_rew, learn_rate_unrew)
+        q_chosen = q_value + learn_rate * (reward - q_value)
+        q_unchosen = (1.0 - forget_rate_unchosen) * q_value
+        q_next = chosen * q_chosen + (1.0 - chosen) * q_unchosen
+
+        return q_next, q_value
+
+    _, q_values = jax.lax.scan(
+        _step,
+        jnp.zeros(N_ACTIONS),  # Initial Q values are 0
+        (choice_history, reward_history),
+    )
+    q_values = q_values.T
+    decision_variable = (
+        softmax_inverse_temperature * (q_values[0] - q_values[1]) + bias_l
+    )
+    return q_values, decision_variable
+
+
 def hattori2019_log_likelihood(
     choice_history,
     reward_history,

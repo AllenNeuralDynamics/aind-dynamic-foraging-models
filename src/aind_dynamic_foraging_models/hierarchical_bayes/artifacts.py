@@ -120,10 +120,27 @@ def save_fit(mcmc, output_dir, *, name="fit", include_session_sites=False, meta=
     present = [site for site in keep if site in available]
 
     netcdf_path = output_dir / f"{name}.nc"
-    _as_dataset(idata.posterior)[present].to_netcdf(str(netcdf_path))
     stats_path = output_dir / f"{name}_sample_stats.nc"
-    if getattr(idata, "sample_stats", None) is not None:
-        _as_dataset(idata.sample_stats).to_netcdf(str(stats_path))
+    posterior = _as_dataset(idata.posterior)[present]
+    sample_stats = (
+        _as_dataset(idata.sample_stats)
+        if getattr(idata, "sample_stats", None) is not None
+        else None
+    )
+
+    # Write ONE grouped InferenceData, so `az.from_netcdf` round-trips. Handing a bare
+    # Dataset to `to_netcdf` puts its variables at the netCDF *root*; `az.from_netcdf`
+    # then finds no groups and returns an EMPTY InferenceData **without raising** -- a
+    # silent failure for every consumer that reloads a fit to draw a figure or rescore a
+    # cohort, which is the whole reason the fit is persisted.
+    groups = {"posterior": posterior}
+    if sample_stats is not None:
+        groups["sample_stats"] = sample_stats
+    az.InferenceData(**groups).to_netcdf(str(netcdf_path))
+
+    # Kept alongside as a flat Dataset for readers written against the earlier layout.
+    if sample_stats is not None:
+        sample_stats.to_netcdf(str(stats_path))
 
     diagnostics = summarise_diagnostics(idata)
     record = {
@@ -159,9 +176,14 @@ def load_population(netcdf_path):
     """
     import xarray as xr
 
-    # save_fit writes a plain xarray Dataset (the posterior group), so read it as one
-    # rather than through az.from_netcdf, which expects a full InferenceData file.
-    with xr.open_dataset(str(netcdf_path)) as posterior:
+    # Fits written since the round-trip fix are grouped InferenceData files, where the
+    # draws live under /posterior; earlier ones put them at the netCDF root. Try the group
+    # first and fall back, so both layouts stay readable.
+    try:
+        posterior_ds = xr.open_dataset(str(netcdf_path), group="posterior")
+    except (OSError, KeyError):
+        posterior_ds = xr.open_dataset(str(netcdf_path))
+    with posterior_ds as posterior:
         out = {}
         for site in POPULATION_SITES:
             if site in posterior:

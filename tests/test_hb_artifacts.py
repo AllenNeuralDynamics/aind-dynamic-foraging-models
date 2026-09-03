@@ -85,6 +85,38 @@ class TestSaveFit(unittest.TestCase):
                 loaded["population_mean"], original, rtol=1e-5, atol=1e-6
             )
 
+    def test_arviz_can_reload_the_fit(self):
+        """`az.from_netcdf` returns a populated InferenceData, not an empty one.
+
+        Regression test. `save_fit` used to hand each group to `to_netcdf` as a bare
+        Dataset, which writes the variables at the netCDF root. `az.from_netcdf` -- the
+        documented way to reload a fit, and what any figure or rescoring code reaches for
+        -- then found no groups and returned an EMPTY InferenceData *without raising*.
+        The draws were intact but unreachable by the standard call, so the failure was
+        silent.
+        """
+        import arviz as az
+
+        with tempfile.TemporaryDirectory() as tmp:
+            result = save_fit(self.mcmc, tmp, name="t")
+            idata = az.from_netcdf(result["netcdf"])
+
+            groups = list(idata.groups())
+            self.assertIn("posterior", groups, f"no posterior group; groups={groups}")
+            self.assertIn("sample_stats", groups, f"no sample_stats group; groups={groups}")
+
+            posterior = idata.posterior
+            for site in POPULATION_SITES:
+                self.assertIn(site, posterior)
+            np.testing.assert_allclose(
+                np.asarray(posterior["population_mean"]).reshape(-1, 5),
+                np.asarray(self.mcmc.get_samples()["population_mean"]),
+                rtol=1e-5, atol=1e-6,
+            )
+            # Diagnostics must travel in the same object, or r_hat/ESS cannot be
+            # computed from the artifact the way arviz expects.
+            self.assertIn("diverging", idata.sample_stats)
+
     def test_records_provenance(self):
         """Supplied metadata and the source commit are recorded."""
         with tempfile.TemporaryDirectory() as tmp:

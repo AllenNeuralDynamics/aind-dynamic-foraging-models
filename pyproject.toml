@@ -42,6 +42,22 @@ rl = [
     'aind_dynamic_foraging_basic_analysis',
 ]
 
+bayes = [
+    # jax and numpyro must be bounded together. numpyro < 0.20 imports
+    # jax.interpreters.pxla.xla_pmap_p, which jax removed after 0.6, so an unbounded
+    # 'jax' here resolves to a version numpyro cannot import at all.
+    'jax>=0.4.25,<0.7',
+    # Ceiling, not caution: numpyro >= 0.20 requires jax >= 0.7, while the disRNN
+    # wrapper pins jax[cuda12]==0.6.1 for the GRU and disRNN models. Raising this
+    # would move jax underneath models validated at 0.6.1 for no benefit here --
+    # the full hierarchical-Bayes suite passes on 0.19. Revisit when that pin moves.
+    'numpyro<0.20',
+    'arviz',      # posterior persistence and sampler diagnostics
+    'xarray',     # reading the persisted netCDF back
+    'h5netcdf',   # netCDF engine; without one xarray falls back to scipy's netCDF3
+                  # writer, which cannot store the string attributes ArviZ attaches
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
@@ -71,7 +87,14 @@ exclude = '''
 '''
 
 [tool.coverage.run]
-omit = ["*__init__*"]
+# hierarchical_bayes needs the `bayes` extra, which the core 3.9/3.10 matrix does not
+# install (JAX requires >= 3.10), so its modules and tests cannot execute there and would
+# otherwise count as wholly uncovered. The dedicated 3.11 job measures them instead.
+omit = [
+    "*__init__*",
+    "*/hierarchical_bayes/*",
+    "*/tests/test_hb_*",
+]
 source = ["aind_dynamic_foraging_models", "tests"]
 
 [tool.coverage.report]

@@ -3,7 +3,7 @@
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 ![Code Style](https://img.shields.io/badge/code%20style-black-black)
 [![semantic-release: angular](https://img.shields.io/badge/semantic--release-angular-e10079?logo=semantic-release)](https://github.com/semantic-release/semantic-release)
-![Interrogate](https://img.shields.io/badge/interrogate-97.0%25-brightgreen)
+![Interrogate](https://img.shields.io/badge/interrogate-98.5%25-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-96%25-brightgreen?logo=codecov)
 ![Python](https://img.shields.io/badge/python->=3.9-blue?logo=python)
 
@@ -230,3 +230,18 @@ Then to create the documentation HTML files, run
 sphinx-build -b html doc_template/source/ doc_template/build/html
 ```
 More info on sphinx installation can be found [here](https://www.sphinx-doc.org/en/master/usage/installation.html).
+
+## Hierarchical Bayesian fitting
+
+`aind_dynamic_foraging_models.hierarchical_bayes` fits the foragers as hierarchical Bayesian
+models (population → subject → session) with NumPyro, as a partially-pooled counterpart to
+the per-session MLE fitting in `generative_model`.
+
+    pip install aind-dynamic-foraging-models[bayes]
+
+- **Start here:** a worked end-to-end example on synthetic data with known ground truth --
+  simulate a cohort, fit it both ways, and check that the parameters come back:
+  [`notebook/demo_hierarchical_bayes.ipynb`](notebook/demo_hierarchical_bayes.ipynb)
+- Design decisions and their rationale: [`src/aind_dynamic_foraging_models/hierarchical_bayes/docs/design-decisions.md`](src/aind_dynamic_foraging_models/hierarchical_bayes/docs/design-decisions.md)
+- Validation against the reference Stan implementation, and performance measurements:
+  [`src/aind_dynamic_foraging_models/hierarchical_bayes/benchmarks/RESULTS.md`](src/aind_dynamic_foraging_models/hierarchical_bayes/benchmarks/RESULTS.md)

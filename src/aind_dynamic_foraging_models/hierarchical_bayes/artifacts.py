@@ -24,10 +24,10 @@ SUBJECT_SITES = ("mu_p", "log_sigma")
 SESSION_SITES = (
     "learn_rate_rew", "learn_rate_unrew", "forget_rate_unchosen",
     "softmax_inverse_temperature", "bias_l", "session_log_lik",
-    # `theta_raw` is the non-centred session offset, shape (subjects, sessions, 5). It is
-    # here because the five named parameters above are registered as sites ONLY in the
-    # two-level models: `hattori2019_three_level` -- the production one_stage estimator --
-    # registers exactly one session-level site, `session_log_lik`, and computes the named
+    # `theta_raw` is the non-centred session offset. Per draw, its shape is (sessions, 5) in
+    # the two-level models and (subjects, sessions, 5) in the three-level model. It is here
+    # because the five named parameters above are registered as sites ONLY in the two-level
+    # models. `hattori2019_three_level` -- the production one_stage estimator --
     # parameters inside the model without exposing them. Since `save_fit` keeps only the
     # sites that are actually `available`, a one_stage fit saved the five names as a no-op.
     #

@@ -108,9 +108,10 @@ class TestSaveFit(unittest.TestCase):
             posterior = idata.posterior
             for site in POPULATION_SITES:
                 self.assertIn(site, posterior)
+            original = np.asarray(self.mcmc.get_samples()["population_mean"])
             np.testing.assert_allclose(
-                np.asarray(posterior["population_mean"]).reshape(-1, 5),
-                np.asarray(self.mcmc.get_samples()["population_mean"]),
+                np.asarray(posterior["population_mean"]).reshape(-1, original.shape[-1]),
+                original,
                 rtol=1e-5, atol=1e-6,
             )
             # Diagnostics must travel in the same object, or r_hat/ESS cannot be

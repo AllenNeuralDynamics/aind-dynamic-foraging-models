@@ -181,7 +181,7 @@ def load_population(netcdf_path):
     # first and fall back, so both layouts stay readable.
     try:
         posterior_ds = xr.open_dataset(str(netcdf_path), group="posterior")
-    except (OSError, KeyError):
+    except (OSError, KeyError, ValueError):
         posterior_ds = xr.open_dataset(str(netcdf_path))
     with posterior_ds as posterior:
         out = {}

@@ -24,6 +24,19 @@ SUBJECT_SITES = ("mu_p", "log_sigma")
 SESSION_SITES = (
     "learn_rate_rew", "learn_rate_unrew", "forget_rate_unchosen",
     "softmax_inverse_temperature", "bias_l", "session_log_lik",
+    # `theta_raw` is the non-centred session offset, shape (subjects, sessions, 5). It is
+    # here because the five named parameters above are registered as sites ONLY in the
+    # two-level models: `hattori2019_three_level` -- the production one_stage estimator --
+    # registers exactly one session-level site, `session_log_lik`, and computes the named
+    # parameters inside the model without exposing them. Since `save_fit` keeps only the
+    # sites that are actually `available`, a one_stage fit saved the five names as a no-op.
+    #
+    # From `theta_raw` the per-session parameters are exactly reconstructible offline:
+    #     theta_unconstrained = mu_p[:, None, :] + exp(log_sigma)[:, None, :] * theta_raw
+    #     params = hattori2019_session_params(theta_unconstrained, beta_max=<from meta>)
+    # `mu_p` and `log_sigma` are already in SUBJECT_SITES, so this is the one site that was
+    # missing for a per-session latent decision-variable replay. See dispatcher #115.
+    "theta_raw",
 )
 
 
@@ -99,6 +112,10 @@ def save_fit(mcmc, output_dir, *, name="fit", include_session_sites=False, meta=
     include_session_sites : bool, optional
         Also keep session-level parameters and per-session log likelihoods. These are the
         bulk of the data, and are what WAIC, PSIS-LOO and per-session comparisons need.
+        On the three-level (one_stage) model this keeps ``session_log_lik`` and
+        ``theta_raw``; the latter is what a per-session parameter or latent
+        decision-variable replay is reconstructed from, and needs ``beta_max`` recorded in
+        ``meta`` to invert the ``softmax_inverse_temperature`` transform.
     meta : mapping, optional
         Provenance to record alongside: config, seed, cohort selection, data snapshot.
 

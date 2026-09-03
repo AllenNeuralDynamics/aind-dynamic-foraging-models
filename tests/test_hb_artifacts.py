@@ -74,6 +74,35 @@ class TestSaveFit(unittest.TestCase):
             self.assertNotIn("session_log_lik", a)
             self.assertIn("session_log_lik", b)
 
+    def test_session_sites_carry_theta_raw_for_replay(self):
+        """A one_stage fit persists what a per-session replay reconstructs from.
+
+        `hattori2019_three_level` registers exactly one session-level site,
+        `session_log_lik`; the five named parameters in SESSION_SITES are sites only in
+        the two-level models, so before `theta_raw` was kept, opting into session sites
+        saved nothing a latent decision-variable replay could use. Asserted on the
+        artifact's own `sites_saved` rather than on the tuple, because `save_fit` filters
+        the keep list against the sites the sampler actually produced -- which is exactly
+        how the five names came to be a silent no-op here.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            with_sessions = save_fit(
+                self.mcmc, tmp, name="c", include_session_sites=True
+            )
+            saved = json.loads(Path(with_sessions["json"]).read_text())["sites_saved"]
+            self.assertIn("theta_raw", saved)
+
+            # Reconstructible offline: theta_raw plus the subject-level sites this fit
+            # already keeps. Shapes must line up as (draws, subjects, sessions, params)
+            # against (draws, subjects, params), or the broadcast below is wrong.
+            draws = self.mcmc.get_samples()
+            theta_raw = np.asarray(draws["theta_raw"])
+            mu_p = np.asarray(draws["mu_p"])
+            self.assertEqual(theta_raw.ndim, 4)
+            self.assertEqual(theta_raw.shape[0], mu_p.shape[0])
+            self.assertEqual(theta_raw.shape[1], mu_p.shape[1])
+            self.assertEqual(theta_raw.shape[3], mu_p.shape[2])
+
     def test_population_round_trips(self):
         """Draws read back match the sampler's, so a rescore needs no refit."""
         with tempfile.TemporaryDirectory() as tmp:

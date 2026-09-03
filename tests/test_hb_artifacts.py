@@ -101,11 +101,16 @@ class TestSaveFit(unittest.TestCase):
             result = save_fit(self.mcmc, tmp, name="t")
             idata = az.from_netcdf(result["netcdf"])
 
-            groups = list(idata.groups())
+            # `.groups` is a METHOD returning bare names on arviz 0.x and a PROPERTY
+            # returning node paths ("/posterior") on 1.x, where from_netcdf hands back an
+            # xarray DataTree. Normalise before asserting, so this test fails on a missing
+            # group rather than on the arviz line it happens to run against.
+            raw = idata.groups
+            groups = [g.lstrip("/") for g in (raw() if callable(raw) else list(raw)) if g != "/"]
             self.assertIn("posterior", groups, f"no posterior group; groups={groups}")
             self.assertIn("sample_stats", groups, f"no sample_stats group; groups={groups}")
 
-            posterior = idata.posterior
+            posterior = idata["posterior"]
             for site in POPULATION_SITES:
                 self.assertIn(site, posterior)
             original = np.asarray(self.mcmc.get_samples()["population_mean"])
@@ -116,7 +121,7 @@ class TestSaveFit(unittest.TestCase):
             )
             # Diagnostics must travel in the same object, or r_hat/ESS cannot be
             # computed from the artifact the way arviz expects.
-            self.assertIn("diverging", idata.sample_stats)
+            self.assertIn("diverging", idata["sample_stats"])
 
     def test_records_provenance(self):
         """Supplied metadata and the source commit are recorded."""

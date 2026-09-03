@@ -31,7 +31,15 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [ '3.11' ]
+        # 3.12 to match beaker/Dockerfile's `FROM python:3.12-slim`, which is where the
+        # hierarchical-Bayes code actually runs. It is also now required rather than
+        # merely preferable: every arviz 1.x wheel declares `requires_python >=3.12`, so
+        # the pinned `arviz>=1.0,<2` in the [bayes] extra cannot resolve on 3.11 --
+        # `pip install -e .[dev,bayes]` fails with "No matching distribution found".
+        #
+        # The rest of the package keeps the 3.10/3.11 matrix above; only this extra needs
+        # 3.12, and testing it on a Python the image never uses was the real defect here.
+        python-version: [ '3.12' ]
     steps:
     - uses: actions/checkout@v3
     - name: Set up Python ${{ matrix.python-version }}

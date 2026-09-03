@@ -42,7 +42,7 @@ class TestLogistic(unittest.TestCase):
         df_trial = nwb.trials.to_dataframe()
 
         # Turn to 0 and 1 coding (assuming all trials are non-autowater trials)
-        choice_history = df_trial["animal_response"].values
+        choice_history = df_trial["animal_response"].to_numpy(copy=True)
         choice_history[choice_history == 2] = np.nan
         reward_history = (
             (df_trial["rewarded_historyL"] + df_trial["rewarded_historyR"]).astype(int).values

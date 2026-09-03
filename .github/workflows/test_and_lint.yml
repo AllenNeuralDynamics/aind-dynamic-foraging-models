@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [ '3.9', '3.10' ]
+        python-version: [ '3.10', '3.11' ]
     steps:
     - uses: actions/checkout@v3
     - name: Set up Python ${{ matrix.python-version }}
@@ -26,7 +26,7 @@ jobs:
       run: coverage run -m unittest discover && coverage report
 
   # The hierarchical Bayesian subpackage needs JAX, which requires Python >= 3.10.
-  # It runs as a separate job so the core 3.9/3.10 matrix above stays untouched.
+  # It runs as a separate job with [bayes] dependencies.
   hierarchical-bayes:
     runs-on: ubuntu-latest
     strategy:

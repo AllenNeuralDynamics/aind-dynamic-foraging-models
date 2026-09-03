@@ -16,6 +16,7 @@ class ForagerCollection:
         "ForagerQLearning",
         "ForagerLossCounting",
         "ForagerCompareThreshold",
+        "ForagerActorCritic",
     ]
 
     FORAGER_PRESETS = {
@@ -60,6 +61,13 @@ class ForagerCollection:
         "CompareToThreshold": dict(
             description="Compare-to-threshold foraging model",
             agent_class="ForagerCompareThreshold",
+            agent_kwargs=dict(
+                choice_kernel="none",
+            ),
+        ),
+        "ActorCritic": dict(
+            description="Vanilla actor-critic model (softmax actor + state-value critic)",
+            agent_class="ForagerActorCritic",
             agent_kwargs=dict(
                 choice_kernel="none",
             ),

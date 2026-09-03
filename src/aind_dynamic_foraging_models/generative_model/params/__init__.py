@@ -14,6 +14,8 @@ class ParamsSymbols(str, Enum):
     learn_rate = R"$\alpha$"
     learn_rate_rew = R"$\alpha_{rew}$"
     learn_rate_unrew = R"$\alpha_{unr}$"
+    learn_rate_actor = R"$\alpha_{actor}$"
+    learn_rate_critic = R"$\alpha_{critic}$"
     forget_rate_unchosen = R"$\delta$"
     choice_kernel_step_size = R"$\alpha_{ck}$"
     choice_kernel_relative_weight = R"$w_{ck}$"

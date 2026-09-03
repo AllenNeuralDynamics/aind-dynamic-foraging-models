@@ -65,6 +65,14 @@ bayes = [
     # has actually run on: the D10 rungs of study 08 completed on arviz 1.3.0. Pinning
     # 0.x instead would force an image rebuild and a downgrade to no benefit. Bounded
     # below 2 because that line does not exist yet and its API is unknown.
+    #
+    # Consequence to know before installing: every arviz 1.x wheel declares
+    # `requires_python >=3.12`, so **this extra needs Python 3.12+** even though the package
+    # as a whole still supports 3.9. `pip install -e .[bayes]` on 3.10/3.11 fails outright
+    # with "No matching distribution found for arviz<2,>=1.0". That is deliberate -- the
+    # alternative is a marker that silently installs no arviz and dies later on
+    # `import arviz` -- and it matches where this code runs: beaker/Dockerfile is
+    # `FROM python:3.12-slim`.
     'arviz>=1.0,<2',
 
     'xarray',     # reading the persisted netCDF back

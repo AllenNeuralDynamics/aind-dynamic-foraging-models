@@ -128,15 +128,22 @@ def save_fit(mcmc, output_dir, *, name="fit", include_session_sites=False, meta=
         else None
     )
 
-    # Write ONE grouped InferenceData, so `az.from_netcdf` round-trips. Handing a bare
-    # Dataset to `to_netcdf` puts its variables at the netCDF *root*; `az.from_netcdf`
-    # then finds no groups and returns an EMPTY InferenceData **without raising** -- a
-    # silent failure for every consumer that reloads a fit to draw a figure or rescore a
-    # cohort, which is the whole reason the fit is persisted.
-    groups = {"posterior": posterior}
+    # Write ONE grouped netCDF, so `az.from_netcdf` round-trips. Handing a bare Dataset to
+    # `to_netcdf` puts its variables at the netCDF *root*, and `az.from_netcdf` then finds
+    # no groups -- on 0.x an empty InferenceData returned without raising, on 1.x a DataTree
+    # whose only node is "/" -- a silent failure for every consumer that reloads a fit to
+    # draw a figure or rescore a cohort, which is the whole reason the fit is persisted.
+    #
+    # Write the groups with xarray's own group writer, NOT via an arviz constructor. On
+    # arviz >= 1.0 `az.InferenceData` is an alias for `xarray.DataTree`, whose __init__
+    # takes no group keywords, so `az.InferenceData(posterior=..., sample_stats=...)`
+    # raises `TypeError: DataTree.__init__() got an unexpected keyword argument
+    # 'posterior'`. That is not hypothetical: it crashed every HB run on the Beaker image
+    # (arviz 1.3.0) at this line. xarray's writer produces the same on-disk groups and
+    # behaves identically on both arviz lines.
+    posterior.to_netcdf(str(netcdf_path), group="posterior", mode="w")
     if sample_stats is not None:
-        groups["sample_stats"] = sample_stats
-    az.InferenceData(**groups).to_netcdf(str(netcdf_path))
+        sample_stats.to_netcdf(str(netcdf_path), group="sample_stats", mode="a")
 
     # Kept alongside as a flat Dataset for readers written against the earlier layout.
     if sample_stats is not None:

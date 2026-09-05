@@ -99,6 +99,22 @@ class TestPublishedBanditModels(unittest.TestCase):
             ),
         )
 
+    def test_grossman_divergent_proposal_does_not_crash_likelihood(self):
+        agent = ForagerGrossmanMetaLearning(seed=0)
+        agent.set_params(
+            learn_rate_rew=1.0,
+            learn_rate_unrew=1.0,
+            forgetting_factor=1.0,
+            expected_uncertainty_step_size=1.0,
+            negative_learning_rate_step_size=1.0,
+            choice_bias=0.0,
+            softmax_inverse_temperature=10.0,
+        )
+        choices = np.tile(np.array([0, 1]), 1000)
+        rewards = np.tile(np.array([1.0, 0.0, 0.0, 1.0]), 500)
+        agent.perform_closed_loop(choices, rewards)
+        self.assertTrue(np.isfinite(agent.choice_prob).all())
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

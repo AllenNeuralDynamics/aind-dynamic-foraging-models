@@ -153,7 +153,13 @@ class ForagerGrossmanMetaLearning(DynamicForagingAgentMLEBase):
         right_logit = float(self.params.softmax_inverse_temperature) * (
             float(q_right) - float(q_left) + float(self.params.choice_bias)
         )
-        probability_right = float(expit(right_logit))
+        if np.isnan(right_logit):
+            # Differential evolution can propose parameters whose long-horizon
+            # meta-learning state diverges. Give that invalid tail chance
+            # likelihood so the optimizer can reject it instead of crashing.
+            probability_right = 0.5
+        else:
+            probability_right = float(expit(right_logit))
         choice_prob = np.array([1.0 - probability_right, probability_right], dtype=float)
         choice = self.rng.choice(self.n_actions, p=choice_prob)
         return choice, choice_prob

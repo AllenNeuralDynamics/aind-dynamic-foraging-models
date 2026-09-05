@@ -112,7 +112,7 @@ class ForagerZidHistoryKernel(DynamicForagingAgentMLEBase):
         self.value[self.trial] = previous_value + float(self.params.learn_rate) * (
             float(reward) - previous_value
         )
-        if switched:
+        if first_update or switched:
             self.state_history_kernel[self.trial] = 0.0
         else:
             previous_kernel = float(self.state_history_kernel[self.trial - 1])

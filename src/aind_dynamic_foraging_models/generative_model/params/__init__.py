@@ -19,8 +19,13 @@ class ParamsSymbols(str, Enum):
     forget_rate_unchosen = R"$\delta$"
     choice_kernel_step_size = R"$\alpha_{ck}$"
     choice_kernel_relative_weight = R"$w_{ck}$"
+    choice_kernel_inverse_temperature = R"$\beta_{ck}$"
     biasL = R"$b_L$"
+    choice_bias = R"$b$"
     softmax_inverse_temperature = R"$\beta$"
     epsilon = R"$\epsilon$"
     threshold = R"$\rho$"  # Adding the threshold parameter with symbol ρ (rho)
     reset_to_threshold = R"$\mathrm{reset}$"
+    forgetting_factor = R"$\zeta$"
+    expected_uncertainty_step_size = R"$\alpha_v$"
+    negative_learning_rate_step_size = R"$\psi$"

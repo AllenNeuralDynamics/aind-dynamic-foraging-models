@@ -53,11 +53,15 @@ functions {
                     array[,,] int reward,
                     array[] int n_sessions,
                     array[,] int n_trials,
-                    array[] vector learn_rate_rew,
-                    array[] vector learn_rate_unrew,
-                    array[] vector forget_rate,
-                    array[] vector beta,
-                    array[] vector bias_l) {
+                    // array[,] real, matching the transformed-parameter declarations
+                    // below. Declaring these as array[] vector is the natural-looking
+                    // guess and stanc rejects it: `array[S, M] real` is a 2-D real array,
+                    // not an array of vectors.
+                    array[,] real learn_rate_rew,
+                    array[,] real learn_rate_unrew,
+                    array[,] real forget_rate,
+                    array[,] real beta,
+                    array[,] real bias_l) {
     real lp = 0;
     for (i in 1:size(subject_slice)) {
       int s = subject_slice[i];

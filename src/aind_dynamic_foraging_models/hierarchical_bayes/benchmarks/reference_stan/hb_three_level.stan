@@ -43,7 +43,11 @@ functions {
    * the gradient of a recurrent scan is inherently sequential within a session, so the only
    * available parallelism is across sessions and subjects.
    */
-  real subject_lpdf(array[] int subject_slice,
+  /* NOTE the name: a `_lpdf` suffix would make Stan treat this as a probability density
+   * and demand a real variate as its first argument, which a reduce_sum slice
+   * (`array[] int`) is not. reduce_sum takes an ordinary function.
+   */
+  real partial_sum_subjects(array[] int subject_slice,
                     int start, int end,
                     array[,,] int choice,
                     array[,,] int reward,
@@ -172,7 +176,7 @@ model {
   {
     array[S] int subject_idx;
     for (s in 1:S) subject_idx[s] = s;
-    target += reduce_sum(subject_lpdf, subject_idx, grainsize,
+    target += reduce_sum(partial_sum_subjects, subject_idx, grainsize,
                          choice, reward, n_sessions, n_trials,
                          learn_rate_rew, learn_rate_unrew, forget_rate, beta, bias_l);
   }

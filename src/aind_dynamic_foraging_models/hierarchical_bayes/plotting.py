@@ -29,6 +29,55 @@ PARAM_LABELS = {
     "bias_l": r"$b_L$  side bias",
 }
 
+#: Fixed x-axis range per parameter, in the model's own (bounded) units.
+#:
+#: House convention, and not merely cosmetic. Autoscaling a posterior to its own mass
+#: makes every panel look equally well determined and makes rungs incomparable: a
+#: parameter tightly pinned at 0.02 and one spread across half its support render at the
+#: same visual width, and the same parameter shifts scale between D=10 and D=614. Fixing
+#: the axis to the parameter's support puts the width of the posterior on the page, so a
+#: tight one looks tight, and panels can be read side by side across rungs.
+#:
+#: These are the supports, not taste: the three rates are probabilities that
+#: ``to_bounded`` maps through a normal CDF onto (0, 1), and the inverse temperature is
+#: mapped onto (0, beta_max) -- which is why plotting it on [0, beta_max] also shows at a
+#: glance whether the posterior is pressing against that ceiling. ``bias_l`` is the one
+#: exception: it is unbounded, and +/-0.5 is a reporting convention rather than a limit.
+PARAM_XLIM = {
+    "learn_rate_rew": (0.0, 1.0),
+    "learn_rate_unrew": (0.0, 1.0),
+    "forget_rate_unchosen": (0.0, 1.0),
+    "softmax_inverse_temperature": (0.0, None),   # None -> beta_max, see param_xlim()
+    "bias_l": (-0.5, 0.5),
+}
+
+
+def param_xlim(param, beta_max=10.0):
+    """Canonical ``(lo, hi)`` x-limits for a parameter, or ``None`` if it has none.
+
+    Parameters
+    ----------
+    param : str or int
+        Parameter name, or its position in :data:`~.model.HATTORI2019_PARAMS`.
+    beta_max : float, optional
+        Upper bound on the softmax inverse temperature, which is a model setting rather
+        than a constant. Resolving it here rather than hardcoding 10 keeps the axis
+        honest if a fit is run with a different ceiling -- the panel would otherwise
+        claim a bound the model never used.
+
+    Returns
+    -------
+    tuple of float or None
+        ``None`` for a parameter with no convention, so callers can leave autoscaling
+        alone rather than inventing a range.
+    """
+    name = param if isinstance(param, str) else list(PARAM_LABELS)[param]
+    span = PARAM_XLIM.get(name)
+    if span is None:
+        return None
+    lo, hi = span
+    return (lo, float(beta_max) if hi is None else hi)
+
 
 def _style(ax):
     """Recessive axes and grid, so the marks carry the figure."""
@@ -96,6 +145,11 @@ def plot_population_recovery(population_draws, subject_means, truth=None,
 
         _style(ax)
         ax.set_yticks([])
+        # Fixed to the parameter's support so panel width means posterior width, and so
+        # the same parameter is comparable across rungs. See PARAM_XLIM.
+        span = param_xlim(names[i], beta_max)
+        if span is not None:
+            ax.set_xlim(*span)
         ax.set_title(PARAM_LABELS.get(names[i], names[i]), fontsize=9,
                      color=INK, pad=8)
 
@@ -255,6 +309,12 @@ def plot_shrinkage(subject_means, population_mean, unpooled=None,
     ax.set_ylabel("subjects", fontsize=9, color=INK)
     ax.set_xlabel(param_name or PARAM_LABELS.get(
         list(PARAM_LABELS)[param_index], "parameter"), fontsize=9, color=INK)
+    # Same convention as the recovery panels: shrinkage is a claim about how far subject
+    # estimates move toward the cohort, and that distance is only readable against a
+    # fixed span.
+    span = param_xlim(param_index, beta_max)
+    if span is not None:
+        ax.set_xlim(*span)
     if unpooled is not None:
         ax.legend(frameon=False, fontsize=8, loc="lower right", labelcolor=INK)
     fig.tight_layout()

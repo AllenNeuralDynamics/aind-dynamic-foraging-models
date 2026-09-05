@@ -14,14 +14,18 @@ follows the NumPyro model's structure and parameterisation, including its three 
 traps (``aF`` inversion, ``bias`` sign, reward-vs-PE-sign branching). See the header of the
 `.stan` file.
 
-cmdstanpy, not pystan
----------------------
-`benchmark_stan_vs_numpyro.py` next door uses `import stan` (pystan 3). This script uses
-cmdstanpy instead, for two reasons that are specific to the HPC node rather than matters of
-taste: CmdStan is already built there (``~/.cmdstan/cmdstan-2.39.0``) while the ``disrnn-stan``
-env that carried pystan no longer exists, and `reduce_sum` threading is configured directly
-through ``cpp_options={"STAN_THREADS": True}`` rather than through an httpstan build server.
-The posterior is the same either way.
+pystan
+------
+`import stan` (pystan 3), matching `benchmark_stan_vs_numpyro.py` next door so the two
+benchmarks in this directory are comparable and there is one Stan toolchain to keep working.
+pystan builds the model through httpstan's own bundled toolchain, which is why nothing here
+depends on a CmdStan installation.
+
+One consequence worth knowing before reading the timings: httpstan does not define
+``STAN_THREADS``, so the ``reduce_sum`` in the model runs **serially**. That is valid Stan --
+``reduce_sum`` degrades to a plain sum when threading is off -- and it means the Stan wall
+times below use one core per chain. Chains still run in parallel. If a threaded number is
+ever wanted, that is a CmdStan build with ``STAN_THREADS=true``, not a model change.
 
 Usage
 -----
@@ -150,38 +154,27 @@ def stan_data(arrays, beta_max=10.0, log_sigma_loc=-1.0, log_sigma_scale=1.0, gr
     }
 
 
-def run_stan(arrays, num_chains, num_samples, num_warmup, seed=0, threads_per_chain=None,
-             beta_max=10.0, output_dir=None):
-    """Compile and fit the three-level Stan model. Returns draws plus timing."""
-    from cmdstanpy import CmdStanModel
+def run_stan(arrays, num_chains, num_samples, num_warmup, seed=0, beta_max=10.0):
+    """Build and fit the three-level Stan model with pystan. Returns draws plus timing."""
+    import stan
 
     here = os.path.dirname(os.path.abspath(__file__))
     stan_file = os.path.join(here, "reference_stan", "hb_three_level.stan")
-
-    if threads_per_chain is None:
-        # Leave one core per chain for the chain itself; reduce_sum threads share the rest.
-        n_cores = int(os.environ.get("SLURM_CPUS_ON_NODE", os.cpu_count() or 1))
-        threads_per_chain = max(1, n_cores // num_chains)
-
-    # Compilation is timed separately: Stan pays it once as a cached binary while JAX pays
-    # JIT on every process start, and folding the two together would flatter whichever
-    # framework happened to be warm.
-    started = time.time()
-    model = CmdStanModel(stan_file=stan_file, cpp_options={"STAN_THREADS": True})
-    compile_seconds = time.time() - started
+    with open(stan_file) as handle:
+        program = handle.read()
 
     data = stan_data(arrays, beta_max=beta_max, grainsize=1)
+
+    # Build is timed separately from sampling. Stan pays a C++ compile once and then samples
+    # from a binary; JAX pays JIT inside its first sampling call. Folding the two together
+    # would flatter whichever framework happened to be warm, so they are reported apart.
     started = time.time()
-    fit = model.sample(
-        data=data,
-        chains=num_chains,
-        parallel_chains=num_chains,
-        threads_per_chain=threads_per_chain,
-        iter_warmup=num_warmup,
-        iter_sampling=num_samples,
-        seed=seed,
-        show_progress=False,
-        output_dir=output_dir,
+    posterior = stan.build(program, data=data, random_seed=seed)
+    compile_seconds = time.time() - started
+
+    started = time.time()
+    fit = posterior.sample(
+        num_chains=num_chains, num_samples=num_samples, num_warmup=num_warmup
     )
     sample_seconds = time.time() - started
 
@@ -189,7 +182,6 @@ def run_stan(arrays, num_chains, num_samples, num_warmup, seed=0, threads_per_ch
         "fit": fit,
         "compile_seconds": compile_seconds,
         "sample_seconds": sample_seconds,
-        "threads_per_chain": threads_per_chain,
         "num_chains": num_chains,
         "num_samples": num_samples,
     }
@@ -281,11 +273,9 @@ def main():
     parser.add_argument("--num-samples", type=int, default=1000)
     parser.add_argument("--beta-max", type=float, default=10.0)
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--threads-per-chain", type=int, default=None)
     parser.add_argument("--skip-numpyro", action="store_true")
     parser.add_argument("--skip-stan", action="store_true")
     parser.add_argument("--output", type=str, default=None)
-    parser.add_argument("--stan-output-dir", type=str, default=None)
     args = parser.parse_args()
 
     if args.synthetic:
@@ -312,22 +302,28 @@ def main():
 
     if not args.skip_stan:
         out = run_stan(arrays, args.num_chains, args.num_samples, args.num_warmup,
-                       seed=args.seed, threads_per_chain=args.threads_per_chain,
-                       beta_max=args.beta_max, output_dir=args.stan_output_dir)
+                       seed=args.seed, beta_max=args.beta_max)
         fit = out["fit"]
-        # (chain, draw) per element of the population vectors.
-        draws = {}
-        for i, name in enumerate(PARAM_NAMES):
-            draws[f"population_mean[{name}]"] = fit.stan_variable("population_mean")[:, i]
-        div = int(np.sum(fit.method_variables()["divergent__"]))
+        # pystan returns (*param_dims, chains * samples) with draws ordered chain-major, so
+        # reshaping to (chain, draw) is what lets r_hat see between-chain variation at all --
+        # ESS and r_hat computed on the flattened vector would silently treat four chains as
+        # one long one.
+        population_mean = np.asarray(fit["population_mean"])
+        draws = {
+            f"population_mean[{name}]":
+                population_mean[i].reshape(args.num_chains, args.num_samples)
+            for i, name in enumerate(PARAM_NAMES)
+        }
+        try:
+            div = int(np.sum(np.asarray(fit["divergent__"])))
+        except (KeyError, AttributeError):
+            div = -1          # -1 = not reported, distinct from a genuine zero
         n_draws = args.num_chains * args.num_samples
         stan_draws_by_param = draws
         report["stan"] = summarise("stan", draws, out["sample_seconds"], div, n_draws)
         report["stan"]["compile_seconds"] = out["compile_seconds"]
-        report["stan"]["threads_per_chain"] = out["threads_per_chain"]
         print(f"stan: {out['sample_seconds']:.1f}s sampling "
-              f"({out['compile_seconds']:.1f}s compile), "
-              f"{out['threads_per_chain']} threads/chain, {div} divergences, "
+              f"({out['compile_seconds']:.1f}s build), {div} divergences, "
               f"min ESS/draw {report['stan']['min_ess_per_draw']:.3f}")
 
     if not args.skip_numpyro:

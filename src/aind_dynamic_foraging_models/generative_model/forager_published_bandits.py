@@ -153,7 +153,7 @@ class ForagerGrossmanMetaLearning(DynamicForagingAgentMLEBase):
         right_logit = float(self.params.softmax_inverse_temperature) * (
             float(q_right) - float(q_left) + float(self.params.choice_bias)
         )
-        if np.isnan(right_logit):
+        if not np.isfinite(right_logit):
             # Differential evolution can propose parameters whose long-horizon
             # meta-learning state diverges. Give that invalid tail chance
             # likelihood so the optimizer can reject it instead of crashing.

@@ -115,6 +115,11 @@ class TestPublishedBanditModels(unittest.TestCase):
         agent.perform_closed_loop(choices, rewards)
         self.assertTrue(np.isfinite(agent.choice_prob).all())
 
+        agent._reset()
+        agent.q_value[:, 0] = [-np.inf, np.inf]
+        _, choice_prob = agent.act(None)
+        np.testing.assert_allclose(choice_prob, [0.5, 0.5])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

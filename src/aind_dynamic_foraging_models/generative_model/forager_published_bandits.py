@@ -104,7 +104,8 @@ class ForagerZidHistoryKernel(DynamicForagingAgentMLEBase):
         return choice, choice_prob
 
     def learn(self, _observation, choice, reward, _next_observation, _done):
-        switched = self.trial == 1 or choice != self.choice_history[self.trial - 2]
+        first_update = self.trial == 1
+        switched = not first_update and choice != self.choice_history[self.trial - 2]
         previous_value = (
             float(self.params.threshold) if switched else float(self.value[self.trial - 1])
         )

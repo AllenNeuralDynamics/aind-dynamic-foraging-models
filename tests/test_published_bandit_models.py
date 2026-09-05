@@ -57,14 +57,14 @@ class TestPublishedBanditModels(unittest.TestCase):
             np.array([1.0, 0.0, 1.0, 0.0]),
         )
 
-        np.testing.assert_allclose(agent.value, np.array([1.0, 0.7, 0.35, 0.7, 0.35]))
+        np.testing.assert_allclose(agent.value, np.array([1.0, 1.0, 0.5, 0.7, 0.35]))
         np.testing.assert_allclose(agent.state_history_kernel, np.array([0, 0, 0.5, 0, 0.5]))
         np.testing.assert_allclose(
             agent.choice_prob,
             np.array(
                 [
-                    [0.5, expit(0.6), expit(0.4), 1.0 - expit(0.6)],
-                    [0.5, 1.0 - expit(0.6), 1.0 - expit(0.4), expit(0.6)],
+                    [0.5, expit(1.2), expit(0.7), 1.0 - expit(0.6)],
+                    [0.5, 1.0 - expit(1.2), 1.0 - expit(0.7), expit(0.6)],
                 ]
             ),
         )

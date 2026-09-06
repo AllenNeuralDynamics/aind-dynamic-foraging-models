@@ -37,54 +37,55 @@
 // side pads every lane to the cohort maximum, and on this cohort that is ~60-75% waste.
 
 functions {
-  /* Log likelihood of one slice of subjects.
+  /* Log likelihood of one subject's sessions.
    *
-   * WHAT IS SLICED, AND WHY IT MATTERS MORE THAN IT LOOKS
-   *
-   * reduce_sum deep-copies its SHARED arguments into every partial sum it evaluates, for any
-   * argument containing parameters. The first version of this file sliced a dummy array of
-   * subject indices and passed the five per-session parameter arrays as shared -- 5 x S x M
-   * autodiff variables copied per partial, S partials per gradient. At D~99 that is roughly
-   * 3.7M variable copies per gradient evaluation, which swamped the likelihood itself: the
-   * fit sustained under 160 iterations in three hours on 92 busy cores, no better than one
-   * thread. More threads only bought more copying.
-   *
-   * So the SLICED argument now carries the parameters -- each partial receives only its own
-   * subjects' rows -- and every shared argument is data, which reduce_sum passes by
-   * reference rather than copying. The likelihood computed is identical; only the amount of
-   * memory traffic per gradient changes.
-   *
-   * The name matters too: a `_lpdf` suffix would make Stan treat this as a density and
-   * demand a real variate as its first argument, which a slice is not.
+   * Sliced over subjects for `reduce_sum`, which is how Stan uses more than one core here:
+   * the gradient of a recurrent scan is inherently sequential within a session, so the only
+   * available parallelism is across sessions and subjects.
    */
-  real partial_sum_subjects(array[] matrix params_slice,
-                            int start, int end,
-                            array[,,] int choice,
-                            array[,,] int reward,
-                            array[] int n_sessions,
-                            array[,] int n_trials) {
+  /* NOTE the name: a `_lpdf` suffix would make Stan treat this as a probability density
+   * and demand a real variate as its first argument, which a reduce_sum slice
+   * (`array[] int`) is not. reduce_sum takes an ordinary function.
+   */
+  real partial_sum_subjects(array[] int subject_slice,
+                    int start, int end,
+                    array[,,] int choice,
+                    array[,,] int reward,
+                    array[] int n_sessions,
+                    array[,] int n_trials,
+                    // array[,] real, matching the transformed-parameter declarations
+                    // below. Declaring these as array[] vector is the natural-looking
+                    // guess and stanc rejects it: `array[S, M] real` is a 2-D real array,
+                    // not an array of vectors.
+                    array[,] real learn_rate_rew,
+                    array[,] real learn_rate_unrew,
+                    array[,] real forget_rate,
+                    array[,] real beta,
+                    array[,] real bias_l) {
     real lp = 0;
-    for (i in 1:size(params_slice)) {
-      int s = start + i - 1;              // index back into the data arrays
+    for (i in 1:size(subject_slice)) {
+      int s = subject_slice[i];
       for (m in 1:n_sessions[s]) {
         int T_sm = n_trials[s, m];
         if (T_sm == 0) continue;
         // Q[1] = left, Q[2] = right, both start at 0 -- the initialisation the
-        // reward-branching equivalence in the header depends on.
+        // reward-branching equivalence above depends on.
         vector[2] Q = rep_vector(0.0, 2);
-        real a_rew = params_slice[i][m, 1];
-        real a_unrew = params_slice[i][m, 2];
-        real f = params_slice[i][m, 3];
-        real b = params_slice[i][m, 4];
-        real bl = params_slice[i][m, 5];
+        real a_rew = learn_rate_rew[s, m];
+        real a_unrew = learn_rate_unrew[s, m];
+        real f = forget_rate[s, m];
+        real b = beta[s, m];
+        real bl = bias_l[s, m];
 
         for (t in 1:T_sm) {
           // choice: 0 = left, 1 = right. The NumPyro model applies the bias to the LEFT
           // option, so a right-referenced logit carries it with a minus sign.
           lp += bernoulli_logit_lpmf(choice[s, m, t] | b * (Q[2] - Q[1]) - bl);
+
           {
             real r = reward[s, m, t];
             real lr = r > 0 ? a_rew : a_unrew;
+            // Chosen option moves toward the outcome; unchosen decays.
             if (choice[s, m, t] == 1) {          // right chosen
               Q[2] += lr * (r - Q[2]);
               Q[1] *= (1 - f);
@@ -130,25 +131,27 @@ parameters {
 }
 
 transformed parameters {
-  // Per-subject, per-session parameters, laid out so reduce_sum can slice them by subject:
-  // columns are learn_rate_rew, learn_rate_unrew, forget_rate_unchosen,
-  // softmax_inverse_temperature, bias_l -- the order of HATTORI2019_PARAMS.
-  //
-  // Phi_approx() with a standard-normal argument IS the uniform prior the published model
-  // calls "non-informative"; the transform carries the prior, so no uniform statement appears
-  // anywhere in this file.
-  array[S] matrix[M, 5] session_params;
+  // Bounded session parameters. Phi() with a standard-normal argument IS the uniform prior
+  // the published model describes as "non-informative" -- the transform carries the prior,
+  // so there is no separate uniform statement anywhere in this file.
+  array[S, M] real<lower=0, upper=1> learn_rate_rew;
+  array[S, M] real<lower=0, upper=1> learn_rate_unrew;
+  array[S, M] real<lower=0, upper=1> forget_rate;
+  array[S, M] real<lower=0> beta;
+  array[S, M] real bias_l;                         // unbounded, passes through untransformed
 
-  for (s in 1:S) {
-    vector[5] mu_p = population_mean + population_scale .* mu_raw[s];
-    vector[5] sigma = exp(log_sigma_mean + log_sigma_spread .* log_sigma_raw[s]);
-    for (m in 1:M) {
-      vector[5] theta = mu_p + sigma .* theta_raw[s, m];
-      session_params[s, m, 1] = Phi_approx(theta[1]);
-      session_params[s, m, 2] = Phi_approx(theta[2]);
-      session_params[s, m, 3] = Phi_approx(theta[3]);
-      session_params[s, m, 4] = Phi_approx(theta[4]) * beta_max;
-      session_params[s, m, 5] = theta[5];       // bias_l is unbounded
+  {
+    for (s in 1:S) {
+      vector[5] mu_p = population_mean + population_scale .* mu_raw[s];
+      vector[5] sigma = exp(log_sigma_mean + log_sigma_spread .* log_sigma_raw[s]);
+      for (m in 1:M) {
+        vector[5] theta = mu_p + sigma .* theta_raw[s, m];
+        learn_rate_rew[s, m]   = Phi_approx(theta[1]);
+        learn_rate_unrew[s, m] = Phi_approx(theta[2]);
+        forget_rate[s, m]      = Phi_approx(theta[3]);
+        beta[s, m]             = Phi_approx(theta[4]) * beta_max;
+        bias_l[s, m]           = theta[5];
+      }
     }
   }
 }
@@ -174,12 +177,13 @@ model {
   // of the likelihood only. Keeping that identical matters -- dropping the padded slots here
   // would change the parameter count and make the two posteriors different objects.
 
-  // grainsize is passed as data and set to 1 by the trainer, which is Stan's AUTOMATIC
-  // partitioning setting rather than "one subject per task". Worth stating because the first
-  // diagnosis of the slowdown blamed grainsize; it was never the problem. The problem was
-  // passing parameters as shared arguments, fixed by slicing session_params above.
-  target += reduce_sum(partial_sum_subjects, session_params, grainsize,
-                       choice, reward, n_sessions, n_trials);
+  {
+    array[S] int subject_idx;
+    for (s in 1:S) subject_idx[s] = s;
+    target += reduce_sum(partial_sum_subjects, subject_idx, grainsize,
+                         choice, reward, n_sessions, n_trials,
+                         learn_rate_rew, learn_rate_unrew, forget_rate, beta, bias_l);
+  }
 }
 
 generated quantities {
@@ -195,17 +199,16 @@ generated quantities {
         vector[2] Q = rep_vector(0.0, 2);
         for (t in 1:n_trials[s, m]) {
           session_log_lik[s, m] += bernoulli_logit_lpmf(
-              choice[s, m, t]
-              | session_params[s, m, 4] * (Q[2] - Q[1]) - session_params[s, m, 5]);
+              choice[s, m, t] | beta[s, m] * (Q[2] - Q[1]) - bias_l[s, m]);
           {
             real r = reward[s, m, t];
-            real lr = r > 0 ? session_params[s, m, 1] : session_params[s, m, 2];
+            real lr = r > 0 ? learn_rate_rew[s, m] : learn_rate_unrew[s, m];
             if (choice[s, m, t] == 1) {
               Q[2] += lr * (r - Q[2]);
-              Q[1] *= (1 - session_params[s, m, 3]);
+              Q[1] *= (1 - forget_rate[s, m]);
             } else {
               Q[1] += lr * (r - Q[1]);
-              Q[2] *= (1 - session_params[s, m, 3]);
+              Q[2] *= (1 - forget_rate[s, m]);
             }
           }
         }

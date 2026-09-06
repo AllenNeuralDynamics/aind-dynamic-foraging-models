@@ -200,7 +200,9 @@ class TestPublishedBanditModels(unittest.TestCase):
             agent.q_value,
             np.array([[0.5, 0.25, 0.4375, 0.328125], [0.5, 0.75, 0.5625, 0.671875]]),
         )
-        squash = lambda value: 0.0001 + 0.9998 * expit(value)
+
+        def squash(value):
+            return 0.0001 + 0.9998 * expit(value)
         np.testing.assert_allclose(
             agent.choice_prob[1],
             [squash(0.0), squash(1.4), squash(0.65)],
@@ -223,7 +225,9 @@ class TestPublishedBanditModels(unittest.TestCase):
             (1.0 - 0.8) * belief_1 + (1.0 - epsilon) * (1.0 - belief_1)
         )
         belief_2 = 0.9 * posterior_2 + 0.1 * (1.0 - posterior_2)
-        squash = lambda value: 0.0001 + 0.9998 * expit(value)
+
+        def squash(value):
+            return 0.0001 + 0.9998 * expit(value)
         np.testing.assert_allclose(agent.probability_right_correct[:3], [0.5, belief_1, belief_2])
         np.testing.assert_allclose(
             agent.choice_prob[1],

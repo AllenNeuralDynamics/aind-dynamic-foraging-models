@@ -28,8 +28,8 @@ class TestGetForager(unittest.TestCase):
         print(f"\nAvailable forager classes: {forager_collection.FORAGER_CLASSES}")
         forager_df = forager_collection.get_all_foragers()
         print(forager_df)
-        # 42 original + 3 ActorCritic variants + 3 published bandit baselines.
-        self.assertEqual(len(forager_df), 48)
+        # 42 original + 3 ActorCritic variants + 8 published bandit baselines.
+        self.assertEqual(len(forager_df), 53)
 
 
 if __name__ == "__main__":

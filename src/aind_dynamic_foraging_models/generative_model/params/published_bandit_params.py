@@ -112,3 +112,161 @@ def generate_grossman_meta_learning_params() -> Tuple[Type[BaseModel], Type[Base
         "softmax_inverse_temperature": (0.0, 10.0),
     }
     return create_pydantic_models_dynamic(fields, bounds)
+
+
+def generate_lebedeva_pr_params() -> Tuple[Type[BaseModel], Type[BaseModel]]:
+    """Return Lebedeva et al.'s perseveration/reward-learning parameters."""
+    fields = {
+        "perseveration_learning_rate": (
+            float,
+            Field(default=0.2, ge=0.0, le=1.0, description="Perseveration learning rate"),
+        ),
+        "reward_learning_rate": (
+            float,
+            Field(default=0.2, ge=0.0, le=1.0, description="Reward-learning rate"),
+        ),
+        "perseveration_weight": (
+            float,
+            Field(default=1.0, description="Asymptotic perseveration magnitude"),
+        ),
+        "reward_weight": (
+            float,
+            Field(default=1.0, description="Asymptotic reward-seeking magnitude"),
+        ),
+        "choice_bias": (
+            float,
+            Field(default=0.0, description="Fixed right-choice log-odds bias"),
+        ),
+    }
+    # The authors fit the three log-odds weights without finite bounds. The
+    # shared differential-evolution fitter requires finite bounds, so use a
+    # numerically saturated range (choice probabilities differ from 0/1 by
+    # less than 2e-9 at either endpoint).
+    bounds = {
+        "perseveration_learning_rate": (0.0, 1.0),
+        "reward_learning_rate": (0.0, 1.0),
+        "perseveration_weight": (-20.0, 20.0),
+        "reward_weight": (-20.0, 20.0),
+        "choice_bias": (-20.0, 20.0),
+    }
+    return create_pydantic_models_dynamic(fields, bounds)
+
+
+def generate_beron_rflr_params() -> Tuple[Type[BaseModel], Type[BaseModel]]:
+    """Return Beron et al.'s recursively formulated logistic-regression parameters."""
+    fields = {
+        "choice_history_weight": (
+            float,
+            Field(default=1.0, description="One-trial choice-history weight"),
+        ),
+        "reward_evidence_weight": (
+            float,
+            Field(default=1.0, description="Choice-reward evidence weight"),
+        ),
+        "evidence_time_constant": (
+            float,
+            Field(default=2.0, gt=0.0, description="Evidence decay time constant in trials"),
+        ),
+    }
+    bounds = {
+        "choice_history_weight": (-20.0, 20.0),
+        "reward_evidence_weight": (-20.0, 20.0),
+        "evidence_time_constant": (0.05, 100.0),
+    }
+    return create_pydantic_models_dynamic(fields, bounds)
+
+
+def generate_miller_rhg_params() -> Tuple[Type[BaseModel], Type[BaseModel]]:
+    """Return Miller et al.'s reward/habit/gambler-fallacy parameters."""
+    fields = {
+        "reward_weight": (float, Field(default=1.0, description="Reward-seeking weight")),
+        "habit_weight": (float, Field(default=1.0, description="Habit weight")),
+        "gambler_fallacy_weight": (
+            float,
+            Field(default=1.0, description="Gambler's-fallacy weight"),
+        ),
+        "reward_retention_logit": (
+            float,
+            Field(default=0.0, description="Logit of reward-state retention"),
+        ),
+        "habit_retention_logit": (
+            float,
+            Field(default=0.0, description="Logit of habit-state retention"),
+        ),
+        "gambler_fallacy_retention_logit": (
+            float,
+            Field(default=0.0, description="Logit of gambler-state retention"),
+        ),
+        "choice_bias": (
+            float,
+            Field(default=0.0, description="Fixed right-choice half-logit bias"),
+        ),
+    }
+    bounds = {
+        "reward_weight": (-20.0, 20.0),
+        "habit_weight": (-20.0, 20.0),
+        "gambler_fallacy_weight": (-20.0, 20.0),
+        "reward_retention_logit": (-10.0, 10.0),
+        "habit_retention_logit": (-10.0, 10.0),
+        "gambler_fallacy_retention_logit": (-10.0, 10.0),
+        "choice_bias": (-20.0, 20.0),
+    }
+    return create_pydantic_models_dynamic(fields, bounds)
+
+
+def generate_eckstein_rl_params() -> Tuple[Type[BaseModel], Type[BaseModel]]:
+    """Return Eckstein et al.'s winning four-parameter RL model."""
+    fields = {
+        "positive_learning_rate": (
+            float,
+            Field(default=0.5, ge=0.0, le=1.0, description="Rewarded-trial learning rate"),
+        ),
+        "negative_learning_rate": (
+            float,
+            Field(default=0.5, ge=0.0, le=1.0, description="Unrewarded-trial learning rate"),
+        ),
+        "softmax_inverse_temperature": (
+            float,
+            Field(default=2.0, ge=0.0, le=15.0, description="Inverse temperature"),
+        ),
+        "perseveration_bonus": (
+            float,
+            Field(default=0.0, ge=-1.0, le=1.0, description="Previous-choice value bonus"),
+        ),
+    }
+    bounds = {
+        "positive_learning_rate": (0.0, 1.0),
+        "negative_learning_rate": (0.0, 1.0),
+        "softmax_inverse_temperature": (0.0, 15.0),
+        "perseveration_bonus": (-1.0, 1.0),
+    }
+    return create_pydantic_models_dynamic(fields, bounds)
+
+
+def generate_eckstein_bi_params() -> Tuple[Type[BaseModel], Type[BaseModel]]:
+    """Return Eckstein et al.'s winning four-parameter Bayesian-inference model."""
+    fields = {
+        "subjective_switch_probability": (
+            float,
+            Field(default=0.05, ge=0.0, le=1.0, description="Subjective reversal rate"),
+        ),
+        "subjective_reward_probability": (
+            float,
+            Field(default=0.75, ge=0.0, le=1.0, description="Subjective correct-side reward rate"),
+        ),
+        "softmax_inverse_temperature": (
+            float,
+            Field(default=2.0, ge=0.0, le=15.0, description="Inverse temperature"),
+        ),
+        "perseveration_bonus": (
+            float,
+            Field(default=0.0, ge=-1.0, le=1.0, description="Previous-choice belief bonus"),
+        ),
+    }
+    bounds = {
+        "subjective_switch_probability": (0.0, 1.0),
+        "subjective_reward_probability": (0.0, 1.0),
+        "softmax_inverse_temperature": (0.0, 15.0),
+        "perseveration_bonus": (-1.0, 1.0),
+    }
+    return create_pydantic_models_dynamic(fields, bounds)

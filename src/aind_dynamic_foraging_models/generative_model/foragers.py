@@ -17,6 +17,9 @@ class ForagerCollection:
         "ForagerLossCounting",
         "ForagerCompareThreshold",
         "ForagerActorCritic",
+        "ForagerRLCK",
+        "ForagerZidHistoryKernel",
+        "ForagerGrossmanMetaLearning",
     ]
 
     FORAGER_PRESETS = {
@@ -71,6 +74,21 @@ class ForagerCollection:
             agent_kwargs=dict(
                 choice_kernel="none",
             ),
+        ),
+        "Chen-RLCK": dict(
+            description="Four-parameter RLCK model used by Chen et al.",
+            agent_class="ForagerRLCK",
+            agent_kwargs={},
+        ),
+        "Zid-HistoryKernel2-ForagingRL": dict(
+            description="Best-fitting history-kernel-2 foraging-RL model from Zid et al.",
+            agent_class="ForagerZidHistoryKernel",
+            agent_kwargs={},
+        ),
+        "Grossman-MetaLearning": dict(
+            description="Uncertainty-dependent meta-learning model from Grossman et al.",
+            agent_class="ForagerGrossmanMetaLearning",
+            agent_kwargs={},
         ),
     }
 

@@ -6,11 +6,14 @@ import numpy as np
 from scipy.special import expit
 
 from aind_dynamic_foraging_models.generative_model import (
+    ForagerAlsioRL,
     ForagerBeronRFLR,
     ForagerEcksteinBI,
     ForagerEcksteinRL,
+    ForagerFeedbackDependentRL,
     ForagerGrossmanMetaLearning,
     ForagerLebedevaPR,
+    ForagerLopezDoubleTrace,
     ForagerMillerRHG,
     ForagerRLCK,
     ForagerZidHistoryKernel,
@@ -22,6 +25,64 @@ from aind_dynamic_foraging_models.generative_model import (
 
 class TestPublishedBanditModels(unittest.TestCase):
     """Check each implementation against a hand-computed short trajectory."""
+
+    def test_feedback_dependent_rl_equations(self):
+        agent = ForagerFeedbackDependentRL(seed=0)
+        agent.set_params(
+            positive_learning_rate=0.5,
+            negative_learning_rate=0.25,
+            softmax_inverse_temperature=2.0,
+        )
+        agent.perform_closed_loop(np.array([1, 1, 0]), np.array([1.0, 0.0, 1.0]))
+
+        np.testing.assert_allclose(
+            agent.q_value,
+            np.array([[0.5, 0.5, 0.5, 0.75], [0.5, 0.75, 0.5625, 0.5625]]),
+        )
+        np.testing.assert_allclose(
+            agent.choice_prob[1],
+            [0.5, expit(0.5), expit(0.125)],
+        )
+
+    def test_alsio_side_stickiness(self):
+        agent = ForagerAlsioRL(seed=0)
+        agent.set_params(
+            positive_learning_rate=0.5,
+            negative_learning_rate=0.25,
+            softmax_inverse_temperature=2.0,
+            perseveration_bonus=0.4,
+        )
+        agent.perform_closed_loop(np.array([1, 1, 0]), np.array([1.0, 0.0, 1.0]))
+
+        np.testing.assert_allclose(
+            agent.choice_prob[1],
+            [0.5, expit(0.9), expit(0.525)],
+        )
+
+    def test_lopez_double_trace_equations(self):
+        agent = ForagerLopezDoubleTrace(seed=0)
+        agent.set_params(
+            learn_rate=0.5,
+            softmax_inverse_temperature=2.0,
+            fast_choice_trace_weight=-1.0,
+            slow_choice_trace_weight=2.0,
+            fast_choice_trace_step_size=0.5,
+            slow_choice_trace_step_size=0.25,
+        )
+        agent.perform_closed_loop(np.array([1, 1, 0]), np.array([1.0, 0.0, 1.0]))
+
+        np.testing.assert_allclose(
+            agent.q_value,
+            np.array([[0.5, 0.25, 0.125, 0.5625], [0.5, 0.75, 0.375, 0.1875]]),
+        )
+        np.testing.assert_allclose(
+            agent.fast_choice_trace,
+            np.array([[0.0, 0.0, 0.0, 0.5], [0.0, 0.5, 0.75, 0.375]]),
+        )
+        np.testing.assert_allclose(
+            agent.slow_choice_trace,
+            np.array([[0.0, 0.0, 0.0, 0.25], [0.0, 0.25, 0.4375, 0.328125]]),
+        )
 
     def test_rlck_equations(self):
         agent = ForagerRLCK(seed=0)

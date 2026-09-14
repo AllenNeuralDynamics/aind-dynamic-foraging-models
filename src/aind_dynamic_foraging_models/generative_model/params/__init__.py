@@ -46,3 +46,7 @@ class ParamsSymbols(str, Enum):
     perseveration_bonus = R"$p$"
     subjective_switch_probability = R"$p_{switch}$"
     subjective_reward_probability = R"$p_{reward}$"
+    fast_choice_trace_weight = R"$\phi$"
+    slow_choice_trace_weight = R"$\vartheta$"
+    fast_choice_trace_step_size = R"$\tau_F$"
+    slow_choice_trace_step_size = R"$\tau_S$"

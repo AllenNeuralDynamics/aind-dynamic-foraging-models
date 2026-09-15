@@ -270,3 +270,169 @@ def generate_eckstein_bi_params() -> Tuple[Type[BaseModel], Type[BaseModel]]:
         "perseveration_bonus": (-1.0, 1.0),
     }
     return create_pydantic_models_dynamic(fields, bounds)
+
+
+def generate_feedback_dependent_rl_params() -> Tuple[Type[BaseModel], Type[BaseModel]]:
+    """Return the three-parameter feedback-dependent Rescorla-Wagner model."""
+    fields = {
+        "positive_learning_rate": (
+            float,
+            Field(default=0.5, ge=0.0, le=1.0, description="Rewarded-trial learning rate"),
+        ),
+        "negative_learning_rate": (
+            float,
+            Field(default=0.5, ge=0.0, le=1.0, description="Unrewarded-trial learning rate"),
+        ),
+        "softmax_inverse_temperature": (
+            float,
+            Field(default=5.0, ge=0.0, description="Inverse temperature"),
+        ),
+    }
+    bounds = {
+        "positive_learning_rate": (0.0, 1.0),
+        "negative_learning_rate": (0.0, 1.0),
+        "softmax_inverse_temperature": (0.0, 100.0),
+    }
+    return create_pydantic_models_dynamic(fields, bounds)
+
+
+def generate_feedback_dependent_rl_bias_params() -> Tuple[Type[BaseModel], Type[BaseModel]]:
+    """Return feedback-dependent RL augmented with a fixed choice bias."""
+    fields = {
+        "positive_learning_rate": (
+            float,
+            Field(default=0.5, ge=0.0, le=1.0, description="Rewarded-trial learning rate"),
+        ),
+        "negative_learning_rate": (
+            float,
+            Field(default=0.5, ge=0.0, le=1.0, description="Unrewarded-trial learning rate"),
+        ),
+        "softmax_inverse_temperature": (
+            float,
+            Field(default=5.0, ge=0.0, description="Inverse temperature"),
+        ),
+        "choice_bias": (
+            float,
+            Field(default=0.0, description="Choice-1 log-odds bias"),
+        ),
+    }
+    bounds = {
+        "positive_learning_rate": (0.0, 1.0),
+        "negative_learning_rate": (0.0, 1.0),
+        "softmax_inverse_temperature": (0.0, 100.0),
+        "choice_bias": (-5.0, 5.0),
+    }
+    return create_pydantic_models_dynamic(fields, bounds)
+
+
+def generate_feedback_dependent_rl_bias_ck1_params() -> Tuple[Type[BaseModel], Type[BaseModel]]:
+    """Return bias-augmented feedback-dependent RL with Bari's one-step choice kernel."""
+    fields = {
+        "positive_learning_rate": (
+            float,
+            Field(default=0.5, ge=0.0, le=1.0, description="Rewarded-trial learning rate"),
+        ),
+        "negative_learning_rate": (
+            float,
+            Field(default=0.5, ge=0.0, le=1.0, description="Unrewarded-trial learning rate"),
+        ),
+        "softmax_inverse_temperature": (
+            float,
+            Field(default=5.0, ge=0.0, description="Inverse temperature"),
+        ),
+        "choice_bias": (
+            float,
+            Field(default=0.0, description="Choice-1 log-odds bias"),
+        ),
+        "choice_kernel_relative_weight": (
+            float,
+            Field(default=0.1, ge=0.0, le=1.0, description="Bari CK1 relative weight"),
+        ),
+        "choice_kernel_step_size": (
+            float,
+            Field(
+                default=1.0,
+                ge=1.0,
+                le=1.0,
+                frozen=True,
+                description="Fixed one-step Bari choice-kernel update",
+            ),
+        ),
+    }
+    bounds = {
+        "positive_learning_rate": (0.0, 1.0),
+        "negative_learning_rate": (0.0, 1.0),
+        "softmax_inverse_temperature": (0.0, 100.0),
+        "choice_bias": (-5.0, 5.0),
+        "choice_kernel_relative_weight": (0.0, 1.0),
+        "choice_kernel_step_size": (1.0, 1.0),
+    }
+    return create_pydantic_models_dynamic(fields, bounds)
+
+
+def generate_alsio_rl_params() -> Tuple[Type[BaseModel], Type[BaseModel]]:
+    """Return Alsiö et al.'s winning dual-rate RL plus side-stickiness model."""
+    fields = {
+        "positive_learning_rate": (
+            float,
+            Field(default=0.5, ge=0.0, le=1.0, description="Win learning rate"),
+        ),
+        "negative_learning_rate": (
+            float,
+            Field(default=0.5, ge=0.0, le=1.0, description="Loss learning rate"),
+        ),
+        "softmax_inverse_temperature": (
+            float,
+            Field(default=5.0, ge=0.0, description="Inverse temperature"),
+        ),
+        "perseveration_bonus": (
+            float,
+            Field(default=0.0, description="Previous-side log-odds bonus"),
+        ),
+    }
+    bounds = {
+        "positive_learning_rate": (0.0, 1.0),
+        "negative_learning_rate": (0.0, 1.0),
+        "softmax_inverse_temperature": (0.0, 100.0),
+        "perseveration_bonus": (-20.0, 20.0),
+    }
+    return create_pydantic_models_dynamic(fields, bounds)
+
+
+def generate_lopez_double_trace_params() -> Tuple[Type[BaseModel], Type[BaseModel]]:
+    """Return López-Yépez et al.'s six-parameter double-trace RL model."""
+    fields = {
+        "learn_rate": (
+            float,
+            Field(default=0.5, ge=0.0, le=1.0, description="Reward learning rate"),
+        ),
+        "softmax_inverse_temperature": (
+            float,
+            Field(default=5.0, ge=0.0, description="Inverse temperature"),
+        ),
+        "fast_choice_trace_weight": (
+            float,
+            Field(default=-1.0, description="Fast choice-trace weight"),
+        ),
+        "slow_choice_trace_weight": (
+            float,
+            Field(default=1.0, description="Slow choice-trace weight"),
+        ),
+        "fast_choice_trace_step_size": (
+            float,
+            Field(default=0.7, ge=0.0, le=1.0, description="Fast trace learning rate"),
+        ),
+        "slow_choice_trace_step_size": (
+            float,
+            Field(default=0.2, ge=0.0, le=1.0, description="Slow trace learning rate"),
+        ),
+    }
+    bounds = {
+        "learn_rate": (0.0, 1.0),
+        "softmax_inverse_temperature": (0.0, 50.0),
+        "fast_choice_trace_weight": (-25.0, 25.0),
+        "slow_choice_trace_weight": (-25.0, 25.0),
+        "fast_choice_trace_step_size": (0.0, 1.0),
+        "slow_choice_trace_step_size": (0.0, 1.0),
+    }
+    return create_pydantic_models_dynamic(fields, bounds)

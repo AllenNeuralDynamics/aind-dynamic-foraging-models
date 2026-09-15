@@ -12,6 +12,7 @@ from .params.published_bandit_params import (
     generate_beron_rflr_params,
     generate_eckstein_bi_params,
     generate_eckstein_rl_params,
+    generate_feedback_dependent_rl_bias_params,
     generate_feedback_dependent_rl_params,
     generate_grossman_meta_learning_params,
     generate_lebedeva_pr_params,
@@ -62,6 +63,25 @@ class ForagerFeedbackDependentRL(DynamicForagingAgentMLEBase):
 
     def get_latent_variables(self):
         return {"q_value": self.q_value.tolist(), "choice_prob": self.choice_prob.tolist()}
+
+
+class ForagerFeedbackDependentRLBias(ForagerFeedbackDependentRL):
+    """Costa feedback-dependent RL augmented with a fixed choice bias."""
+
+    def _get_params_model(self, _agent_kwargs):
+        return generate_feedback_dependent_rl_bias_params()
+
+    def get_agent_alias(self):
+        return "FeedbackDependentRLBias"
+
+    def act(self, _observation):
+        right_logit = float(self.params.softmax_inverse_temperature) * (
+            float(self.q_value[1, self.trial]) - float(self.q_value[0, self.trial])
+        ) + float(self.params.choice_bias)
+        probability_right = float(expit(right_logit))
+        choice_prob = np.array([1.0 - probability_right, probability_right], dtype=float)
+        choice = self.rng.choice(self.n_actions, p=choice_prob)
+        return choice, choice_prob
 
 
 class ForagerAlsioRL(ForagerFeedbackDependentRL):

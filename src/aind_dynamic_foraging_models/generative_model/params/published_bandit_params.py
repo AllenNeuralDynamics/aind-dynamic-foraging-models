@@ -296,6 +296,35 @@ def generate_feedback_dependent_rl_params() -> Tuple[Type[BaseModel], Type[BaseM
     return create_pydantic_models_dynamic(fields, bounds)
 
 
+def generate_feedback_dependent_rl_bias_params() -> Tuple[Type[BaseModel], Type[BaseModel]]:
+    """Return feedback-dependent RL augmented with a fixed choice bias."""
+    fields = {
+        "positive_learning_rate": (
+            float,
+            Field(default=0.5, ge=0.0, le=1.0, description="Rewarded-trial learning rate"),
+        ),
+        "negative_learning_rate": (
+            float,
+            Field(default=0.5, ge=0.0, le=1.0, description="Unrewarded-trial learning rate"),
+        ),
+        "softmax_inverse_temperature": (
+            float,
+            Field(default=5.0, ge=0.0, description="Inverse temperature"),
+        ),
+        "choice_bias": (
+            float,
+            Field(default=0.0, description="Choice-1 log-odds bias"),
+        ),
+    }
+    bounds = {
+        "positive_learning_rate": (0.0, 1.0),
+        "negative_learning_rate": (0.0, 1.0),
+        "softmax_inverse_temperature": (0.0, 100.0),
+        "choice_bias": (-5.0, 5.0),
+    }
+    return create_pydantic_models_dynamic(fields, bounds)
+
+
 def generate_alsio_rl_params() -> Tuple[Type[BaseModel], Type[BaseModel]]:
     """Return Alsiö et al.'s winning dual-rate RL plus side-stickiness model."""
     fields = {

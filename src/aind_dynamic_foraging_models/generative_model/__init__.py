@@ -10,6 +10,7 @@ from .forager_published_bandits import (  # noqa: F401
     ForagerEcksteinBI,
     ForagerEcksteinRL,
     ForagerFeedbackDependentRL,
+    ForagerFeedbackDependentRLBias,
     ForagerGrossmanMetaLearning,
     ForagerLebedevaPR,
     ForagerLopezDoubleTrace,

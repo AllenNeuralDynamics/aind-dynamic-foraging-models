@@ -11,6 +11,7 @@ from aind_dynamic_foraging_models.generative_model import (
     ForagerEcksteinBI,
     ForagerEcksteinRL,
     ForagerFeedbackDependentRL,
+    ForagerFeedbackDependentRLBias,
     ForagerGrossmanMetaLearning,
     ForagerLebedevaPR,
     ForagerLopezDoubleTrace,
@@ -42,6 +43,21 @@ class TestPublishedBanditModels(unittest.TestCase):
         np.testing.assert_allclose(
             agent.choice_prob[1],
             [0.5, expit(0.5), expit(0.125)],
+        )
+
+    def test_feedback_dependent_rl_choice_bias(self):
+        agent = ForagerFeedbackDependentRLBias(seed=0)
+        agent.set_params(
+            positive_learning_rate=0.5,
+            negative_learning_rate=0.25,
+            softmax_inverse_temperature=2.0,
+            choice_bias=0.4,
+        )
+        agent.perform_closed_loop(np.array([1, 1, 0]), np.array([1.0, 0.0, 1.0]))
+
+        np.testing.assert_allclose(
+            agent.choice_prob[1],
+            [expit(0.4), expit(0.9), expit(0.525)],
         )
 
     def test_alsio_side_stickiness(self):

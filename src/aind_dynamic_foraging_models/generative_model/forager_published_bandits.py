@@ -23,7 +23,7 @@ from .params.published_bandit_params import (
 
 
 class ForagerFeedbackDependentRL(DynamicForagingAgentMLEBase):
-    """Feedback-dependent Rescorla-Wagner model used by Costa and Tang."""
+    """Feedback-dependent Rescorla-Wagner model used by Costa."""
 
     def __init__(self, params: dict = {}, **kwargs):
         self.agent_kwargs = {}

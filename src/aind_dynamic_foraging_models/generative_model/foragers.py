@@ -124,7 +124,7 @@ class ForagerCollection:
             agent_kwargs={},
         ),
         "FeedbackDependent-RL": dict(
-            description="Feedback-dependent RL model used by Costa and Tang.",
+            description="Feedback-dependent RL model used by Costa.",
             agent_class="ForagerFeedbackDependentRL",
             agent_kwargs={},
         ),

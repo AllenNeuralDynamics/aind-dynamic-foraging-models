@@ -11,6 +11,7 @@ from .forager_published_bandits import (  # noqa: F401
     ForagerEcksteinRL,
     ForagerFeedbackDependentRL,
     ForagerFeedbackDependentRLBias,
+    ForagerFeedbackDependentRLBiasCK1,
     ForagerGrossmanMetaLearning,
     ForagerLebedevaPR,
     ForagerLopezDoubleTrace,

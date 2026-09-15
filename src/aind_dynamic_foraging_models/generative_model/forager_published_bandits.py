@@ -13,6 +13,7 @@ from .params.published_bandit_params import (
     generate_eckstein_bi_params,
     generate_eckstein_rl_params,
     generate_feedback_dependent_rl_bias_params,
+    generate_feedback_dependent_rl_bias_ck1_params,
     generate_feedback_dependent_rl_params,
     generate_grossman_meta_learning_params,
     generate_lebedeva_pr_params,
@@ -82,6 +83,51 @@ class ForagerFeedbackDependentRLBias(ForagerFeedbackDependentRL):
         choice_prob = np.array([1.0 - probability_right, probability_right], dtype=float)
         choice = self.rng.choice(self.n_actions, p=choice_prob)
         return choice, choice_prob
+
+
+class ForagerFeedbackDependentRLBiasCK1(ForagerFeedbackDependentRLBias):
+    """Costa dual-rate RL plus bias and Bari's one-step choice kernel."""
+
+    def _get_params_model(self, _agent_kwargs):
+        return generate_feedback_dependent_rl_bias_ck1_params()
+
+    def get_agent_alias(self):
+        return "FeedbackDependentRLBiasCK1"
+
+    def _reset(self):
+        super()._reset()
+        self.choice_kernel = np.zeros((self.n_actions, self.n_trials + 1), dtype=float)
+
+    def act(self, _observation):
+        value_difference = float(self.q_value[1, self.trial]) - float(
+            self.q_value[0, self.trial]
+        )
+        kernel_difference = float(self.choice_kernel[1, self.trial]) - float(
+            self.choice_kernel[0, self.trial]
+        )
+        right_logit = float(self.params.softmax_inverse_temperature) * (
+            value_difference
+            + float(self.params.choice_kernel_relative_weight) * kernel_difference
+        ) + float(self.params.choice_bias)
+        probability_right = float(expit(right_logit))
+        choice_prob = np.array([1.0 - probability_right, probability_right], dtype=float)
+        choice = self.rng.choice(self.n_actions, p=choice_prob)
+        return choice, choice_prob
+
+    def learn(self, observation, choice, reward, next_observation, done):
+        super().learn(observation, choice, reward, next_observation, done)
+        self.choice_kernel[:, self.trial] = learn_choice_kernel(
+            choice=choice,
+            choice_kernel_tminus1=self.choice_kernel[:, self.trial - 1],
+            choice_kernel_step_size=float(self.params.choice_kernel_step_size),
+        )
+
+    def get_latent_variables(self):
+        return {
+            "q_value": self.q_value.tolist(),
+            "choice_kernel": self.choice_kernel.tolist(),
+            "choice_prob": self.choice_prob.tolist(),
+        }
 
 
 class ForagerAlsioRL(ForagerFeedbackDependentRL):

@@ -20,6 +20,11 @@ class ForagerCollection:
         "ForagerRLCK",
         "ForagerZidHistoryKernel",
         "ForagerGrossmanMetaLearning",
+        "ForagerLebedevaPR",
+        "ForagerBeronRFLR",
+        "ForagerMillerRHG",
+        "ForagerEcksteinRL",
+        "ForagerEcksteinBI",
     ]
 
     FORAGER_PRESETS = {
@@ -88,6 +93,31 @@ class ForagerCollection:
         "Grossman-MetaLearning": dict(
             description="Uncertainty-dependent meta-learning model from Grossman et al.",
             agent_class="ForagerGrossmanMetaLearning",
+            agent_kwargs={},
+        ),
+        "Lebedeva-PR": dict(
+            description="Perseveration/reward-learning model from Lebedeva et al.",
+            agent_class="ForagerLebedevaPR",
+            agent_kwargs={},
+        ),
+        "Beron-RFLR": dict(
+            description="Recursively formulated logistic regression from Beron et al.",
+            agent_class="ForagerBeronRFLR",
+            agent_kwargs={},
+        ),
+        "Miller-RHG": dict(
+            description="Reward/habit/gambler-fallacy model from Miller et al.",
+            agent_class="ForagerMillerRHG",
+            agent_kwargs={},
+        ),
+        "Eckstein-RL": dict(
+            description="Winning asymmetric counterfactual RL model from Eckstein et al.",
+            agent_class="ForagerEcksteinRL",
+            agent_kwargs={},
+        ),
+        "Eckstein-BI": dict(
+            description="Winning hidden-state Bayesian-inference model from Eckstein et al.",
+            agent_class="ForagerEcksteinBI",
             agent_kwargs={},
         ),
     }

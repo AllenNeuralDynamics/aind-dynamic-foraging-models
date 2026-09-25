@@ -29,6 +29,7 @@ class TestPublishedBanditModels(unittest.TestCase):
     """Check each implementation against a hand-computed short trajectory."""
 
     def test_feedback_dependent_rl_equations(self):
+        """Match Costa's dual-rate value updates on a short trajectory."""
         agent = ForagerFeedbackDependentRL(seed=0)
         agent.set_params(
             positive_learning_rate=0.5,
@@ -47,6 +48,7 @@ class TestPublishedBanditModels(unittest.TestCase):
         )
 
     def test_feedback_dependent_rl_choice_bias(self):
+        """Verify that a fixed choice bias shifts every decision logit."""
         agent = ForagerFeedbackDependentRLBias(seed=0)
         agent.set_params(
             positive_learning_rate=0.5,
@@ -62,6 +64,7 @@ class TestPublishedBanditModels(unittest.TestCase):
         )
 
     def test_feedback_dependent_rl_choice_bias_ck1(self):
+        """Verify the sensitivity model's one-step choice-kernel contribution."""
         agent = ForagerFeedbackDependentRLBiasCK1(seed=0)
         agent.set_params(
             positive_learning_rate=0.5,
@@ -82,6 +85,7 @@ class TestPublishedBanditModels(unittest.TestCase):
         )
 
     def test_alsio_side_stickiness(self):
+        """Match Alsiö's spatial stickiness term after the first choice."""
         agent = ForagerAlsioRL(seed=0)
         agent.set_params(
             positive_learning_rate=0.5,
@@ -97,6 +101,7 @@ class TestPublishedBanditModels(unittest.TestCase):
         )
 
     def test_lopez_double_trace_equations(self):
+        """Match López-Yépez reward values and fast and slow traces."""
         agent = ForagerLopezDoubleTrace(seed=0)
         agent.set_params(
             learn_rate=0.5,

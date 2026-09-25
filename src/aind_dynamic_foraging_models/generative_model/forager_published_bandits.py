@@ -28,6 +28,7 @@ class ForagerFeedbackDependentRL(DynamicForagingAgentMLEBase):
     """Feedback-dependent Rescorla-Wagner model used by Costa."""
 
     def __init__(self, params: dict = {}, **kwargs):
+        """Initialize the feedback-dependent learner."""
         self.agent_kwargs = {}
         super().__init__(agent_kwargs=self.agent_kwargs, params=params, **kwargs)
 
@@ -42,6 +43,7 @@ class ForagerFeedbackDependentRL(DynamicForagingAgentMLEBase):
         self.q_value = np.full((self.n_actions, self.n_trials + 1), 0.5, dtype=float)
 
     def act(self, _observation):
+        """Sample an action from the current softmax value difference."""
         right_logit = float(self.params.softmax_inverse_temperature) * (
             float(self.q_value[1, self.trial]) - float(self.q_value[0, self.trial])
         )
@@ -51,6 +53,7 @@ class ForagerFeedbackDependentRL(DynamicForagingAgentMLEBase):
         return choice, choice_prob
 
     def learn(self, _observation, choice, reward, _next_observation, _done):
+        """Update the chosen value with the outcome-specific learning rate."""
         previous_q = self.q_value[:, self.trial - 1]
         learning_rate = (
             float(self.params.positive_learning_rate)
@@ -63,6 +66,7 @@ class ForagerFeedbackDependentRL(DynamicForagingAgentMLEBase):
         )
 
     def get_latent_variables(self):
+        """Return learned values and choice probabilities."""
         return {"q_value": self.q_value.tolist(), "choice_prob": self.choice_prob.tolist()}
 
 
@@ -76,6 +80,7 @@ class ForagerFeedbackDependentRLBias(ForagerFeedbackDependentRL):
         return "FeedbackDependentRLBias"
 
     def act(self, _observation):
+        """Sample an action after adding the fixed right-choice bias."""
         right_logit = float(self.params.softmax_inverse_temperature) * (
             float(self.q_value[1, self.trial]) - float(self.q_value[0, self.trial])
         ) + float(self.params.choice_bias)
@@ -99,6 +104,7 @@ class ForagerFeedbackDependentRLBiasCK1(ForagerFeedbackDependentRLBias):
         self.choice_kernel = np.zeros((self.n_actions, self.n_trials + 1), dtype=float)
 
     def act(self, _observation):
+        """Sample an action from values, choice history, and fixed bias."""
         value_difference = float(self.q_value[1, self.trial]) - float(
             self.q_value[0, self.trial]
         )
@@ -115,6 +121,7 @@ class ForagerFeedbackDependentRLBiasCK1(ForagerFeedbackDependentRLBias):
         return choice, choice_prob
 
     def learn(self, observation, choice, reward, next_observation, done):
+        """Update action values and the one-step choice kernel."""
         super().learn(observation, choice, reward, next_observation, done)
         self.choice_kernel[:, self.trial] = learn_choice_kernel(
             choice=choice,
@@ -123,6 +130,7 @@ class ForagerFeedbackDependentRLBiasCK1(ForagerFeedbackDependentRLBias):
         )
 
     def get_latent_variables(self):
+        """Return values, choice kernel, and choice probabilities."""
         return {
             "q_value": self.q_value.tolist(),
             "choice_kernel": self.choice_kernel.tolist(),
@@ -140,6 +148,7 @@ class ForagerAlsioRL(ForagerFeedbackDependentRL):
         return "AlsioDualRateStickyRL"
 
     def act(self, _observation):
+        """Sample an action with a bonus for repeating the previous side."""
         right_logit = float(self.params.softmax_inverse_temperature) * (
             float(self.q_value[1, self.trial]) - float(self.q_value[0, self.trial])
         )
@@ -157,6 +166,7 @@ class ForagerLopezDoubleTrace(DynamicForagingAgentMLEBase):
     """López-Yépez et al. reward value plus fast/slow choice traces."""
 
     def __init__(self, params: dict = {}, **kwargs):
+        """Initialize the reward-value and dual-choice-trace learner."""
         self.agent_kwargs = {}
         super().__init__(agent_kwargs=self.agent_kwargs, params=params, **kwargs)
 
@@ -173,6 +183,7 @@ class ForagerLopezDoubleTrace(DynamicForagingAgentMLEBase):
         self.slow_choice_trace = np.zeros((self.n_actions, self.n_trials + 1), dtype=float)
 
     def act(self, _observation):
+        """Sample an action from reward values and fast and slow traces."""
         values = (
             self.q_value[:, self.trial]
             + float(self.params.fast_choice_trace_weight)
@@ -185,6 +196,7 @@ class ForagerLopezDoubleTrace(DynamicForagingAgentMLEBase):
         return choice, choice_prob
 
     def learn(self, _observation, choice, reward, _next_observation, _done):
+        """Update reward values and both exponential choice traces."""
         previous_q = self.q_value[:, self.trial - 1]
         indicator = np.zeros(self.n_actions, dtype=float)
         indicator[int(choice)] = 1.0
@@ -202,6 +214,7 @@ class ForagerLopezDoubleTrace(DynamicForagingAgentMLEBase):
         )
 
     def get_latent_variables(self):
+        """Return reward values, both traces, and choice probabilities."""
         return {
             "q_value": self.q_value.tolist(),
             "fast_choice_trace": self.fast_choice_trace.tolist(),

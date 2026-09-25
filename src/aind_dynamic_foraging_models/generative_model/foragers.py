@@ -25,6 +25,9 @@ class ForagerCollection:
         "ForagerMillerRHG",
         "ForagerEcksteinRL",
         "ForagerEcksteinBI",
+        "ForagerFeedbackDependentRL",
+        "ForagerAlsioRL",
+        "ForagerLopezDoubleTrace",
     ]
 
     FORAGER_PRESETS = {
@@ -118,6 +121,21 @@ class ForagerCollection:
         "Eckstein-BI": dict(
             description="Winning hidden-state Bayesian-inference model from Eckstein et al.",
             agent_class="ForagerEcksteinBI",
+            agent_kwargs={},
+        ),
+        "FeedbackDependent-RL": dict(
+            description="Feedback-dependent RL model used by Costa.",
+            agent_class="ForagerFeedbackDependentRL",
+            agent_kwargs={},
+        ),
+        "Alsio-DualRateSticky-RL": dict(
+            description="Dual-rate RL with side stickiness from Alsiö et al.",
+            agent_class="ForagerAlsioRL",
+            agent_kwargs={},
+        ),
+        "Lopez-DoubleTrace": dict(
+            description="Fast/slow choice-trace RL model from López-Yépez et al.",
+            agent_class="ForagerLopezDoubleTrace",
             agent_kwargs={},
         ),
     }

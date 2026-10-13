@@ -17,6 +17,17 @@ class ForagerCollection:
         "ForagerLossCounting",
         "ForagerCompareThreshold",
         "ForagerActorCritic",
+        "ForagerRLCK",
+        "ForagerZidHistoryKernel",
+        "ForagerGrossmanMetaLearning",
+        "ForagerLebedevaPR",
+        "ForagerBeronRFLR",
+        "ForagerMillerRHG",
+        "ForagerEcksteinRL",
+        "ForagerEcksteinBI",
+        "ForagerFeedbackDependentRL",
+        "ForagerAlsioRL",
+        "ForagerLopezDoubleTrace",
     ]
 
     FORAGER_PRESETS = {
@@ -71,6 +82,61 @@ class ForagerCollection:
             agent_kwargs=dict(
                 choice_kernel="none",
             ),
+        ),
+        "Chen-RLCK": dict(
+            description="Four-parameter RLCK model used by Chen et al.",
+            agent_class="ForagerRLCK",
+            agent_kwargs={},
+        ),
+        "Zid-HistoryKernel2-ForagingRL": dict(
+            description="Best-fitting history-kernel-2 foraging-RL model from Zid et al.",
+            agent_class="ForagerZidHistoryKernel",
+            agent_kwargs={},
+        ),
+        "Grossman-MetaLearning": dict(
+            description="Uncertainty-dependent meta-learning model from Grossman et al.",
+            agent_class="ForagerGrossmanMetaLearning",
+            agent_kwargs={},
+        ),
+        "Lebedeva-PR": dict(
+            description="Perseveration/reward-learning model from Lebedeva et al.",
+            agent_class="ForagerLebedevaPR",
+            agent_kwargs={},
+        ),
+        "Beron-RFLR": dict(
+            description="Recursively formulated logistic regression from Beron et al.",
+            agent_class="ForagerBeronRFLR",
+            agent_kwargs={},
+        ),
+        "Miller-RHG": dict(
+            description="Reward/habit/gambler-fallacy model from Miller et al.",
+            agent_class="ForagerMillerRHG",
+            agent_kwargs={},
+        ),
+        "Eckstein-RL": dict(
+            description="Winning asymmetric counterfactual RL model from Eckstein et al.",
+            agent_class="ForagerEcksteinRL",
+            agent_kwargs={},
+        ),
+        "Eckstein-BI": dict(
+            description="Winning hidden-state Bayesian-inference model from Eckstein et al.",
+            agent_class="ForagerEcksteinBI",
+            agent_kwargs={},
+        ),
+        "FeedbackDependent-RL": dict(
+            description="Feedback-dependent RL model used by Costa.",
+            agent_class="ForagerFeedbackDependentRL",
+            agent_kwargs={},
+        ),
+        "Alsio-DualRateSticky-RL": dict(
+            description="Dual-rate RL with side stickiness from Alsiö et al.",
+            agent_class="ForagerAlsioRL",
+            agent_kwargs={},
+        ),
+        "Lopez-DoubleTrace": dict(
+            description="Fast/slow choice-trace RL model from López-Yépez et al.",
+            agent_class="ForagerLopezDoubleTrace",
+            agent_kwargs={},
         ),
     }
 

@@ -136,6 +136,60 @@ class TestFigures(unittest.TestCase):
         self.assertGreaterEqual(lo, -0.05)
         self.assertLessEqual(hi, 1.05)
 
+    # The fixed-axis contract. These literals are written out on purpose rather than read
+    # back from ``P.PARAM_XLIM``: asserting a table against itself would pass whatever the
+    # table said, and the point is that an edit to the convention fails here and has to be
+    # made deliberately. The first test also fails on the autoscaled behaviour this
+    # replaced, which the looser bound above does not.
+    EXPECTED_XLIM = (
+        (0.0, 1.0),      # learn_rate_rew
+        (0.0, 1.0),      # learn_rate_unrew
+        (0.0, 1.0),      # forget_rate_unchosen
+        (0.0, None),     # softmax_inverse_temperature: upper bound is beta_max
+        (-0.5, 0.5),     # bias_l
+    )
+
+    def _expected(self, index, beta_max):
+        lo, hi = self.EXPECTED_XLIM[index]
+        return (lo, beta_max if hi is None else hi)
+
+    def test_population_recovery_pins_every_panel_to_its_limits(self):
+        """All five recovery panels carry their parameter's fixed range, not autoscale."""
+        fig = P.plot_population_recovery(self.population, self.subjects,
+                                         truth=np.zeros(N_PARAMS))
+        for index, ax in enumerate(fig.axes):
+            with self.subTest(param_index=index):
+                np.testing.assert_allclose(ax.get_xlim(), self._expected(index, 10.0))
+
+    def test_population_recovery_inverse_temperature_follows_beta_max(self):
+        """A fit run with a different ceiling must not be drawn under the default one."""
+        fig = P.plot_population_recovery(self.population, self.subjects, beta_max=6.0)
+        np.testing.assert_allclose(fig.axes[3].get_xlim(), (0.0, 6.0))
+        # The other four are independent of beta_max.
+        for index in (0, 1, 2, 4):
+            with self.subTest(param_index=index):
+                np.testing.assert_allclose(fig.axes[index].get_xlim(),
+                                           self._expected(index, 6.0))
+
+    def test_shrinkage_pins_every_parameter_to_its_limits(self):
+        """Shrinkage is read against a fixed span, for each of the five parameters."""
+        for index in range(N_PARAMS):
+            with self.subTest(param_index=index):
+                fig = P.plot_shrinkage(self.subjects, self.population.mean(axis=0),
+                                       param_index=index)
+                np.testing.assert_allclose(fig.axes[0].get_xlim(),
+                                           self._expected(index, 10.0))
+
+    def test_shrinkage_inverse_temperature_follows_beta_max(self):
+        """The shrinkage panel resolves its upper bound from beta_max as well."""
+        fig = P.plot_shrinkage(self.subjects, self.population.mean(axis=0),
+                               param_index=3, beta_max=6.0)
+        np.testing.assert_allclose(fig.axes[0].get_xlim(), (0.0, 6.0))
+
+    def test_unknown_parameter_keeps_autoscale(self):
+        """A name with no convention returns None, leaving callers free to autoscale."""
+        self.assertIsNone(P.param_xlim("not_a_parameter"))
+
 
 if __name__ == "__main__":
     unittest.main()

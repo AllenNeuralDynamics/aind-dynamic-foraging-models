@@ -62,9 +62,11 @@ moves while Stan's accumulates:
 |---|---|---|
 | 1 subject, 40 sessions x 650 trials, 16 chains | **1084 s measured** | 3.7x slower, **measured** |
 | 30 subjects as 30 separate per-subject fits | ~9 h, *projected* as 30 x the row above | not the mode this package runs in |
-| 30 subjects, one joint three-level fit | **not possible with the reference model** -- it is two-level per subject, so this would need a Stan model that does not exist and has never been written or run | 79 min **measured** (synthetic, 25 sessions x 500 trials); 3 h 32 m on real data with sessions up to 1238 trials, that figure including the k=0 scoring pass |
+| 30 subjects, one joint three-level fit | **not possible with the reference model** -- it is two-level per subject, so this needed a new Stan model; one now exists (`reference_stan/hb_three_level.stan`) and its D~29 measurement is under "Update" below. As first written this cell said no such model existed | 79 min **measured** (synthetic, 25 sessions x 500 trials); 3 h 32 m on real data with sessions up to 1238 trials, that figure including the k=0 scoring pass |
 | 614 subjects as separate per-subject fits, 128 cores | ~23 h, *projected* from measured core-seconds | ~1 subject's cost, *projected* from flat lane scaling |
 | 153 held-out subjects, one conditioning rung | not applicable | ~20 s **measured**, from ~4 h sequential |
+
+**Update (2026-10-14): the cohort-scale row is now partly measured.** `reference_stan/hb_three_level.stan` is a Stan port of the joint three-level model and `fit_three_level_stan.py` fits it. On the real D~29 cohort (4 chains, 2000 warmup, 2000 draws, seed 0), Stan on 8 CPU cores took 14.7 h and NumPyro on one H200 took 6.4 h (Stan 2.3x slower in wall time, as run). On the five population means, Stan gave about 7.8x the effective sample size per draw and 3.4x the ESS per second; Stan had 23 divergences against NumPyro's 5. Both fail the divergence gate. No Stan fit at D~99 completed under any configuration tried, and NumPyro's D~99 fit finished but did not mix, so there is no head-to-head at the large end yet. The thread count of the Stan D~29 fit was not recorded. Sources and caveats: study 08 report r4 and the `stan-arm` launch records in the dispatcher repo. The "inferred, not measured" label above still applies to every cohort size other than D~29.
 
 **Read the middle row carefully.** The comparison there is not Stan-slower-than-NumPyro; it
 is that Stan cannot express the estimator at all without a new model. Extending it to three

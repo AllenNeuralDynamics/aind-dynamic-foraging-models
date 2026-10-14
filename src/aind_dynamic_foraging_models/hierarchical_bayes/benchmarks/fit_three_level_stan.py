@@ -21,11 +21,22 @@ benchmarks in this directory are comparable and there is one Stan toolchain to k
 pystan builds the model through httpstan's own bundled toolchain, which is why nothing here
 depends on a CmdStan installation.
 
-One consequence worth knowing before reading the timings: httpstan does not define
-``STAN_THREADS``, so the ``reduce_sum`` in the model runs **serially**. That is valid Stan --
-``reduce_sum`` degrades to a plain sum when threading is off -- and it means the Stan wall
-times below use one core per chain. Chains still run in parallel. If a threaded number is
-ever wanted, that is a CmdStan build with ``STAN_THREADS=true``, not a model change.
+Threading, corrected. httpstan **does** define ``STAN_THREADS`` (``httpstan/models.py``), so the
+model's ``reduce_sum`` can thread across subjects within a chain. What sets the thread count is
+the ``STAN_NUM_THREADS`` environment variable, read once at start-up; when it is unset Stan
+documents one thread. An earlier version of this docstring said threading was impossible under
+pystan and that a threaded number needs a CmdStan build. That was wrong. For the first D~29
+fit the effective thread count was not recorded, so its wall time should be read as "the
+8-CPU allocation it had", not as a one-thread floor. Chains run as separate processes either
+way. In the one clean test (D~99, exclusive node, 16 threads per chain) threading showed no
+measurable gain.
+
+A ``reduce_sum`` variant that slices the parameter arrays instead of a dummy index array was
+tried and reverted on this branch (8967512, reverted in b1684af). The revert's message quotes
+a measurement that was wrong: two Slurm array tasks were mislabelled, so the D~29 and D~99
+runs were swapped. The effect of that variant is unresolved, and it may be faster at D~99. It
+was left reverted rather than restored on a result that is not established; a clean
+one-variable rerun is what would settle it.
 
 Usage
 -----

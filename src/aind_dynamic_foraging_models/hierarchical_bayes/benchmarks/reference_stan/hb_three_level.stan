@@ -5,6 +5,14 @@
 // if both frameworks fit the SAME posterior -- so this file follows the NumPyro model's
 // structure and parameterisation, not `stan_qLearning_5params.stan`'s.
 //
+// ONE KNOWN DEVIATION from that goal: the bounded session parameters use `Phi_approx`, Stan's
+// logistic approximation to the normal CDF (absolute error about 2e-4), where NumPyro's
+// `hattori2019_session_params` uses the exact CDF. The two posteriors therefore differ slightly
+// and the transformed rates are only approximately uniform under a standard-normal latent.
+// `Phi_approx` is what the reported D~29 Stan fit ran with, so it was kept to leave the code
+// matching the recorded run; switching to `Phi` is a one-word change per line but needs a refit
+// (about 15 h at D~29) before the numbers can be called like-for-like.
+//
 // Differences from the reference model in this directory, all deliberate:
 //
 //   * a subject level between the population and the sessions, so session parameters are
@@ -131,9 +139,11 @@ parameters {
 }
 
 transformed parameters {
-  // Bounded session parameters. Phi() with a standard-normal argument IS the uniform prior
-  // the published model describes as "non-informative" -- the transform carries the prior,
-  // so there is no separate uniform statement anywhere in this file.
+  // Bounded session parameters. The exact Phi() with a standard-normal argument IS the uniform
+  // prior the published model describes as "non-informative" -- the transform carries the prior,
+  // so there is no separate uniform statement anywhere in this file. Phi_approx() is used below
+  // instead (see the deviation note in the header), so the prior is uniform only to within the
+  // approximation error.
   array[S, M] real<lower=0, upper=1> learn_rate_rew;
   array[S, M] real<lower=0, upper=1> learn_rate_unrew;
   array[S, M] real<lower=0, upper=1> forget_rate;

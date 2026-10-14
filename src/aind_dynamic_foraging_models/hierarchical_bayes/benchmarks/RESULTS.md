@@ -48,12 +48,13 @@ configuration this package should never run in production, so it needs its compl
 (see "Batching" below). Adding subjects to a fit is therefore close to free here. The same
 holds for held-out scoring: 16x the subjects for 1.64x the time.
 
-**Inferred, not measured.** Stan has no equivalent path for this likelihood. Its per-gradient
-work is a sequential loop over every trial of every session, so cohort cost grows with total
-trials; `reduce_sum` can split that across threads but the work itself does not shrink, and
-Stan's GPU support does not cover a user-written recurrent scan. We have not benchmarked Stan
-at several cohort sizes, so treat the linearity as a property of the implementation rather
-than a measurement.
+**Inferred, not measured, except at D~29.** Stan has no lane-batched path for this likelihood.
+Its per-gradient work is a sequential loop over every trial of every session, so cohort cost
+grows with total trials; `reduce_sum` can split that across threads but the work itself does
+not shrink, and Stan's GPU support does not cover a user-written recurrent scan. A joint
+three-level Stan model now exists and has been timed at one cohort size (D~29, see the Update
+below); no other cohort size has been benchmarked, so treat the linearity at larger sizes as a
+property of the implementation rather than a measurement.
 
 **The consequence.** Per subject, Stan is 3.7x faster. Across a cohort, NumPyro's cost barely
 moves while Stan's accumulates:
@@ -66,14 +67,17 @@ moves while Stan's accumulates:
 | 614 subjects as separate per-subject fits, 128 cores | ~23 h, *projected* from measured core-seconds | ~1 subject's cost, *projected* from flat lane scaling |
 | 153 held-out subjects, one conditioning rung | not applicable | ~20 s **measured**, from ~4 h sequential |
 
-**Update (2026-10-14): the cohort-scale row is now partly measured.** `reference_stan/hb_three_level.stan` is a Stan port of the joint three-level model and `fit_three_level_stan.py` fits it. On the real D~29 cohort (4 chains, 2000 warmup, 2000 draws, seed 0), Stan on 8 CPU cores took 14.7 h and NumPyro on one H200 took 6.4 h (Stan 2.3x slower in wall time, as run). On the five population means, Stan gave about 7.8x the effective sample size per draw and 3.4x the ESS per second; Stan had 23 divergences against NumPyro's 5. Both fail the divergence gate. No Stan fit at D~99 completed under any configuration tried, and NumPyro's D~99 fit finished but did not mix, so there is no head-to-head at the large end yet. The thread count of the Stan D~29 fit was not recorded. Sources and caveats: study 08 report r4 and the `stan-arm` launch records in the dispatcher repo. The "inferred, not measured" label above still applies to every cohort size other than D~29.
+**Update (2026-10-14): the cohort-scale row is now partly measured.** `reference_stan/hb_three_level.stan` is a Stan port of the joint three-level model and `fit_three_level_stan.py` fits it. On the real D~29 cohort (4 chains, 2000 warmup, 2000 draws, seed 0), Stan on 8 CPU cores took 14.7 h and NumPyro on one H200 took 6.4 h (Stan 2.3x slower in wall time, as run). On the five population means, Stan gave about 7.8x the effective sample size per draw and 3.4x the ESS per second; Stan had 23 divergences against NumPyro's 5. Both fail the divergence gate. No Stan fit at D~99 completed under any configuration tried, and NumPyro's D~99 fit finished but did not mix, so there is no head-to-head at the large end yet. The thread count of the Stan D~29 fit was not recorded. Caveats: the Stan program uses `Phi_approx` where NumPyro uses the exact normal CDF (see the header of the `.stan` file), so the two posteriors are nearly, not exactly, identical; the thread count of the Stan fit was not recorded; and the NumPyro wall time is the trainer's `hb/fit_seconds` while the Stan time is its sampling time without build. Sources: study 08 report r4 and the `stan-arm` launch records in the dispatcher repo. The "inferred, not measured" label above still applies to every cohort size other than D~29.
 
-**Read the middle row carefully.** The comparison there is not Stan-slower-than-NumPyro; it
-is that Stan cannot express the estimator at all without a new model. Extending it to three
-levels is possible in principle -- it is an ordinary hierarchical model -- but would also
-need `reduce_sum` to use more than 16 cores, and would carry a trajectory-length penalty from
-the higher dimension. None of that has been attempted, so no Stan joint-fit number exists
-anywhere in this document.
+**Read the middle row carefully.** As first written, that row compared NumPyro with the
+*two-level reference model*, which cannot express the joint estimator, so the row was a
+statement about the reference and not a Stan-versus-NumPyro timing. Extending it to three
+levels was always possible in principle -- it is an ordinary hierarchical model -- and has
+since been done (`reference_stan/hb_three_level.stan`). The joint-fit Stan number is therefore
+no longer absent, but it exists at one size only: D~29, in the Update above. What remains
+unmeasured is the large-cohort scaling the argument rests on: no Stan fit at D~99 or above
+completed under any configuration tried, and NumPyro's D~99 fit finished without mixing, so
+there is no head-to-head there.
 
 So the framework choice is not "NumPyro is faster" -- it is not, per subject. It is that
 **the cohort is the unit of work, and only one of the two can treat it that way.** A build

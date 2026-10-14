@@ -21,6 +21,15 @@ benchmarks in this directory are comparable and there is one Stan toolchain to k
 pystan builds the model through httpstan's own bundled toolchain, which is why nothing here
 depends on a CmdStan installation.
 
+Known deviation: the Stan program uses ``Phi_approx`` for the bounded session parameters and
+NumPyro uses the exact normal CDF (see the header of the ``.stan`` file). The agreement check
+below is therefore agreement between two nearly, not exactly, identical posteriors.
+
+Timing basis: Stan's ``sample_seconds`` excludes compilation. NumPyro's first call includes
+tracing and JIT, so by default it is run twice on the same key and the second run is timed;
+the first is reported as ``cold_seconds``. ``--no-warm-numpyro`` skips the second run (use it
+for a cohort too large to fit twice) and the report then says the NumPyro time is cold.
+
 Threading, corrected. httpstan **does** define ``STAN_THREADS`` (``httpstan/models.py``), so the
 model's ``reduce_sum`` can thread across subjects within a chain. What sets the thread count is
 the ``STAN_NUM_THREADS`` environment variable, read once at start-up; when it is unset Stan
@@ -198,8 +207,12 @@ def run_stan(arrays, num_chains, num_samples, num_warmup, seed=0, beta_max=10.0)
     }
 
 
-def run_numpyro(arrays, num_chains, num_samples, num_warmup, seed=0, beta_max=10.0):
-    """Fit the same data with the NumPyro three-level model."""
+def run_numpyro(arrays, num_chains, num_samples, num_warmup, seed=0, beta_max=10.0, warm=True):
+    """Fit the same data with the NumPyro three-level model.
+
+    With ``warm`` the fit is run twice on the same key and the second run is timed, so the time
+    excludes tracing and JIT, as Stan's excludes compilation.
+    """
     import jax
     import numpyro
     from numpyro.infer import MCMC, NUTS
@@ -223,19 +236,25 @@ def run_numpyro(arrays, num_chains, num_samples, num_warmup, seed=0, beta_max=10
         chain_method="vectorized",
         progress_bar=False,
     )
-    started = time.time()
-    mcmc.run(
-        jax.random.PRNGKey(seed),
-        arrays["choice"], arrays["reward"],
-        valid_mask=valid, session_mask=session_mask, beta_max=beta_max,
-        extra_fields=("num_steps", "energy", "accept_prob", "diverging"),
-    )
-    mcmc.get_samples()["population_mean"].block_until_ready()
-    sample_seconds = time.time() - started
+    def _run():
+        started = time.time()
+        mcmc.run(
+            jax.random.PRNGKey(seed),
+            arrays["choice"], arrays["reward"],
+            valid_mask=valid, session_mask=session_mask, beta_max=beta_max,
+            extra_fields=("num_steps", "energy", "accept_prob", "diverging"),
+        )
+        mcmc.get_samples()["population_mean"].block_until_ready()
+        return time.time() - started
+
+    cold_seconds = _run()
+    sample_seconds = _run() if warm else cold_seconds
 
     return {
         "mcmc": mcmc,
         "sample_seconds": sample_seconds,
+        "cold_seconds": cold_seconds,
+        "timing_basis": "warm (second run, excludes JIT)" if warm else "cold (includes tracing and JIT)",
         "device": str(jax.devices()[0]),
         "num_chains": num_chains,
         "num_samples": num_samples,
@@ -280,6 +299,8 @@ def main():
     parser.add_argument("--n-sessions", type=int, default=8)
     parser.add_argument("--n-trials", type=int, default=300)
     parser.add_argument("--num-chains", type=int, default=4)
+    parser.add_argument("--no-warm-numpyro", action="store_true",
+                        help="time NumPyro's first call (includes JIT) instead of a second run")
     parser.add_argument("--num-warmup", type=int, default=1000)
     parser.add_argument("--num-samples", type=int, default=1000)
     parser.add_argument("--beta-max", type=float, default=10.0)
@@ -339,7 +360,7 @@ def main():
 
     if not args.skip_numpyro:
         out = run_numpyro(arrays, args.num_chains, args.num_samples, args.num_warmup,
-                          seed=args.seed, beta_max=args.beta_max)
+                          seed=args.seed, beta_max=args.beta_max, warm=not args.no_warm_numpyro)
         samples = out["mcmc"].get_samples(group_by_chain=True)
         draws = {}
         for i, name in enumerate(PARAM_NAMES):
@@ -350,7 +371,9 @@ def main():
         numpyro_draws_by_param = draws
         report["numpyro"] = summarise("numpyro", draws, out["sample_seconds"], div, n_draws)
         report["numpyro"]["device"] = out["device"]
-        print(f"numpyro: {out['sample_seconds']:.1f}s on {out['device']}, "
+        report["numpyro"]["timing_basis"] = out["timing_basis"]
+        report["numpyro"]["cold_seconds"] = out["cold_seconds"]
+        print(f"numpyro: {out['sample_seconds']:.1f}s [{out['timing_basis']}] on {out['device']}, "
               f"{div} divergences, "
               f"min ESS/draw {report['numpyro']['min_ess_per_draw']:.3f}")
 

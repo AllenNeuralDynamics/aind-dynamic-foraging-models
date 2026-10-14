@@ -264,6 +264,21 @@ def run_numpyro(arrays, num_chains, num_samples, num_warmup, seed=0, beta_max=10
     }
 
 
+def chains_first(flat, num_chains, num_samples):
+    """Reshape PyStan's flat draw axis to ``(..., chain, draw)``.
+
+    ``fit[name]`` has trailing axis ``num_samples * num_chains`` in DRAW-MAJOR order with the
+    chain index innermost (PyStan 3 ``Fit.__getitem__`` reshapes a ``(param, draw, chain)``
+    array), so element ``k`` is draw ``k // num_chains`` of chain ``k % num_chains``. A plain
+    ``reshape(num_chains, num_samples)`` therefore puts consecutive draws of all chains into
+    each "chain", and R-hat and ESS computed from that are not valid.
+    """
+    flat = np.asarray(flat)
+    if flat.shape[-1] != num_chains * num_samples:
+        raise ValueError(f"last axis is {flat.shape[-1]}, expected {num_chains} x {num_samples}")
+    return np.swapaxes(flat.reshape(*flat.shape[:-1], num_samples, num_chains), -1, -2)
+
+
 def summarise(name, draws_by_param, seconds, divergences, n_draws):
     """Common efficiency table for either framework: ESS/draw and ESS/s are the comparison."""
     import arviz as az
@@ -339,14 +354,13 @@ def main():
         out = run_stan(arrays, args.num_chains, args.num_samples, args.num_warmup,
                        seed=args.seed, beta_max=args.beta_max)
         fit = out["fit"]
-        # pystan returns (*param_dims, chains * samples) with draws ordered chain-major, so
-        # reshaping to (chain, draw) is what lets r_hat see between-chain variation at all --
-        # ESS and r_hat computed on the flattened vector would silently treat four chains as
-        # one long one.
+        # pystan returns (*param_dims, samples * chains) with the CHAIN index innermost, not
+        # chain-major; chains_first() undoes that so r_hat sees real chains. An earlier version
+        # reshaped chain-major, which mixed the chains and overstated ESS (about 6x at D~29).
         population_mean = np.asarray(fit["population_mean"])
         draws = {
             f"population_mean[{name}]":
-                population_mean[i].reshape(args.num_chains, args.num_samples)
+                chains_first(population_mean[i], args.num_chains, args.num_samples)
             for i, name in enumerate(PARAM_NAMES)
         }
         try:

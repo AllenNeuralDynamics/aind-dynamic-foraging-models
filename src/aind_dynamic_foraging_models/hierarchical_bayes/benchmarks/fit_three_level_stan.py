@@ -236,6 +236,7 @@ def run_numpyro(arrays, num_chains, num_samples, num_warmup, seed=0, beta_max=10
         chain_method="vectorized",
         progress_bar=False,
     )
+
     def _run():
         started = time.time()
         mcmc.run(
@@ -254,7 +255,9 @@ def run_numpyro(arrays, num_chains, num_samples, num_warmup, seed=0, beta_max=10
         "mcmc": mcmc,
         "sample_seconds": sample_seconds,
         "cold_seconds": cold_seconds,
-        "timing_basis": "warm (second run, excludes JIT)" if warm else "cold (includes tracing and JIT)",
+        "timing_basis": (
+            "warm (second run, excludes JIT)" if warm else "cold (includes tracing and JIT)"
+        ),
         "device": str(jax.devices()[0]),
         "num_chains": num_chains,
         "num_samples": num_samples,

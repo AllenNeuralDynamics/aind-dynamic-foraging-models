@@ -446,15 +446,15 @@ def batched_heldout_log_lik(
     n_draws=None,
     session_chunk=None,
 ):
-    """Score many held-out sessions at once, one vmapped pass per chunk.
+    """Score many held-out sessions at once by the trial-marginal, one vmapped pass per chunk.
 
     Batching the adaptation fits removed one bottleneck and exposed the next: replaying each
     held-out session in its own call means thousands of small dispatches, which on a
     latency-bound device costs far more than the arithmetic does. Session replays are
     independent, so they vectorise the same way everything else here does.
 
-    Draws are reduced inside each chunk rather than materialised, since keeping every
-    per-trial probability for every draw and session at once would run to gigabytes.
+    This returns the trial-marginal only; :func:`batched_heldout_scores` returns it together
+    with the session-marginal from the same draws.
 
     Parameters
     ----------
@@ -471,8 +471,8 @@ def batched_heldout_log_lik(
     beta_max : float, optional
         Upper bound of ``softmax_inverse_temperature``.
     n_draws : int, optional
-        Subsample this many posterior draws. The posterior-predictive average converges
-        quickly, so fewer draws here trade a little noise for a lot of time.
+        Subsample this many posterior draws. The trial-marginal average converges quickly,
+        so fewer draws here trade a little noise for a lot of time.
     session_chunk : int, optional
         Sessions per vmapped pass, which caps peak memory. Defaults to a size derived from
         the device's own memory limit, so the same code neither wastes a large GPU nor
@@ -482,6 +482,77 @@ def batched_heldout_log_lik(
     -------
     tuple of np.ndarray
         Per-session summed log likelihood and trial count, both shape ``(n_sessions,)``.
+    """
+    scores = batched_heldout_scores(
+        batched_samples, subject_indices, choices, rewards, valid_mask,
+        rng_key=rng_key, beta_max=beta_max, n_draws=n_draws, session_chunk=session_chunk,
+    )
+    return scores["trial_marginal"], scores["n_trials"]
+
+
+def batched_heldout_scores(
+    batched_samples,
+    subject_indices,
+    choices,
+    rewards,
+    valid_mask=None,
+    *,
+    rng_key,
+    beta_max=10.0,
+    n_draws=None,
+    n_theta_per_draw=1,
+    session_chunk=None,
+):
+    """Score held-out sessions by both marginals, from one shared set of session draws.
+
+    A held-out session's session-level parameters are never fitted, so each score averages
+    over them: for every posterior draw of the subject's ``(mu_p, sigma)``, fresh session
+    parameters are drawn and the session replayed. The two scores differ only in where the
+    average is taken.
+
+    - **Trial-marginal**: average each trial's choice probability over draws, then sum the
+      logs. Every trial may in effect use a different session's parameters, so this is not
+      the predictive probability of any session the model could generate.
+    - **Session-marginal**: average the whole session's likelihood over draws
+      (``logsumexp`` minus ``log`` of the draw count). This is the posterior predictive
+      probability of the session, and equals predicting trial by trial while updating belief
+      about the session's parameters as its trials arrive.
+
+    The session-marginal is a Monte Carlo estimate dominated, on long sessions, by the few
+    draws that fit best; it is biased low when too few draws land there. Check
+    ``weight_ess`` before trusting it: an ESS near 1 means the estimate rests on one draw and
+    ``session_marginal_se`` is itself unreliable.
+
+    Parameters
+    ----------
+    batched_samples : mapping
+        Draws from :func:`fit_adaptation_batched`, with a subject axis.
+    subject_indices : array_like of int, shape (n_sessions,)
+        Which subject each session belongs to, indexing into the batched fit.
+    choices, rewards : array_like, shape (n_sessions, n_trials)
+        Sessions to score, padded on the trial axis.
+    valid_mask : array_like of bool, same shape, optional
+        Trials to include. Defaults to all trials.
+    rng_key : jax.Array
+        Key for the fresh session-level draws.
+    beta_max : float, optional
+        Upper bound of ``softmax_inverse_temperature``.
+    n_draws : int, optional
+        Subsample this many posterior draws. Defaults to all of them.
+    n_theta_per_draw : int, optional
+        Session-parameter draws per posterior draw. Most of the session-marginal's variance
+        is in this draw, so raising it buys accuracy at linear cost without refitting. With
+        the default of 1 the draws, and so both scores, match :func:`batched_heldout_log_lik`.
+    session_chunk : int, optional
+        Sessions per vmapped pass, which caps peak memory. Defaults to a size derived from
+        the device's own memory limit.
+
+    Returns
+    -------
+    dict of np.ndarray, each shape ``(n_sessions,)``
+        ``trial_marginal`` and ``session_marginal`` (summed log likelihoods),
+        ``session_marginal_se`` (delta-method standard error of the latter), ``weight_ess``
+        (effective number of draws behind it), and ``n_trials`` (trials scored).
     """
     choices = jnp.asarray(choices, dtype=jnp.int32)
     rewards = jnp.asarray(rewards, dtype=jnp.float32)
@@ -495,13 +566,41 @@ def batched_heldout_log_lik(
     sigma = jnp.exp(jnp.asarray(batched_samples["log_sigma"]))
     if n_draws is not None and n_draws < mu_p.shape[0]:
         mu_p, sigma = mu_p[:n_draws], sigma[:n_draws]
-
     if session_chunk is None:
-        session_chunk = auto_session_chunk(n_trials, int(mu_p.shape[0]))
+        session_chunk = auto_session_chunk(n_trials, int(mu_p.shape[0]) * n_theta_per_draw)
 
-    if session_chunk is None:
-        session_chunk = auto_session_chunk(n_trials, int(mu_p.shape[0]))
+    over_draws = _observed_prob_over_draws(n_trials, beta_max)
+    names = ("trial_marginal", "session_marginal", "session_marginal_se", "weight_ess")
+    out = {name: np.zeros(n_sessions) for name in names}
+    out["n_trials"] = np.zeros(n_sessions, dtype=int)
 
+    for start in range(0, n_sessions, session_chunk):
+        stop = min(start + session_chunk, n_sessions)
+        idx = subject_indices[start:stop]
+        chunk_key, rng_key = jax.random.split(rng_key)
+        theta = _draw_session_theta(chunk_key, mu_p[:, idx, :], sigma[:, idx, :],
+                                    n_theta_per_draw)
+        # (draws, chunk, trials)
+        probs = over_draws(theta, choices[start:stop], rewards[start:stop])
+        mask = valid_mask[start:stop]
+
+        # Average, then clip, exactly as the trial-marginal scorer always has.
+        averaged = jnp.clip(jnp.mean(probs, axis=0), 1e-10, 1.0)
+        trial = jnp.sum(jnp.where(mask, jnp.log(averaged), 0.0), axis=-1)
+        per_draw_log = jnp.where(mask, jnp.log(jnp.clip(probs, 1e-10, 1.0)), 0.0)
+        session, se, ess = _session_marginal(jnp.sum(per_draw_log, axis=-1))
+
+        out["trial_marginal"][start:stop] = np.asarray(trial)
+        out["session_marginal"][start:stop] = np.asarray(session)
+        out["session_marginal_se"][start:stop] = np.asarray(se)
+        out["weight_ess"][start:stop] = np.asarray(ess)
+        out["n_trials"][start:stop] = np.asarray(jnp.sum(mask, axis=-1))
+
+    return out
+
+
+def _observed_prob_over_draws(n_trials, beta_max):
+    """Jitted replay: probability of the observed action, per draw, session and trial."""
     trial_index = jnp.arange(n_trials)
 
     def _observed_prob(theta, session_choices, session_rewards):
@@ -518,28 +617,55 @@ def batched_heldout_log_lik(
         return prob[session_choices, trial_index]
 
     over_sessions = jax.vmap(_observed_prob, in_axes=(0, 0, 0))
-    over_draws = jax.jit(jax.vmap(over_sessions, in_axes=(0, None, None)))
+    return jax.jit(jax.vmap(over_sessions, in_axes=(0, None, None)))
 
-    log_lik = np.zeros(n_sessions)
-    counts = np.zeros(n_sessions, dtype=int)
 
-    for start in range(0, n_sessions, session_chunk):
-        stop = min(start + session_chunk, n_sessions)
-        idx = subject_indices[start:stop]
-        chunk_key, rng_key = jax.random.split(rng_key)
+def _draw_session_theta(key, mu_p, sigma, n_theta_per_draw):
+    """Fresh session parameters, ``n_theta_per_draw`` per posterior draw, flattened.
 
-        mu_chunk = mu_p[:, idx, :]          # (draws, chunk, params)
-        sigma_chunk = sigma[:, idx, :]
-        theta = mu_chunk + sigma_chunk * jax.random.normal(chunk_key, mu_chunk.shape)
+    With one per draw the noise has exactly the posterior's shape, so the stream matches the
+    trial-marginal scorer's from before both scores were computed together.
+    """
+    if n_theta_per_draw == 1:
+        return mu_p + sigma * jax.random.normal(key, mu_p.shape)
+    noise = jax.random.normal(key, (n_theta_per_draw,) + mu_p.shape)
+    theta = mu_p[None] + sigma[None] * noise
+    return theta.reshape((-1,) + mu_p.shape[1:])
 
-        probs = over_draws(theta, choices[start:stop], rewards[start:stop])
-        averaged = jnp.mean(probs, axis=0)   # probability space, before the log
-        averaged = jnp.clip(averaged, 1e-10, 1.0)
 
-        mask = valid_mask[start:stop]
-        log_lik[start:stop] = np.asarray(
-            jnp.sum(jnp.where(mask, jnp.log(averaged), 0.0), axis=-1)
-        )
-        counts[start:stop] = np.asarray(jnp.sum(mask, axis=-1))
+def _session_marginal(per_draw):
+    """Log-mean-exp over draws, its delta-method standard error, and the weights' ESS.
 
-    return log_lik, counts
+    ``per_draw`` holds each draw's summed session log likelihood, shape (draws, sessions).
+    """
+    n = per_draw.shape[0]
+    top = jnp.max(per_draw, axis=0)
+    weights = jnp.exp(per_draw - top)          # in (0, 1], the best draw at 1
+    mean_w = jnp.mean(weights, axis=0)
+    session = top + jnp.log(mean_w)
+    se = jnp.std(weights, axis=0, ddof=1) / (jnp.sqrt(n) * mean_w) if n > 1 else jnp.inf
+    ess = jnp.sum(weights, axis=0) ** 2 / jnp.sum(weights ** 2, axis=0)
+    return session, se, ess
+
+
+def pooled_likelihood(log_lik, n_trials, log_lik_se=None):
+    """Trial-weighted pooled likelihood, ``exp(total log likelihood / total trials)``.
+
+    Parameters
+    ----------
+    log_lik, n_trials : array_like, shape (n_sessions,)
+        Per-session summed log likelihood and trial count.
+    log_lik_se : array_like, shape (n_sessions,), optional
+        Per-session standard errors, independent across sessions, propagated by the delta
+        method.
+
+    Returns
+    -------
+    tuple of (float, float or None)
+        The pooled likelihood and its standard error (``None`` without ``log_lik_se``).
+    """
+    total, count = float(np.sum(log_lik)), int(np.sum(n_trials))
+    pooled = float(np.exp(total / count))
+    if log_lik_se is None:
+        return pooled, None
+    return pooled, pooled * float(np.sqrt(np.sum(np.square(log_lik_se)))) / count

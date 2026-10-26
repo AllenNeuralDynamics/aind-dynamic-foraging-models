@@ -55,8 +55,8 @@ class TestDeclaredDependencies(unittest.TestCase):
         """No module is imported that a clean install would not provide."""
         imported = _imported_top_level_modules(PACKAGE)
         declared = _declared_dependencies()
-        # scikit-learn imports as sklearn; nothing else here differs from its dist name.
-        aliases = {"sklearn": "scikit-learn"}
+        # Import names that differ from their distribution names.
+        aliases = {"sklearn": "scikit-learn", "arviz_stats": "arviz-stats"}
         missing = {
             name for name in imported
             if aliases.get(name, name) not in declared

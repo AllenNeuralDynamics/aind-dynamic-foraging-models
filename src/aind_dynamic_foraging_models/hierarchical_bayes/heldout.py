@@ -417,6 +417,11 @@ def fit_heldout_two_level(
 def subject_diagnostics(mcmc):
     """Per-subject worst-case R-hat and bulk ESS over ``mu_p`` and ``log_sigma``.
 
+    R-hat is ArviZ's rank-normalised split R-hat, which takes the worse of the bulk value and
+    the folded (tail) value, so chains that agree in location but not in scale are flagged
+    too. ESS is ArviZ's bulk ESS. Both match what ``artifacts.summarise_diagnostics`` reports
+    for the population sites and what study 08 gated on.
+
     Parameters
     ----------
     mcmc : numpyro.infer.MCMC
@@ -427,14 +432,14 @@ def subject_diagnostics(mcmc):
     dict
         ``max_r_hat`` and ``min_ess_bulk`` of shape ``(n_subjects,)``, and ``divergences``.
     """
-    from numpyro.diagnostics import effective_sample_size, split_gelman_rubin
+    import arviz as az
 
     grouped = mcmc.get_samples(group_by_chain=True)
     r_hat, ess = [], []
     for site in ("mu_p", "log_sigma"):
         draws = np.asarray(grouped[site])            # (chains, draws, subjects, params)
-        r_hat.append(np.asarray(split_gelman_rubin(draws)))
-        ess.append(np.asarray(effective_sample_size(draws)))
+        r_hat.append(np.asarray(az.rhat(draws, method="rank", chain_axis=0, draw_axis=1)))
+        ess.append(np.asarray(az.ess(draws, method="bulk", chain_axis=0, draw_axis=1)))
     diverging = mcmc.get_extra_fields().get("diverging")
     return {
         "max_r_hat": np.max(np.concatenate(r_hat, axis=-1), axis=-1),

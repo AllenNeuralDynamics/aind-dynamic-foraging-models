@@ -113,29 +113,56 @@ class TestMultiChainFit(unittest.TestCase):
         """Two chains stuck in different places give a large R-hat for that subject only."""
         from aind_dynamic_foraging_models.hierarchical_bayes.heldout import subject_diagnostics
 
-        class _Stub:
-            """Stands in for a finished MCMC with chosen draws."""
-
-            def __init__(self, grouped):
-                """Hold draws shaped (chains, draws, subjects, params)."""
-                self.grouped = grouped
-
-            def get_samples(self, group_by_chain=False):
-                """Return the held draws."""
-                return self.grouped
-
-            def get_extra_fields(self):
-                """No divergence field, as when it was not collected."""
-                return {}
-
         rng = np.random.default_rng(3)
         draws = rng.normal(0.0, 1.0, (2, 200, 2, N_PARAMS))
         draws[1, :, 1, 0] += 5.0   # subject 1's chains disagree on one parameter
-        diagnostics = subject_diagnostics(_Stub({"mu_p": jnp.asarray(draws),
-                                                 "log_sigma": jnp.asarray(draws)}))
+        diagnostics = subject_diagnostics(_StubRun({"mu_p": jnp.asarray(draws),
+                                                    "log_sigma": jnp.asarray(draws)}))
         self.assertLess(diagnostics["max_r_hat"][0], 1.05)
         self.assertGreater(diagnostics["max_r_hat"][1], 1.5)
         self.assertIsNone(diagnostics["divergences"])
+
+    def test_r_hat_flags_chains_that_differ_only_in_scale(self):
+        """Same centre, three times the spread: only the folded, rank-normalised R-hat sees it."""
+        from aind_dynamic_foraging_models.hierarchical_bayes.heldout import subject_diagnostics
+
+        rng = np.random.default_rng(4)
+        draws = rng.normal(0.0, 1.0, (4, 500, 2, N_PARAMS))
+        draws[2:, :, 1, 0] *= 3.0   # subject 1: half the chains three times wider
+        diagnostics = subject_diagnostics(_StubRun({"mu_p": draws, "log_sigma": draws}))
+        self.assertLess(diagnostics["max_r_hat"][0], 1.02)
+        self.assertGreater(diagnostics["max_r_hat"][1], 1.05)
+
+    def test_ess_is_the_bulk_ess(self):
+        """ESS agrees with ArviZ's bulk ESS computed parameter by parameter."""
+        import arviz as az
+
+        from aind_dynamic_foraging_models.hierarchical_bayes.heldout import subject_diagnostics
+
+        rng = np.random.default_rng(5)
+        draws = np.cumsum(rng.normal(0.0, 1.0, (4, 300, 2, N_PARAMS)), axis=1) * 0.05 \
+            + rng.normal(0.0, 1.0, (4, 300, 2, N_PARAMS))     # autocorrelated
+        diagnostics = subject_diagnostics(_StubRun({"mu_p": draws, "log_sigma": draws + 1.0}))
+        for subject in range(2):
+            reference = min(float(az.ess(draws[:, :, subject, k], method="bulk"))
+                            for k in range(N_PARAMS))
+            self.assertAlmostEqual(diagnostics["min_ess_bulk"][subject], reference, delta=1e-6)
+
+
+class _StubRun:
+    """Stands in for a finished MCMC run with chosen draws, shaped (chains, draws, ...)."""
+
+    def __init__(self, grouped):
+        """Hold the draws."""
+        self.grouped = grouped
+
+    def get_samples(self, group_by_chain=False):
+        """Return the held draws."""
+        return self.grouped
+
+    def get_extra_fields(self):
+        """No divergence field, as when it was not collected."""
+        return {}
 
 
 if __name__ == "__main__":

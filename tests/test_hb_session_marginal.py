@@ -88,7 +88,11 @@ class TestWhereTheScoresAgree(unittest.TestCase):
         np.testing.assert_allclose(scores["trial_marginal"], expected, rtol=1e-4)
 
     def test_log_lik_is_the_trial_marginal(self):
-        """``batched_heldout_log_lik`` returns the joint scorer's trial-marginal, same draws."""
+        """The joint scorer's trial-marginal is the original scorer's, from the same draws.
+
+        The original replays through ``hattori2019_choice_prob``; the joint scorer derives
+        probabilities from the Q trajectory instead, so the two agree to rounding.
+        """
         samples = _samples(np.zeros(N_PARAMS), np.full(N_PARAMS, -0.5), 64, n_subjects=2)
         choices, rewards = _sessions(5, 40)
         subjects = np.array([0, 1, 0, 1, 1])
@@ -97,7 +101,7 @@ class TestWhereTheScoresAgree(unittest.TestCase):
                                               rng_key=key, session_chunk=2)
         new = batched_heldout_scores(samples, subjects, choices, rewards,
                                      rng_key=key, session_chunk=2)
-        np.testing.assert_array_equal(new["trial_marginal"], old)
+        np.testing.assert_allclose(new["trial_marginal"], old, rtol=1e-5)
         np.testing.assert_array_equal(new["n_trials"], counts)
 
 
@@ -263,7 +267,7 @@ class TestBatching(unittest.TestCase):
 
 @unittest.skipUnless(HAS_JAX, "requires the 'bayes' extra (jax, numpyro)")
 class TestPooledLikelihood(unittest.TestCase):
-    """The trial-weighted pooled likelihood and its propagated error."""
+    """The trial-weighted pooled likelihood and its jointly estimated error."""
 
     def test_pools_by_trials_not_by_session(self):
         """exp(total log likelihood / total trials)."""
@@ -271,11 +275,34 @@ class TestPooledLikelihood(unittest.TestCase):
         self.assertAlmostEqual(pooled, np.exp(-40.0 / 60))
         self.assertIsNone(se)
 
-    def test_propagates_independent_errors(self):
-        """Session errors add in quadrature, then scale by the pooled value per trial."""
-        pooled, se = pooled_likelihood(np.array([-10.0, -30.0]), np.array([20, 40]),
-                                       np.array([0.3, 0.4]))
-        self.assertAlmostEqual(se, pooled * 0.5 / 60)
+    def test_sessions_sharing_draws_do_not_average_their_errors_away(self):
+        """Nine copies of one session's error add linearly, not in quadrature.
+
+        Scored from the same posterior draws, identical sessions carry identical Monte Carlo
+        error. Pooling them must report nine times one session's error in the total, where
+        treating them as independent would report three times.
+        """
+        rng = np.random.default_rng(0)
+        column = 1.0 + 0.2 * rng.standard_normal((300, 1))
+        one_total_se = float(np.std(column, ddof=1))
+        log_lik, n_trials = np.full(9, -50.0), np.full(9, 100)
+        pooled, se = pooled_likelihood(log_lik, n_trials, np.repeat(column, 9, axis=1))
+        _, se_one = pooled_likelihood(log_lik[:1], n_trials[:1], column)
+        # Same relative error per trial: nine times the total error over nine times the trials.
+        self.assertAlmostEqual(se / pooled, se_one / np.exp(-0.5), places=10)
+        self.assertGreater(se_one, 0.0)
+        self.assertLess(one_total_se, 1.0)
+
+    def test_scored_sessions_feed_the_pooled_error(self):
+        """End to end: the scorer's relative weights pool to a finite, positive error."""
+        samples = _samples(np.zeros(N_PARAMS), np.full(N_PARAMS, -0.7), 200)
+        choices, rewards = _sessions(4, 30)
+        scores = _score(samples, choices, rewards)
+        self.assertEqual(scores["relative_weights"].shape, (200, 4))
+        np.testing.assert_allclose(scores["relative_weights"].mean(axis=0), 1.0, rtol=1e-5)
+        pooled, se = pooled_likelihood(scores["session_marginal"], scores["n_trials"],
+                                       scores["relative_weights"])
+        self.assertTrue(0.0 < se < pooled)
 
 
 if __name__ == "__main__":

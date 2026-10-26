@@ -18,6 +18,7 @@ try:
     from aind_dynamic_foraging_models.hierarchical_bayes.heldout import (
         batched_heldout_log_lik,
         batched_heldout_scores,
+        pareto_k_threshold,
         pooled_likelihood,
     )
     from aind_dynamic_foraging_models.hierarchical_bayes.likelihood import (
@@ -236,6 +237,35 @@ class TestMonteCarloError(unittest.TestCase):
         scores = _score(self.samples, self.choices, self.rewards)
         self.assertGreaterEqual(scores["weight_ess"][0], 1.0)
         self.assertLessEqual(scores["weight_ess"][0], 200.0 + 1e-6)
+
+
+@unittest.skipUnless(HAS_JAX, "requires the 'bayes' extra (jax, numpyro)")
+class TestParetoK(unittest.TestCase):
+    """k-hat separates estimates resting on many draws from ones resting on a few."""
+
+    def test_more_trials_concentrate_the_weights(self):
+        """Few trials leave the weights even (k-hat low); many concentrate them."""
+        samples = _samples(np.zeros(N_PARAMS), np.full(N_PARAMS, 0.5), 2000)
+        short = _score(samples, *_sessions(3, 5))
+        long = _score(samples, *_sessions(3, 400))
+        threshold = pareto_k_threshold(2000)
+        self.assertTrue(np.all(short["pareto_k"] < threshold), short["pareto_k"])
+        # Above the threshold, or unjudged (nan): either way none passes the gate.
+        self.assertFalse(np.any(long["pareto_k"] < threshold), long["pareto_k"])
+
+    def test_degenerate_weights(self):
+        """Identical weights cannot be heavy-tailed; too few draws cannot be judged."""
+        choices, rewards = _sessions(1, 20)
+        same = _score(_samples(np.zeros(N_PARAMS), np.full(N_PARAMS, -30.0), 50),
+                      choices, rewards)
+        few = _score(_samples(np.zeros(N_PARAMS), np.zeros(N_PARAMS), 10), choices, rewards)
+        self.assertEqual(same["pareto_k"][0], -np.inf)
+        self.assertTrue(np.isnan(few["pareto_k"][0]))
+
+    def test_threshold(self):
+        """0.7 once draws are plentiful; stricter for small samples."""
+        self.assertAlmostEqual(pareto_k_threshold(128000), 0.7)
+        self.assertAlmostEqual(pareto_k_threshold(100), 0.5)
 
 
 @unittest.skipUnless(HAS_JAX, "requires the 'bayes' extra (jax, numpyro)")

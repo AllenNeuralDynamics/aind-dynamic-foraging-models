@@ -733,7 +733,9 @@ def batched_heldout_scores(
         (effective number of draws behind it), and ``n_trials`` (trials scored); and
         ``relative_weights``, shape ``(n_posterior_draws, n_sessions)``: each posterior
         draw's session likelihood relative to the session's mean, which
-        :func:`pooled_likelihood` needs to pool errors that share posterior draws.
+        :func:`pooled_likelihood` needs to pool errors that share posterior draws; and
+        ``pareto_k``, the PSIS Pareto k-hat of each session's draw weights, a reliability
+        diagnostic only (the scores are not smoothed). See :func:`pareto_k_threshold`.
     """
     choices = jnp.asarray(choices, dtype=jnp.int32)
     rewards = jnp.asarray(rewards, dtype=jnp.float32)
@@ -751,7 +753,8 @@ def batched_heldout_scores(
         session_chunk = auto_session_chunk(n_trials, int(mu_p.shape[0]) * n_theta_per_draw)
 
     over_draws = _observed_prob_over_draws(n_trials, beta_max)
-    names = ("trial_marginal", "session_marginal", "session_marginal_se", "weight_ess")
+    names = ("trial_marginal", "session_marginal", "session_marginal_se", "weight_ess",
+             "pareto_k")
     out = {name: np.zeros(n_sessions) for name in names}
     out["n_trials"] = np.zeros(n_sessions, dtype=int)
     out["relative_weights"] = np.zeros((int(mu_p.shape[0]), n_sessions))
@@ -777,6 +780,7 @@ def batched_heldout_scores(
         out["session_marginal"][start:stop] = np.asarray(session)
         out["session_marginal_se"][start:stop] = np.asarray(se)
         out["weight_ess"][start:stop] = np.asarray(ess)
+        out["pareto_k"][start:stop] = _pareto_k(np.asarray(per_draw))
         out["n_trials"][start:stop] = np.asarray(jnp.sum(mask, axis=-1))
         out["relative_weights"][:, start:stop] = np.asarray(relative)
 
@@ -868,6 +872,43 @@ def _autocorrelated_se(series):
     ess = np.asarray(effective_sample_size(np.asarray(series)[None]))
     ess = np.clip(np.nan_to_num(ess, nan=1.0), 1.0, n)
     return jnp.std(series, axis=0, ddof=1) / jnp.sqrt(ess)
+
+
+def _pareto_k(per_draw):
+    """PSIS Pareto k-hat of each session's draw weights; ``per_draw`` is (draws, sessions).
+
+    Uses ArviZ's ``pareto_khat`` on the weights scaled by their maximum, one session at a
+    time. Checked on log-normal weights (arviz-stats 1.3.1): on the weights k-hat rises with
+    the log-sd (0.06, 0.30, 0.50, 0.99, 1.68 at sd 0.5 to 5) as ESS falls from 15657 to 4 of
+    20000, while ``log_weights=True`` stayed near zero throughout and ``psislw(axis=0)`` gave
+    ~1 for bounded weights, so neither of those is used.
+    Identical weights cannot be heavy-tailed and get ``-inf``. Fewer than 25 draws, or a
+    tail ArviZ cannot fit, get ``nan``: unjudged, which a gate must treat as failing.
+    """
+    from arviz_stats.base.array import array_stats
+
+    khat = np.full(per_draw.shape[1], np.nan)
+    for session in range(per_draw.shape[1]):
+        log_w = per_draw[:, session].astype(np.float64)   # float32 exp underflows
+        if np.ptp(log_w) < 1e-12:
+            khat[session] = -np.inf
+        elif log_w.shape[0] >= 25:
+            try:
+                khat[session] = float(array_stats.pareto_khat(
+                    np.exp(log_w - log_w.max()), chain_axis=None, draw_axis=-1))
+            except ValueError:  # a tail ArviZ cannot fit is unjudged, not safe
+                pass
+    return khat
+
+
+def pareto_k_threshold(n_draws):
+    """Largest Pareto k-hat at which a session-marginal estimate is trusted.
+
+    ``min(1 - 1 / log10(n_draws), 0.7)`` (Vehtari et al. 2024, "Pareto smoothed importance
+    sampling", JMLR). Above it the estimate rests on too few draws to be reliable, however
+    small its reported error. ``n_draws`` counts every session draw behind one estimate.
+    """
+    return float(min(1.0 - 1.0 / np.log10(n_draws), 0.7))
 
 
 def pooled_likelihood(log_lik, n_trials, relative_weights=None):

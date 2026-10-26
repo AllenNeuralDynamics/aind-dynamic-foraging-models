@@ -259,8 +259,11 @@ class TestParetoK(unittest.TestCase):
         same = _score(_samples(np.zeros(N_PARAMS), np.full(N_PARAMS, -30.0), 50),
                       choices, rewards)
         few = _score(_samples(np.zeros(N_PARAMS), np.zeros(N_PARAMS), 10), choices, rewards)
+        few_same = _score(_samples(np.zeros(N_PARAMS), np.full(N_PARAMS, -30.0), 10),
+                          choices, rewards)
         self.assertEqual(same["pareto_k"][0], -np.inf)
         self.assertTrue(np.isnan(few["pareto_k"][0]))
+        self.assertTrue(np.isnan(few_same["pareto_k"][0]))   # identical but too few
 
     def test_underflowed_small_weights_do_not_block_the_fit(self):
         """Draws whose weight underflows to zero leave the upper tail, and k-hat, usable."""

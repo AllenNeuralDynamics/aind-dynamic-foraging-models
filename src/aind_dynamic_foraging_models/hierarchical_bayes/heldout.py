@@ -890,9 +890,11 @@ def _pareto_k(per_draw):
     khat = np.full(per_draw.shape[1], np.nan)
     for session in range(per_draw.shape[1]):
         log_w = per_draw[:, session].astype(np.float64)   # float32 exp underflows
+        if log_w.shape[0] < 25:
+            continue                                      # too few to judge: nan
         if np.ptp(log_w) < 1e-12:
             khat[session] = -np.inf
-        elif log_w.shape[0] >= 25:
+        else:
             try:
                 khat[session] = float(array_stats.pareto_khat(
                     np.exp(log_w - log_w.max()), chain_axis=None, draw_axis=-1,

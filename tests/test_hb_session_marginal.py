@@ -102,6 +102,22 @@ class TestWhereTheScoresAgree(unittest.TestCase):
 
 
 @unittest.skipUnless(HAS_JAX, "requires the 'bayes' extra (jax, numpyro)")
+class TestConfidentlyWrongDraws(unittest.TestCase):
+    """A draw that is almost certain of the wrong action must score at its true likelihood."""
+
+    def test_session_marginal_is_not_floored(self):
+        """Ten right choices against a left bias of 30: about -300, not ten floors of 1e-10."""
+        mu = np.zeros(N_PARAMS)
+        mu[BIAS] = 30.0
+        choices, rewards = np.ones((1, 10), dtype=int), np.zeros((1, 10))
+        scores = _score(_samples(mu, np.full(N_PARAMS, -30.0), 20), choices, rewards)
+        expected = 10 * -np.logaddexp(0.0, 30.0)  # log sigmoid(-30), ten times
+        self.assertAlmostEqual(scores["session_marginal"][0], expected, delta=1e-3)
+        # The trial-marginal keeps its historical floor, so its old numbers stay reproducible.
+        self.assertAlmostEqual(scores["trial_marginal"][0], 10 * np.log(1e-10), delta=1e-3)
+
+
+@unittest.skipUnless(HAS_JAX, "requires the 'bayes' extra (jax, numpyro)")
 class TestWhereTheScoresDiffer(unittest.TestCase):
     """A closed-form case: each draw is a near-deterministic left or right chooser.
 
@@ -166,6 +182,24 @@ class TestMonteCarloError(unittest.TestCase):
         eight = _score(self.samples, self.choices, self.rewards, seed=1, n_theta_per_draw=8)
         self.assertGreater(eight["weight_ess"][0], 4 * one["weight_ess"][0])
         self.assertLess(eight["session_marginal_se"][0], one["session_marginal_se"][0])
+
+    def test_replicates_of_one_posterior_draw_do_not_shrink_the_error(self):
+        """Replicates share their posterior draw, so they add no independent information.
+
+        With negligible session spread, every replicate of a posterior draw is the same
+        draw. The posterior means vary, so the error comes from them alone and must not fall
+        as replicates are added.
+        """
+        rng = np.random.default_rng(2)
+        samples = {
+            "mu_p": rng.normal(0.0, 0.3, (200, 1, N_PARAMS)),
+            "log_sigma": np.full((200, 1, N_PARAMS), -30.0),
+        }
+        one = _score(samples, self.choices, self.rewards, seed=4)
+        eight = _score(samples, self.choices, self.rewards, seed=4, n_theta_per_draw=8)
+        np.testing.assert_allclose(eight["session_marginal"], one["session_marginal"], rtol=1e-5)
+        np.testing.assert_allclose(eight["session_marginal_se"], one["session_marginal_se"],
+                                   rtol=1e-3)
 
     def test_ess_is_bounded_by_the_draw_count(self):
         """ESS lies between one draw and all of them."""

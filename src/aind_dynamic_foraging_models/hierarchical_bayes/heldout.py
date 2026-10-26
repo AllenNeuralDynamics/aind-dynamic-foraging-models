@@ -23,7 +23,7 @@ import numpyro
 import numpyro.distributions as dist
 from numpyro.infer import MCMC, NUTS
 
-from .likelihood import hattori2019_choice_prob
+from .likelihood import hattori2019_choice_prob, hattori2019_value_trajectory
 from .model import HATTORI2019_PARAMS, hattori2019_session_params
 
 POPULATION_SITES = (
@@ -580,15 +580,16 @@ def batched_heldout_scores(
         chunk_key, rng_key = jax.random.split(rng_key)
         theta = _draw_session_theta(chunk_key, mu_p[:, idx, :], sigma[:, idx, :],
                                     n_theta_per_draw)
-        # (draws, chunk, trials)
-        probs = over_draws(theta, choices[start:stop], rewards[start:stop])
+        # Both (draws, chunk, trials): the legacy probability and the exact log probability.
+        probs, log_probs = over_draws(theta, choices[start:stop], rewards[start:stop])
         mask = valid_mask[start:stop]
 
         # Average, then clip, exactly as the trial-marginal scorer always has.
         averaged = jnp.clip(jnp.mean(probs, axis=0), 1e-10, 1.0)
         trial = jnp.sum(jnp.where(mask, jnp.log(averaged), 0.0), axis=-1)
-        per_draw_log = jnp.where(mask, jnp.log(jnp.clip(probs, 1e-10, 1.0)), 0.0)
-        session, se, ess = _session_marginal(jnp.sum(per_draw_log, axis=-1))
+        # Unclipped: a confidently wrong draw must count at its true, very low likelihood.
+        per_draw = jnp.sum(jnp.where(mask, log_probs, 0.0), axis=-1)
+        session, se, ess = _session_marginal(per_draw, n_theta_per_draw)
 
         out["trial_marginal"][start:stop] = np.asarray(trial)
         out["session_marginal"][start:stop] = np.asarray(session)
@@ -600,21 +601,32 @@ def batched_heldout_scores(
 
 
 def _observed_prob_over_draws(n_trials, beta_max):
-    """Jitted replay: probability of the observed action, per draw, session and trial."""
+    """Jitted replay of the observed action's probability, per draw, session and trial.
+
+    Returns two arrays. The probability from :func:`hattori2019_choice_prob` keeps the
+    trial-marginal identical to what it always was. The log probability is computed from the
+    decision variable (the left-minus-right logit) with ``log_sigmoid``, so it stays exact
+    where the probability itself underflows; the session-marginal sums these, and a floor
+    on the probability would put a ceiling on how badly a confidently wrong draw can score.
+    """
     trial_index = jnp.arange(n_trials)
 
     def _observed_prob(theta, session_choices, session_rewards):
-        """Probability the model assigned to the observed action, per trial."""
+        """Probability, and exact log probability, of the observed action per trial."""
         params = hattori2019_session_params(theta, beta_max=beta_max)
-        prob = hattori2019_choice_prob(
-            session_choices, session_rewards,
-            learn_rate_rew=params["learn_rate_rew"],
-            learn_rate_unrew=params["learn_rate_unrew"],
-            forget_rate_unchosen=params["forget_rate_unchosen"],
-            softmax_inverse_temperature=params["softmax_inverse_temperature"],
-            bias_l=params["bias_l"],
+        kwargs = {
+            "learn_rate_rew": params["learn_rate_rew"],
+            "learn_rate_unrew": params["learn_rate_unrew"],
+            "forget_rate_unchosen": params["forget_rate_unchosen"],
+            "softmax_inverse_temperature": params["softmax_inverse_temperature"],
+            "bias_l": params["bias_l"],
+        }
+        prob = hattori2019_choice_prob(session_choices, session_rewards, **kwargs)
+        _, left_minus_right = hattori2019_value_trajectory(
+            session_choices, session_rewards, **kwargs
         )
-        return prob[session_choices, trial_index]
+        sign = jnp.where(session_choices == 0, 1.0, -1.0)  # 0 is left
+        return prob[session_choices, trial_index], jax.nn.log_sigmoid(sign * left_minus_right)
 
     over_sessions = jax.vmap(_observed_prob, in_axes=(0, 0, 0))
     return jax.jit(jax.vmap(over_sessions, in_axes=(0, None, None)))
@@ -633,17 +645,23 @@ def _draw_session_theta(key, mu_p, sigma, n_theta_per_draw):
     return theta.reshape((-1,) + mu_p.shape[1:])
 
 
-def _session_marginal(per_draw):
+def _session_marginal(per_draw, n_theta_per_draw=1):
     """Log-mean-exp over draws, its delta-method standard error, and the weights' ESS.
 
-    ``per_draw`` holds each draw's summed session log likelihood, shape (draws, sessions).
+    ``per_draw`` holds each draw's summed session log likelihood, shape
+    ``(n_theta_per_draw * n_posterior, sessions)``, ordered as :func:`_draw_session_theta`
+    flattens them. Replicates of one posterior draw share its ``(mu_p, sigma)``, so they are
+    not independent: the standard error is taken across posterior draws, each first
+    averaged over its replicates. The ESS counts every draw, since it describes how many of
+    them the estimate actually rests on.
     """
-    n = per_draw.shape[0]
     top = jnp.max(per_draw, axis=0)
     weights = jnp.exp(per_draw - top)          # in (0, 1], the best draw at 1
     mean_w = jnp.mean(weights, axis=0)
     session = top + jnp.log(mean_w)
-    se = jnp.std(weights, axis=0, ddof=1) / (jnp.sqrt(n) * mean_w) if n > 1 else jnp.inf
+    by_posterior = jnp.mean(weights.reshape((n_theta_per_draw, -1) + weights.shape[1:]), axis=0)
+    n = by_posterior.shape[0]
+    se = jnp.std(by_posterior, axis=0, ddof=1) / (jnp.sqrt(n) * mean_w) if n > 1 else jnp.inf
     ess = jnp.sum(weights, axis=0) ** 2 / jnp.sum(weights ** 2, axis=0)
     return session, se, ess
 

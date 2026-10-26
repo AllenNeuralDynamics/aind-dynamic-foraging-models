@@ -262,6 +262,14 @@ class TestParetoK(unittest.TestCase):
         self.assertEqual(same["pareto_k"][0], -np.inf)
         self.assertTrue(np.isnan(few["pareto_k"][0]))
 
+    def test_underflowed_small_weights_do_not_block_the_fit(self):
+        """Draws whose weight underflows to zero leave the upper tail, and k-hat, usable."""
+        from aind_dynamic_foraging_models.hierarchical_bayes.heldout import _pareto_k
+
+        rng = np.random.default_rng(0)
+        log_w = np.concatenate([np.full(1000, -1e4), rng.normal(0.0, 0.5, 1000)])
+        self.assertTrue(np.isfinite(_pareto_k(log_w[:, None])[0]))
+
     def test_threshold(self):
         """0.7 once draws are plentiful; stricter for small samples."""
         self.assertAlmostEqual(pareto_k_threshold(128000), 0.7)

@@ -895,7 +895,8 @@ def _pareto_k(per_draw):
         elif log_w.shape[0] >= 25:
             try:
                 khat[session] = float(array_stats.pareto_khat(
-                    np.exp(log_w - log_w.max()), chain_axis=None, draw_axis=-1))
+                    np.exp(log_w - log_w.max()), chain_axis=None, draw_axis=-1,
+                    tail="right"))   # only large weights matter; tiny ones underflow
             except ValueError:  # a tail ArviZ cannot fit is unjudged, not safe
                 pass
     return khat

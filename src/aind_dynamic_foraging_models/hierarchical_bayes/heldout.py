@@ -521,7 +521,9 @@ def batched_heldout_scores(
     The session-marginal is a Monte Carlo estimate dominated, on long sessions, by the few
     draws that fit best; it is biased low when too few draws land there. Check
     ``weight_ess`` before trusting it: an ESS near 1 means the estimate rests on one draw and
-    ``session_marginal_se`` is itself unreliable.
+    ``session_marginal_se`` is itself unreliable. Even at a moderate ESS the delta-method
+    error runs about 20% low, and it accounts for the posterior draws' autocorrelation but
+    not for a posterior that has not converged.
 
     Parameters
     ----------
@@ -650,20 +652,38 @@ def _session_marginal(per_draw, n_theta_per_draw=1):
 
     ``per_draw`` holds each draw's summed session log likelihood, shape
     ``(n_theta_per_draw * n_posterior, sessions)``, ordered as :func:`_draw_session_theta`
-    flattens them. Replicates of one posterior draw share its ``(mu_p, sigma)``, so they are
-    not independent: the standard error is taken across posterior draws, each first
-    averaged over its replicates. The ESS counts every draw, since it describes how many of
-    them the estimate actually rests on.
+    flattens them. Two dependencies shape the standard error. Replicates of one posterior
+    draw share its ``(mu_p, sigma)``, so each posterior draw's replicates are averaged first.
+    Posterior draws come from MCMC and are autocorrelated, so the error divides by their
+    autocorrelation-aware ESS rather than their count. ``weight_ess`` is a different number:
+    it counts how many draws the estimate rests on, by the spread of their weights.
     """
     top = jnp.max(per_draw, axis=0)
     weights = jnp.exp(per_draw - top)          # in (0, 1], the best draw at 1
     mean_w = jnp.mean(weights, axis=0)
     session = top + jnp.log(mean_w)
     by_posterior = jnp.mean(weights.reshape((n_theta_per_draw, -1) + weights.shape[1:]), axis=0)
-    n = by_posterior.shape[0]
-    se = jnp.std(by_posterior, axis=0, ddof=1) / (jnp.sqrt(n) * mean_w) if n > 1 else jnp.inf
+    se = _autocorrelated_se(by_posterior) / mean_w
     ess = jnp.sum(weights, axis=0) ** 2 / jnp.sum(weights ** 2, axis=0)
     return session, se, ess
+
+
+def _autocorrelated_se(series):
+    """Standard error of the mean of an autocorrelated series, ``sd / sqrt(ESS)``.
+
+    ``series`` has the draw axis first, in sampling order. The ESS is NumPyro's
+    autocorrelation estimate for a single chain, so a slowly mixing posterior widens the
+    error instead of hiding behind its draw count. With fewer than four draws there is
+    nothing to estimate from, and the error is reported as infinite rather than invented.
+    """
+    from numpyro.diagnostics import effective_sample_size
+
+    n = series.shape[0]
+    if n < 4:
+        return jnp.full(series.shape[1:], jnp.inf)
+    ess = np.asarray(effective_sample_size(np.asarray(series)[None]))
+    ess = np.clip(np.nan_to_num(ess, nan=1.0), 1.0, n)
+    return jnp.std(series, axis=0, ddof=1) / jnp.sqrt(ess)
 
 
 def pooled_likelihood(log_lik, n_trials, log_lik_se=None):

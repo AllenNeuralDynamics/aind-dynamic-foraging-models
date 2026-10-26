@@ -201,6 +201,32 @@ class TestMonteCarloError(unittest.TestCase):
         np.testing.assert_allclose(eight["session_marginal_se"], one["session_marginal_se"],
                                    rtol=1e-3)
 
+    def test_autocorrelated_posterior_draws_widen_the_error(self):
+        """MCMC draws are correlated; the error must reflect that, not assume independence.
+
+        Posterior means follow an AR(1) chain with correlation 0.8, about nine draws per
+        independent one. Repeating the whole chain shows the estimate's real spread, which
+        the reported error must match; treating draws as independent would understate it
+        about threefold. (The delta method itself runs ~20% low when few draws carry the
+        weight, and at correlation 0.95 the ESS estimate is too noisy to rely on.)
+        """
+        rng = np.random.default_rng(5)
+        n_draws, rho = 400, 0.8
+        estimates, reported = [], []
+        for _ in range(30):
+            chain = np.zeros((n_draws, 1, N_PARAMS))
+            chain[0] = rng.normal(0.0, 0.3, (1, N_PARAMS))
+            for t in range(1, n_draws):
+                chain[t] = rho * chain[t - 1] + np.sqrt(1 - rho ** 2) * rng.normal(
+                    0.0, 0.3, (1, N_PARAMS))
+            samples = {"mu_p": chain, "log_sigma": np.full_like(chain, -30.0)}
+            scores = _score(samples, self.choices, self.rewards)
+            estimates.append(scores["session_marginal"][0])
+            reported.append(scores["session_marginal_se"][0])
+        ratio = np.median(reported) / np.std(estimates, ddof=1)
+        self.assertGreater(ratio, 0.6)
+        self.assertLess(ratio, 1.5)
+
     def test_ess_is_bounded_by_the_draw_count(self):
         """ESS lies between one draw and all of them."""
         scores = _score(self.samples, self.choices, self.rewards)

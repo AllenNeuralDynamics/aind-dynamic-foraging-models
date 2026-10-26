@@ -23,7 +23,7 @@ import numpyro
 import numpyro.distributions as dist
 from numpyro.infer import MCMC, NUTS
 
-from .likelihood import hattori2019_choice_prob
+from .likelihood import hattori2019_choice_prob, hattori2019_value_trajectory
 from .model import HATTORI2019_PARAMS, hattori2019_session_params
 
 POPULATION_SITES = (
@@ -543,3 +543,239 @@ def batched_heldout_log_lik(
         counts[start:stop] = np.asarray(jnp.sum(mask, axis=-1))
 
     return log_lik, counts
+
+
+def batched_heldout_scores(
+    batched_samples,
+    subject_indices,
+    choices,
+    rewards,
+    valid_mask=None,
+    *,
+    rng_key,
+    beta_max=10.0,
+    n_draws=None,
+    n_theta_per_draw=1,
+    session_chunk=None,
+):
+    """Score held-out sessions by both marginals, from one shared set of session draws.
+
+    A held-out session's session-level parameters are never fitted, so each score averages
+    over them: for every posterior draw of the subject's ``(mu_p, sigma)``, fresh session
+    parameters are drawn and the session replayed. The two scores differ only in where the
+    average is taken.
+
+    - **Trial-marginal**: average each trial's choice probability over draws, then sum the
+      logs. Every trial may in effect use a different session's parameters, so this is not
+      the predictive probability of any session the model could generate.
+    - **Session-marginal**: average the whole session's likelihood over draws
+      (``logsumexp`` minus ``log`` of the draw count). This is the posterior predictive
+      probability of the session, and equals predicting trial by trial while updating belief
+      about the session's parameters as its trials arrive.
+
+    The session-marginal is a Monte Carlo estimate dominated, on long sessions, by the few
+    draws that fit best; it is biased low when too few draws land there. Check
+    ``weight_ess`` before trusting it: an ESS near 1 means the estimate rests on one draw and
+    ``session_marginal_se`` is itself unreliable. Even at a moderate ESS the delta-method
+    error runs about 20% low, and it accounts for the posterior draws' autocorrelation but
+    not for a posterior that has not converged.
+
+    Parameters
+    ----------
+    batched_samples : mapping
+        Draws from :func:`fit_adaptation_batched`, with a subject axis.
+    subject_indices : array_like of int, shape (n_sessions,)
+        Which subject each session belongs to, indexing into the batched fit.
+    choices, rewards : array_like, shape (n_sessions, n_trials)
+        Sessions to score, padded on the trial axis.
+    valid_mask : array_like of bool, same shape, optional
+        Trials to include. Defaults to all trials.
+    rng_key : jax.Array
+        Key for the fresh session-level draws.
+    beta_max : float, optional
+        Upper bound of ``softmax_inverse_temperature``.
+    n_draws : int, optional
+        Subsample this many posterior draws. Defaults to all of them.
+    n_theta_per_draw : int, optional
+        Session-parameter draws per posterior draw. Most of the session-marginal's variance
+        is in this draw, so raising it buys accuracy at linear cost without refitting. With
+        the default of 1 the draws, and so both scores, match :func:`batched_heldout_log_lik`.
+    session_chunk : int, optional
+        Sessions per vmapped pass, which caps peak memory. Defaults to a size derived from
+        the device's own memory limit.
+
+    Returns
+    -------
+    dict of np.ndarray, each shape ``(n_sessions,)``
+        ``trial_marginal`` and ``session_marginal`` (summed log likelihoods),
+        ``session_marginal_se`` (delta-method standard error of the latter), ``weight_ess``
+        (effective number of draws behind it), and ``n_trials`` (trials scored); and
+        ``relative_weights``, shape ``(n_posterior_draws, n_sessions)``: each posterior
+        draw's session likelihood relative to the session's mean, which
+        :func:`pooled_likelihood` needs to pool errors that share posterior draws.
+    """
+    choices = jnp.asarray(choices, dtype=jnp.int32)
+    rewards = jnp.asarray(rewards, dtype=jnp.float32)
+    subject_indices = jnp.asarray(subject_indices, dtype=jnp.int32)
+    n_sessions, n_trials = choices.shape
+    if valid_mask is None:
+        valid_mask = jnp.ones_like(choices, dtype=bool)
+    valid_mask = jnp.asarray(valid_mask, dtype=bool)
+
+    mu_p = jnp.asarray(batched_samples["mu_p"])
+    sigma = jnp.exp(jnp.asarray(batched_samples["log_sigma"]))
+    if n_draws is not None and n_draws < mu_p.shape[0]:
+        mu_p, sigma = mu_p[:n_draws], sigma[:n_draws]
+    if session_chunk is None:
+        session_chunk = auto_session_chunk(n_trials, int(mu_p.shape[0]) * n_theta_per_draw)
+
+    over_draws = _observed_prob_over_draws(n_trials, beta_max)
+    names = ("trial_marginal", "session_marginal", "session_marginal_se", "weight_ess")
+    out = {name: np.zeros(n_sessions) for name in names}
+    out["n_trials"] = np.zeros(n_sessions, dtype=int)
+    out["relative_weights"] = np.zeros((int(mu_p.shape[0]), n_sessions))
+
+    for start in range(0, n_sessions, session_chunk):
+        stop = min(start + session_chunk, n_sessions)
+        idx = subject_indices[start:stop]
+        chunk_key, rng_key = jax.random.split(rng_key)
+        theta = _draw_session_theta(chunk_key, mu_p[:, idx, :], sigma[:, idx, :],
+                                    n_theta_per_draw)
+        # Both (draws, chunk, trials): the legacy probability and the exact log probability.
+        probs, log_probs = over_draws(theta, choices[start:stop], rewards[start:stop])
+        mask = valid_mask[start:stop]
+
+        # Average, then clip, exactly as the trial-marginal scorer always has.
+        averaged = jnp.clip(jnp.mean(probs, axis=0), 1e-10, 1.0)
+        trial = jnp.sum(jnp.where(mask, jnp.log(averaged), 0.0), axis=-1)
+        # Unclipped: a confidently wrong draw must count at its true, very low likelihood.
+        per_draw = jnp.sum(jnp.where(mask, log_probs, 0.0), axis=-1)
+        session, se, ess, relative = _session_marginal(per_draw, n_theta_per_draw)
+
+        out["trial_marginal"][start:stop] = np.asarray(trial)
+        out["session_marginal"][start:stop] = np.asarray(session)
+        out["session_marginal_se"][start:stop] = np.asarray(se)
+        out["weight_ess"][start:stop] = np.asarray(ess)
+        out["n_trials"][start:stop] = np.asarray(jnp.sum(mask, axis=-1))
+        out["relative_weights"][:, start:stop] = np.asarray(relative)
+
+    return out
+
+
+def _observed_prob_over_draws(n_trials, beta_max):
+    """Jitted replay of the observed action's probability, per draw, session and trial.
+
+    One replay (:func:`hattori2019_value_trajectory`) gives the pre-update Q values, and both
+    returned arrays come from the same logits, ``beta * Q + [bias_l, 0]``: the probability
+    by softmax, as :func:`hattori2019_choice_prob` computes it, and the log probability by
+    log-softmax, which stays exact where the probability underflows. The session-marginal
+    sums the latter; a floor on the probability would cap how badly a confidently wrong draw
+    can score.
+    """
+    trial_index = jnp.arange(n_trials)
+
+    def _observed_prob(theta, session_choices, session_rewards):
+        """Probability, and exact log probability, of the observed action per trial."""
+        params = hattori2019_session_params(theta, beta_max=beta_max)
+        q_values, _ = hattori2019_value_trajectory(
+            session_choices, session_rewards,
+            learn_rate_rew=params["learn_rate_rew"],
+            learn_rate_unrew=params["learn_rate_unrew"],
+            forget_rate_unchosen=params["forget_rate_unchosen"],
+            softmax_inverse_temperature=params["softmax_inverse_temperature"],
+            bias_l=params["bias_l"],
+        )
+        logits = (params["softmax_inverse_temperature"] * q_values.T
+                  + jnp.array([params["bias_l"], 0.0]))          # (n_trials, actions)
+        observed = (trial_index, session_choices)
+        return (jax.nn.softmax(logits, axis=-1)[observed],
+                jax.nn.log_softmax(logits, axis=-1)[observed])
+
+    over_sessions = jax.vmap(_observed_prob, in_axes=(0, 0, 0))
+    return jax.jit(jax.vmap(over_sessions, in_axes=(0, None, None)))
+
+
+def _draw_session_theta(key, mu_p, sigma, n_theta_per_draw):
+    """Fresh session parameters, ``n_theta_per_draw`` per posterior draw, flattened.
+
+    With one per draw the noise has exactly the posterior's shape, so the stream matches the
+    trial-marginal scorer's from before both scores were computed together.
+    """
+    if n_theta_per_draw == 1:
+        return mu_p + sigma * jax.random.normal(key, mu_p.shape)
+    noise = jax.random.normal(key, (n_theta_per_draw,) + mu_p.shape)
+    theta = mu_p[None] + sigma[None] * noise
+    return theta.reshape((-1,) + mu_p.shape[1:])
+
+
+def _session_marginal(per_draw, n_theta_per_draw=1):
+    """Log-mean-exp over draws, its delta-method standard error, the weights' ESS, and each
+    posterior draw's weight relative to the mean.
+
+    ``per_draw`` holds each draw's summed session log likelihood, shape
+    ``(n_theta_per_draw * n_posterior, sessions)``, ordered as :func:`_draw_session_theta`
+    flattens them. Two dependencies shape the standard error. Replicates of one posterior
+    draw share its ``(mu_p, sigma)``, so each posterior draw's replicates are averaged first.
+    Posterior draws come from MCMC and are autocorrelated, so the error divides by their
+    autocorrelation-aware ESS rather than their count. ``weight_ess`` is a different number:
+    it counts how many draws the estimate rests on, by the spread of their weights.
+    """
+    top = jnp.max(per_draw, axis=0)
+    weights = jnp.exp(per_draw - top)          # in (0, 1], the best draw at 1
+    mean_w = jnp.mean(weights, axis=0)
+    session = top + jnp.log(mean_w)
+    by_posterior = jnp.mean(weights.reshape((n_theta_per_draw, -1) + weights.shape[1:]), axis=0)
+    relative = by_posterior / mean_w          # (posterior draws, sessions), mean 1
+    se = _autocorrelated_se(relative)
+    ess = jnp.sum(weights, axis=0) ** 2 / jnp.sum(weights ** 2, axis=0)
+    return session, se, ess, relative
+
+
+def _autocorrelated_se(series):
+    """Standard error of the mean of an autocorrelated series, ``sd / sqrt(ESS)``.
+
+    ``series`` has the draw axis first, in sampling order. The ESS is NumPyro's
+    autocorrelation estimate for a single chain, so a slowly mixing posterior widens the
+    error instead of hiding behind its draw count. With fewer than four draws there is
+    nothing to estimate from, and the error is reported as infinite rather than invented.
+    """
+    from numpyro.diagnostics import effective_sample_size
+
+    n = series.shape[0]
+    if n < 4:
+        return jnp.full(series.shape[1:], jnp.inf)
+    ess = np.asarray(effective_sample_size(np.asarray(series)[None]))
+    ess = np.clip(np.nan_to_num(ess, nan=1.0), 1.0, n)
+    return jnp.std(series, axis=0, ddof=1) / jnp.sqrt(ess)
+
+
+def pooled_likelihood(log_lik, n_trials, relative_weights=None):
+    """Trial-weighted pooled likelihood, ``exp(total log likelihood / total trials)``.
+
+    Sessions scored from the same fit share its posterior draws, so their Monte Carlo errors
+    are correlated, and per-session errors must not be added as if independent. The pooled
+    error is instead taken jointly: by the delta method, the total log likelihood moves with
+    ``sum over sessions of relative_weights[d, s]`` for each posterior draw ``d``, and the
+    error of that per-draw sum's mean accounts for every correlation across sessions and,
+    by its autocorrelation-aware ESS, along the chain.
+
+    Parameters
+    ----------
+    log_lik, n_trials : array_like, shape (n_sessions,)
+        Per-session summed log likelihood and trial count.
+    relative_weights : array_like, shape (n_posterior_draws, n_sessions), optional
+        From :func:`batched_heldout_scores`, for the session-marginal. Leave out for the
+        trial-marginal, whose Monte Carlo error is not estimated.
+
+    Returns
+    -------
+    tuple of (float, float or None)
+        The pooled likelihood and its standard error (``None`` without ``relative_weights``).
+    """
+    total, count = float(np.sum(log_lik)), int(np.sum(n_trials))
+    pooled = float(np.exp(total / count))
+    if relative_weights is None:
+        return pooled, None
+    per_draw_total = np.sum(np.asarray(relative_weights), axis=1, keepdims=True)
+    total_se = float(np.asarray(_autocorrelated_se(per_draw_total))[0])
+    return pooled, pooled * total_se / count

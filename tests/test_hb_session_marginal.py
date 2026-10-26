@@ -1,0 +1,309 @@
+"""Session-marginal against trial-marginal scoring of held-out sessions.
+
+The two scores average over a held-out session's unseen session-level parameters at different
+places: per trial, or over the whole session. These tests pin down where they must agree, a
+case where they provably differ, and whether the session-marginal's reported Monte Carlo error
+is honest.
+"""
+
+import unittest
+
+from tests._hb_deps import assert_deps_present
+
+import numpy as np
+
+try:
+    import jax
+
+    from aind_dynamic_foraging_models.hierarchical_bayes.heldout import (
+        batched_heldout_log_lik,
+        batched_heldout_scores,
+        pooled_likelihood,
+    )
+    from aind_dynamic_foraging_models.hierarchical_bayes.likelihood import (
+        hattori2019_choice_prob,
+    )
+    from aind_dynamic_foraging_models.hierarchical_bayes.model import (
+        hattori2019_session_params,
+    )
+
+    HAS_JAX = True
+except ImportError:  # pragma: no cover - exercised only without the bayes extra
+    HAS_JAX = False
+
+assert_deps_present(HAS_JAX)
+
+N_PARAMS = 5
+BIAS = 4  # position of bias_l in the unconstrained vector
+
+
+def _samples(mu, log_sigma, n_draws, n_subjects=1):
+    """Posterior draws that put every draw at the same ``(mu_p, log_sigma)``."""
+    shape = (n_draws, n_subjects, N_PARAMS)
+    return {
+        "mu_p": np.broadcast_to(np.asarray(mu, dtype=float), shape).copy(),
+        "log_sigma": np.broadcast_to(np.asarray(log_sigma, dtype=float), shape).copy(),
+    }
+
+
+def _sessions(n_sessions, n_trials, seed=0):
+    """Random choice and reward histories; scoring does not need them to be realistic."""
+    rng = np.random.default_rng(seed)
+    choices = rng.integers(0, 2, size=(n_sessions, n_trials))
+    rewards = (rng.random((n_sessions, n_trials)) < 0.4).astype(float)
+    return choices, rewards
+
+
+def _score(samples, choices, rewards, seed=0, **kwargs):
+    """Score every session as belonging to subject 0."""
+    return batched_heldout_scores(
+        samples, np.zeros(len(choices), dtype=int), choices, rewards,
+        rng_key=jax.random.PRNGKey(seed), **kwargs,
+    )
+
+
+@unittest.skipUnless(HAS_JAX, "requires the 'bayes' extra (jax, numpyro)")
+class TestWhereTheScoresAgree(unittest.TestCase):
+    """Cases where averaging per trial and per session must give the same number."""
+
+    def test_single_trial_sessions_agree_exactly(self):
+        """With one trial, the session's likelihood is the trial's probability."""
+        choices, rewards = _sessions(6, 1)
+        scores = _score(_samples(np.zeros(N_PARAMS), np.zeros(N_PARAMS), 400), choices, rewards)
+        np.testing.assert_allclose(scores["session_marginal"], scores["trial_marginal"],
+                                   rtol=1e-5)
+
+    def test_zero_spread_gives_the_plain_log_likelihood(self):
+        """With no between-session spread every draw is ``mu_p``, so nothing is averaged."""
+        mu = np.array([0.3, -0.5, -1.0, 0.4, 0.2])
+        choices, rewards = _sessions(3, 60)
+        scores = _score(_samples(mu, np.full(N_PARAMS, -30.0), 50), choices, rewards)
+
+        params = hattori2019_session_params(mu)
+        expected = []
+        for c, r in zip(choices, rewards):
+            prob = np.asarray(hattori2019_choice_prob(c, r, **params))
+            expected.append(np.sum(np.log(prob[c, np.arange(len(c))])))
+        np.testing.assert_allclose(scores["session_marginal"], expected, rtol=1e-4)
+        np.testing.assert_allclose(scores["trial_marginal"], expected, rtol=1e-4)
+
+    def test_log_lik_is_the_trial_marginal(self):
+        """The joint scorer's trial-marginal is the original scorer's, from the same draws.
+
+        The original replays through ``hattori2019_choice_prob``; the joint scorer derives
+        probabilities from the Q trajectory instead, so the two agree to rounding.
+        """
+        samples = _samples(np.zeros(N_PARAMS), np.full(N_PARAMS, -0.5), 64, n_subjects=2)
+        choices, rewards = _sessions(5, 40)
+        subjects = np.array([0, 1, 0, 1, 1])
+        key = jax.random.PRNGKey(3)
+        old, counts = batched_heldout_log_lik(samples, subjects, choices, rewards,
+                                              rng_key=key, session_chunk=2)
+        new = batched_heldout_scores(samples, subjects, choices, rewards,
+                                     rng_key=key, session_chunk=2)
+        np.testing.assert_allclose(new["trial_marginal"], old, rtol=1e-5)
+        np.testing.assert_array_equal(new["n_trials"], counts)
+
+
+@unittest.skipUnless(HAS_JAX, "requires the 'bayes' extra (jax, numpyro)")
+class TestConfidentlyWrongDraws(unittest.TestCase):
+    """A draw that is almost certain of the wrong action must score at its true likelihood."""
+
+    def test_session_marginal_is_not_floored(self):
+        """Ten right choices against a left bias of 30: about -300, not ten floors of 1e-10."""
+        mu = np.zeros(N_PARAMS)
+        mu[BIAS] = 30.0
+        choices, rewards = np.ones((1, 10), dtype=int), np.zeros((1, 10))
+        scores = _score(_samples(mu, np.full(N_PARAMS, -30.0), 20), choices, rewards)
+        expected = 10 * -np.logaddexp(0.0, 30.0)  # log sigmoid(-30), ten times
+        self.assertAlmostEqual(scores["session_marginal"][0], expected, delta=1e-3)
+        # The trial-marginal keeps its historical floor, so its old numbers stay reproducible.
+        self.assertAlmostEqual(scores["trial_marginal"][0], 10 * np.log(1e-10), delta=1e-3)
+
+
+@unittest.skipUnless(HAS_JAX, "requires the 'bayes' extra (jax, numpyro)")
+class TestWhereTheScoresDiffer(unittest.TestCase):
+    """A closed-form case: each draw is a near-deterministic left or right chooser.
+
+    With an enormous spread on ``bias_l`` alone, half the draws choose left with probability
+    ~1 and half choose right. Four left choices in a row are then generated by half the
+    draws, so the session-marginal is log 0.5. Averaged per trial, each trial gets 0.5 and the
+    trial-marginal is log 0.5**4. A session that switches sides is generated by no draw.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        """Score an all-left and a switching session under the split prior."""
+        log_sigma = np.full(N_PARAMS, -30.0)
+        log_sigma[BIAS] = np.log(1e4)
+        choices = np.array([[0, 0, 0, 0], [0, 1, 0, 1]])
+        rewards = np.zeros((2, 4))
+        cls.scores = _score(_samples(np.zeros(N_PARAMS), log_sigma, 4000), choices, rewards)
+
+    def test_session_marginal_is_the_fraction_of_left_choosers(self):
+        """All-left: about half the draws generate it."""
+        self.assertAlmostEqual(self.scores["session_marginal"][0], np.log(0.5), delta=0.05)
+
+    def test_trial_marginal_counts_that_fraction_once_per_trial(self):
+        """All-left, per trial: the same fraction ``f`` of left choosers, four times over.
+
+        Both scores come from the same draws, so this holds whatever ``f`` they drew, up to
+        the few draws whose bias is too small to saturate.
+        """
+        log_f = self.scores["session_marginal"][0]
+        self.assertAlmostEqual(self.scores["trial_marginal"][0], 4 * log_f, delta=0.01)
+
+    def test_switching_session_is_near_impossible(self):
+        """No draw generates left-right-left-right; the trial-marginal still allows it."""
+        f = np.exp(self.scores["session_marginal"][0])
+        self.assertLess(self.scores["session_marginal"][1], np.log(1e-3))
+        self.assertAlmostEqual(self.scores["trial_marginal"][1],
+                               2 * np.log(f) + 2 * np.log(1 - f), delta=0.01)
+
+
+@unittest.skipUnless(HAS_JAX, "requires the 'bayes' extra (jax, numpyro)")
+class TestMonteCarloError(unittest.TestCase):
+    """The reported error and ESS describe the estimator, not just decorate it."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Repeat one estimate under many keys to see its real spread."""
+        cls.samples = _samples(np.zeros(N_PARAMS), np.full(N_PARAMS, -0.7), 200)
+        cls.choices, cls.rewards = _sessions(1, 50, seed=7)
+        runs = [_score(cls.samples, cls.choices, cls.rewards, seed=s) for s in range(40)]
+        cls.estimates = np.array([r["session_marginal"][0] for r in runs])
+        cls.reported_se = np.array([r["session_marginal_se"][0] for r in runs])
+
+    def test_reported_error_matches_the_spread_across_keys(self):
+        """Delta-method SE agrees with the empirical standard deviation within a factor 2."""
+        ratio = np.median(self.reported_se) / np.std(self.estimates, ddof=1)
+        self.assertGreater(ratio, 0.5)
+        self.assertLess(ratio, 2.0)
+
+    def test_more_session_draws_raise_the_ess_and_cut_the_error(self):
+        """``n_theta_per_draw`` multiplies the draws the estimate rests on."""
+        one = _score(self.samples, self.choices, self.rewards, seed=1)
+        eight = _score(self.samples, self.choices, self.rewards, seed=1, n_theta_per_draw=8)
+        self.assertGreater(eight["weight_ess"][0], 4 * one["weight_ess"][0])
+        self.assertLess(eight["session_marginal_se"][0], one["session_marginal_se"][0])
+
+    def test_replicates_of_one_posterior_draw_do_not_shrink_the_error(self):
+        """Replicates share their posterior draw, so they add no independent information.
+
+        With negligible session spread, every replicate of a posterior draw is the same
+        draw. The posterior means vary, so the error comes from them alone and must not fall
+        as replicates are added.
+        """
+        rng = np.random.default_rng(2)
+        samples = {
+            "mu_p": rng.normal(0.0, 0.3, (200, 1, N_PARAMS)),
+            "log_sigma": np.full((200, 1, N_PARAMS), -30.0),
+        }
+        one = _score(samples, self.choices, self.rewards, seed=4)
+        eight = _score(samples, self.choices, self.rewards, seed=4, n_theta_per_draw=8)
+        np.testing.assert_allclose(eight["session_marginal"], one["session_marginal"], rtol=1e-5)
+        np.testing.assert_allclose(eight["session_marginal_se"], one["session_marginal_se"],
+                                   rtol=1e-3)
+
+    def test_autocorrelated_posterior_draws_widen_the_error(self):
+        """MCMC draws are correlated; the error must reflect that, not assume independence.
+
+        Posterior means follow an AR(1) chain with correlation 0.8, about nine draws per
+        independent one. Repeating the whole chain shows the estimate's real spread, which
+        the reported error must match; treating draws as independent would understate it
+        about threefold. (The delta method itself runs ~20% low when few draws carry the
+        weight, and at correlation 0.95 the ESS estimate is too noisy to rely on.)
+        """
+        rng = np.random.default_rng(5)
+        n_draws, rho = 400, 0.8
+        estimates, reported = [], []
+        for _ in range(30):
+            chain = np.zeros((n_draws, 1, N_PARAMS))
+            chain[0] = rng.normal(0.0, 0.3, (1, N_PARAMS))
+            for t in range(1, n_draws):
+                chain[t] = rho * chain[t - 1] + np.sqrt(1 - rho ** 2) * rng.normal(
+                    0.0, 0.3, (1, N_PARAMS))
+            samples = {"mu_p": chain, "log_sigma": np.full_like(chain, -30.0)}
+            scores = _score(samples, self.choices, self.rewards)
+            estimates.append(scores["session_marginal"][0])
+            reported.append(scores["session_marginal_se"][0])
+        ratio = np.median(reported) / np.std(estimates, ddof=1)
+        self.assertGreater(ratio, 0.6)
+        self.assertLess(ratio, 1.5)
+
+    def test_ess_is_bounded_by_the_draw_count(self):
+        """ESS lies between one draw and all of them."""
+        scores = _score(self.samples, self.choices, self.rewards)
+        self.assertGreaterEqual(scores["weight_ess"][0], 1.0)
+        self.assertLessEqual(scores["weight_ess"][0], 200.0 + 1e-6)
+
+
+@unittest.skipUnless(HAS_JAX, "requires the 'bayes' extra (jax, numpyro)")
+class TestBatching(unittest.TestCase):
+    """Masking and chunking behave as they do for the trial-marginal."""
+
+    def test_masked_trials_are_not_scored(self):
+        """A session scored with half its trials masked equals the unmasked half alone."""
+        samples = _samples(np.zeros(N_PARAMS), np.full(N_PARAMS, -30.0), 20)
+        choices, rewards = _sessions(2, 30)
+        mask = np.ones_like(choices, dtype=bool)
+        mask[:, 15:] = False
+        masked = _score(samples, choices, rewards, valid_mask=mask)
+        short = _score(samples, choices[:, :15], rewards[:, :15])
+        np.testing.assert_allclose(masked["session_marginal"], short["session_marginal"],
+                                   rtol=1e-5)
+        np.testing.assert_array_equal(masked["n_trials"], [15, 15])
+
+    def test_chunking_keeps_estimates_within_their_error(self):
+        """Different chunk sizes redraw latents but agree within the reported error."""
+        samples = _samples(np.zeros(N_PARAMS), np.full(N_PARAMS, -0.7), 300)
+        choices, rewards = _sessions(6, 30)
+        small = _score(samples, choices, rewards, session_chunk=2)
+        large = _score(samples, choices, rewards, session_chunk=64)
+        gap = np.abs(small["session_marginal"] - large["session_marginal"])
+        bound = 5 * np.hypot(small["session_marginal_se"], large["session_marginal_se"])
+        self.assertTrue(np.all(gap < bound), f"gap {gap} exceeds {bound}")
+
+
+@unittest.skipUnless(HAS_JAX, "requires the 'bayes' extra (jax, numpyro)")
+class TestPooledLikelihood(unittest.TestCase):
+    """The trial-weighted pooled likelihood and its jointly estimated error."""
+
+    def test_pools_by_trials_not_by_session(self):
+        """exp(total log likelihood / total trials)."""
+        pooled, se = pooled_likelihood(np.array([-10.0, -30.0]), np.array([20, 40]))
+        self.assertAlmostEqual(pooled, np.exp(-40.0 / 60))
+        self.assertIsNone(se)
+
+    def test_sessions_sharing_draws_do_not_average_their_errors_away(self):
+        """Nine copies of one session's error add linearly, not in quadrature.
+
+        Scored from the same posterior draws, identical sessions carry identical Monte Carlo
+        error. Pooling them must report nine times one session's error in the total, where
+        treating them as independent would report three times.
+        """
+        rng = np.random.default_rng(0)
+        column = 1.0 + 0.2 * rng.standard_normal((300, 1))
+        one_total_se = float(np.std(column, ddof=1))
+        log_lik, n_trials = np.full(9, -50.0), np.full(9, 100)
+        pooled, se = pooled_likelihood(log_lik, n_trials, np.repeat(column, 9, axis=1))
+        _, se_one = pooled_likelihood(log_lik[:1], n_trials[:1], column)
+        # Same relative error per trial: nine times the total error over nine times the trials.
+        self.assertAlmostEqual(se / pooled, se_one / np.exp(-0.5), places=10)
+        self.assertGreater(se_one, 0.0)
+        self.assertLess(one_total_se, 1.0)
+
+    def test_scored_sessions_feed_the_pooled_error(self):
+        """End to end: the scorer's relative weights pool to a finite, positive error."""
+        samples = _samples(np.zeros(N_PARAMS), np.full(N_PARAMS, -0.7), 200)
+        choices, rewards = _sessions(4, 30)
+        scores = _score(samples, choices, rewards)
+        self.assertEqual(scores["relative_weights"].shape, (200, 4))
+        np.testing.assert_allclose(scores["relative_weights"].mean(axis=0), 1.0, rtol=1e-5)
+        pooled, se = pooled_likelihood(scores["session_marginal"], scores["n_trials"],
+                                       scores["relative_weights"])
+        self.assertTrue(0.0 < se < pooled)
+
+
+if __name__ == "__main__":
+    unittest.main()

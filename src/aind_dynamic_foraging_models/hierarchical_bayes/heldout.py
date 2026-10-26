@@ -33,6 +33,18 @@ POPULATION_SITES = (
     "log_sigma_spread",
 )
 
+# The fixed hyperprior that turns :func:`adapt_subjects_batched` into
+# :func:`~aind_dynamic_foraging_models.hierarchical_bayes.model.hattori2019_two_level` with its
+# default priors: ``mu_p ~ Normal(0, 1)`` and ``log sigma ~ Normal(-1, 1)`` on every parameter.
+# Passed where a population point estimate would go, it conditions each held-out subject on
+# its own context sessions alone, with no population level and no training subjects.
+FIXED_HYPERPRIOR = {
+    "population_mean": np.zeros(len(HATTORI2019_PARAMS)),
+    "population_scale": np.ones(len(HATTORI2019_PARAMS)),
+    "log_sigma_mean": np.full(len(HATTORI2019_PARAMS), -1.0),
+    "log_sigma_spread": np.ones(len(HATTORI2019_PARAMS)),
+}
+
 
 def population_point_estimate(samples):
     """Reduce a fitted population posterior to the point estimate used for adaptation.
@@ -334,18 +346,122 @@ def fit_adaptation_batched(
         Draws with a leading subject axis: ``mu_p`` and ``log_sigma`` are
         ``(n_draws, n_subjects, n_params)``.
     """
+    mcmc = _run_adaptation(
+        context_choices, context_rewards, population, rng_key=rng_key,
+        session_mask=session_mask, valid_mask=valid_mask, num_warmup=num_warmup,
+        num_samples=num_samples, num_chains=1, beta_max=beta_max, progress_bar=progress_bar,
+    )
+    return mcmc.get_samples()
+
+
+def fit_heldout_two_level(
+    context_choices,
+    context_rewards,
+    *,
+    rng_key,
+    session_mask=None,
+    valid_mask=None,
+    num_warmup=500,
+    num_samples=500,
+    num_chains=4,
+    beta_max=10.0,
+    progress_bar=False,
+):
+    """Fit a two-level model to each held-out subject's context sessions, with diagnostics.
+
+    Each subject gets subject-level hyperparameters over session-level parameters under
+    :data:`FIXED_HYPERPRIOR`, with no population level: the model is
+    :func:`~aind_dynamic_foraging_models.hierarchical_bayes.model.hattori2019_two_level`,
+    batched across subjects. Subjects are independent, so one batched sampler fits them all.
+
+    Several chains are run so that each subject can be checked on its own. The sampler is
+    shared, so a divergence belongs to the joint batch and cannot be attributed to one
+    subject; R-hat and ESS can, and are returned per subject.
+
+    Parameters
+    ----------
+    context_choices, context_rewards : array_like, shape (n_subjects, n_context, n_trials)
+        Context sessions, padded on the session and trial axes.
+    rng_key : jax.Array
+        Sampler key.
+    session_mask, valid_mask : array_like of bool, optional
+        As for :func:`adapt_subjects_batched`.
+    num_warmup, num_samples : int, optional
+        Per chain.
+    num_chains : int, optional
+        Chains, run vectorised on one device.
+    beta_max : float, optional
+        Upper bound of ``softmax_inverse_temperature``.
+    progress_bar : bool, optional
+        Show NumPyro's progress bar.
+
+    Returns
+    -------
+    samples : dict of str to jnp.ndarray
+        Draws pooled over chains: ``mu_p`` and ``log_sigma`` are
+        ``(num_chains * num_samples, n_subjects, n_params)``, as
+        :func:`batched_heldout_log_lik` takes them.
+    diagnostics : dict
+        ``max_r_hat`` and ``min_ess_bulk``, each shape ``(n_subjects,)``, the worst value over
+        that subject's ``mu_p`` and ``log_sigma``; and ``divergences``, the joint count.
+    """
+    mcmc = _run_adaptation(
+        context_choices, context_rewards, FIXED_HYPERPRIOR, rng_key=rng_key,
+        session_mask=session_mask, valid_mask=valid_mask, num_warmup=num_warmup,
+        num_samples=num_samples, num_chains=num_chains, beta_max=beta_max,
+        progress_bar=progress_bar,
+    )
+    return mcmc.get_samples(), subject_diagnostics(mcmc)
+
+
+def subject_diagnostics(mcmc):
+    """Per-subject worst-case R-hat and bulk ESS over ``mu_p`` and ``log_sigma``.
+
+    Parameters
+    ----------
+    mcmc : numpyro.infer.MCMC
+        A finished run of :func:`adapt_subjects_batched` with at least two chains.
+
+    Returns
+    -------
+    dict
+        ``max_r_hat`` and ``min_ess_bulk`` of shape ``(n_subjects,)``, and ``divergences``.
+    """
+    from numpyro.diagnostics import effective_sample_size, split_gelman_rubin
+
+    grouped = mcmc.get_samples(group_by_chain=True)
+    r_hat, ess = [], []
+    for site in ("mu_p", "log_sigma"):
+        draws = np.asarray(grouped[site])            # (chains, draws, subjects, params)
+        r_hat.append(np.asarray(split_gelman_rubin(draws)))
+        ess.append(np.asarray(effective_sample_size(draws)))
+    diverging = mcmc.get_extra_fields().get("diverging")
+    return {
+        "max_r_hat": np.max(np.concatenate(r_hat, axis=-1), axis=-1),
+        "min_ess_bulk": np.min(np.concatenate(ess, axis=-1), axis=-1),
+        "divergences": int(np.sum(np.asarray(diverging))) if diverging is not None else None,
+    }
+
+
+def _run_adaptation(
+    context_choices, context_rewards, population, *, rng_key, session_mask, valid_mask,
+    num_warmup, num_samples, num_chains, beta_max, progress_bar,
+):
+    """Run NUTS on :func:`adapt_subjects_batched`; chains are vectorised on one device."""
     mcmc = MCMC(
         NUTS(adapt_subjects_batched),
         num_warmup=num_warmup,
         num_samples=num_samples,
-        num_chains=1,
+        num_chains=num_chains,
+        chain_method="vectorized",
         progress_bar=progress_bar,
     )
     mcmc.run(
         rng_key, context_choices, context_rewards, population,
         session_mask, valid_mask, beta_max=beta_max,
+        extra_fields=("diverging",),
     )
-    return mcmc.get_samples()
+    return mcmc
 
 
 def batched_choice_prob(

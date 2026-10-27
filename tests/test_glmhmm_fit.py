@@ -154,6 +154,34 @@ class TestSpecialCasesAndRefits(unittest.TestCase):
                                           jax.random.PRNGKey(3), num_restarts=2, max_iters=20)
         self.assertEqual(best.log_joint[-1], max(r.log_joint[-1] for r in results))
 
+    def test_frozen_initial_and_transitions_are_kept(self):
+        """Untrainable pi and A survive EM unchanged; the emissions still move."""
+        model = GLMHMM(2, N_LAGS, "hurdle")
+        start, props = model.initialize(jax.random.PRNGKey(5), transition_matrix=TRANSITIONS,
+                                        initial_probs=INITIAL, noise_scale=0.3)
+        frozen = props._replace(
+            initial=props.initial._replace(
+                probs=props.initial.probs.__class__(trainable=False)),
+            transitions=props.transitions._replace(
+                transition_matrix=props.transitions.transition_matrix.__class__(trainable=False)),
+        )
+        result = fit_em(model, start, frozen, self.buckets, max_iters=5)
+        np.testing.assert_allclose(result.params.initial.probs, INITIAL)
+        np.testing.assert_allclose(result.params.transitions.transition_matrix, TRANSITIONS)
+        self.assertFalse(np.allclose(result.params.emissions.side_weights,
+                                     start.emissions.side_weights))
+
+    def test_last_log_joint_describes_the_returned_parameters(self):
+        """On the iteration-limit path the final entry is the returned fit's own objective."""
+        model = GLMHMM(2, N_LAGS, "hurdle")
+        start, props = model.initialize(jax.random.PRNGKey(6), noise_scale=0.3)
+        for max_iters in (1, 3):
+            result = fit_em(model, start, props, self.buckets, max_iters=max_iters, tol=0.0)
+            self.assertFalse(result.converged)
+            self.assertEqual(len(result.log_joint), max_iters + 1)
+            again = fit_em(model, result.params, props, self.buckets, max_iters=0)
+            self.assertAlmostEqual(result.log_joint[-1], again.log_joint[0], places=6)
+
     def test_subject_refit_from_global_parameters(self):
         """A refit under the subject prior starts from given parameters and improves them."""
         model = GLMHMM(2, N_LAGS, "hurdle")

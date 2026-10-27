@@ -62,6 +62,15 @@ class TestDefaultDesign(unittest.TestCase):
         np.testing.assert_array_equal(inputs[:, cols["mask"]], 1.0)
         np.testing.assert_array_equal(inputs[:, cols["regressors"]], self.X)
 
+    def test_session_shorter_than_the_history(self):
+        """Fewer trials than lags: the design builds, with the unreachable lags all zero."""
+        X = default_design(np.array([1, 0, 2]), np.array([1, 0, 0]), n_lags=5)
+        self.assertEqual(X.shape, (3, 21))
+        names = column_names(5)
+        np.testing.assert_array_equal(X[:, names.index("RewC_3")], 0.0)
+        self.assertEqual(X[2, names.index("RewC_2")], 1.0)  # trial 2, two back: rewarded right
+        np.testing.assert_array_equal(default_design([2], [0], 3)[0, :-1], 0.0)
+
     def test_rejects_bad_codes_and_unknown_design(self):
         """Out-of-range choices or rewards, and unknown designs, fail loudly."""
         with self.assertRaises(ValueError):

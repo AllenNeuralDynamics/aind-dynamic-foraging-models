@@ -42,7 +42,8 @@ def _lagged(values, n_lags):
     """
     n_trials = len(values)
     out = np.zeros((n_trials, n_lags))
-    for lag in range(1, n_lags + 1):
+    # Lags at or beyond the session length see only trials before the start: all zero.
+    for lag in range(1, min(n_lags, n_trials - 1) + 1):
         out[lag:, lag - 1] = values[: n_trials - lag]
     return out
 

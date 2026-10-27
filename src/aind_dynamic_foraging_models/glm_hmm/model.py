@@ -296,13 +296,16 @@ def _bucket_e_step(model, params, labels, inputs):
 
 @partial(jax.jit, static_argnums=0)
 def _m_step(model, params, props, initial_counts, transition_counts, emission_stats, prior):
-    """MAP update of every component from summed statistics."""
+    """MAP update of every trainable component from summed statistics."""
     K = model.num_states
-    initial = params.initial._replace(probs=dirichlet_map(initial_counts, prior.alpha))
-    concentration = prior.alpha + prior.stickiness * jnp.eye(K)
-    transitions = params.transitions._replace(
-        transition_matrix=dirichlet_map(transition_counts, concentration)
-    )
+    initial, transitions = params.initial, params.transitions
+    if props.initial.probs.trainable:
+        initial = initial._replace(probs=dirichlet_map(initial_counts, prior.alpha))
+    if props.transitions.transition_matrix.trainable:
+        concentration = prior.alpha + prior.stickiness * jnp.eye(K)
+        transitions = transitions._replace(
+            transition_matrix=dirichlet_map(transition_counts, concentration)
+        )
     emissions, _ = model.emission_component.m_step(
         params.emissions, props.emissions, emission_stats, None, prior.sigma
     )
@@ -341,7 +344,7 @@ def fit_em(
     prior : Prior
         MAP hyperparameters.
     max_iters : int
-        Maximum EM iterations.
+        Maximum number of M-steps (``0`` only evaluates the log joint at ``params``).
     tol : float
         Stop when the log joint improves by less than ``tol`` nats per real trial, so the
         criterion means the same for one subject's sessions and for a whole cohort.
@@ -360,7 +363,9 @@ def fit_em(
         blocks = model.emission_component.prepare_m_step(labels_flat, inputs_flat)
         block_rows = [(jnp.asarray(b.X), jnp.asarray(b.targets)) for b in blocks]
         history, converged = [], False
-        for iteration in range(max_iters):
+        # max_iters M-steps; the log joint is evaluated before each and once more after the
+        # last, so history[-1] always describes the returned parameters.
+        for iteration in range(max_iters + 1):
             loglik, initial_counts, transition_counts, gammas = 0.0, 0.0, 0.0, []
             for bucket, selector in zip(buckets, selectors):
                 ll, ic, tc, gamma = _bucket_e_step(model, params, bucket.labels, bucket.inputs)
@@ -373,6 +378,8 @@ def fit_em(
                 print(f"EM iteration {iteration}: log joint {history[-1]:.4f}")
             if len(history) > 1 and abs(history[-1] - history[-2]) < tol * n_trials:
                 converged = True
+                break
+            if iteration == max_iters:
                 break
             gamma = np.concatenate(gammas)
             emission_stats = tuple(

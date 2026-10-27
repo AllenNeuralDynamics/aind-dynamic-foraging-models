@@ -28,6 +28,8 @@ def _style():
         "ytick.labelsize": 5.5, "legend.fontsize": 5.5, "axes.linewidth": 0.5,
         "xtick.major.width": 0.5, "ytick.major.width": 0.5, "lines.linewidth": 0.9,
         "axes.spines.top": False, "axes.spines.right": False, "svg.fonttype": "none",
+        # Deterministic SVGs: fixed element ids, so regenerating identical data changes no bytes.
+        "svg.hashsalt": "glmhmm-recovery",
     })
 
 
@@ -82,7 +84,7 @@ def figure_weights(size, out):
         _weight_scatter(row_axes[0], row, emission)
         _transitions(row_axes[1], result["true_transitions"], row["fit_transitions"])
     fig.tight_layout()
-    fig.savefig(out / "fig_recovery_weights.svg")
+    fig.savefig(out / "fig_recovery_weights.svg", metadata={"Date": None})
     plt.close(fig)
 
 
@@ -128,7 +130,7 @@ def figure_size(size, out):
         ax.set(xlabel="simulated trials", ylabel=label)
     axes[0].legend(frameon=False)
     fig.tight_layout()
-    fig.savefig(out / "fig_recovery_vs_size.svg")
+    fig.savefig(out / "fig_recovery_vs_size.svg", metadata={"Date": None})
     plt.close(fig)
 
 
@@ -161,7 +163,7 @@ def figure_reference_split(size, out):
         ax.legend(frameon=False, loc="upper left", handletextpad=0.2)
     fig.suptitle(f"reference emission, {row['n_sessions']} sessions", fontsize=6.5)
     fig.tight_layout()
-    fig.savefig(out / "fig_reference_split.svg")
+    fig.savefig(out / "fig_reference_split.svg", metadata={"Date": None})
     plt.close(fig)
 
 
@@ -180,7 +182,7 @@ def figure_selection(selection, out):
            ylabel="held-out log lik. vs true model\n(millinats / trial)", xticks=range(1, 6))
     ax.legend(frameon=False)
     fig.tight_layout()
-    fig.savefig(out / "fig_model_selection.svg")
+    fig.savefig(out / "fig_model_selection.svg", metadata={"Date": None})
     plt.close(fig)
 
 
@@ -206,7 +208,7 @@ def figure_per_mouse(per_mouse, out):
     axes[1].axhline(0, color="0.7", lw=0.5)
     axes[1].set_ylabel("held-out likelihood - mouse's oracle")
     fig.tight_layout()
-    fig.savefig(out / "fig_per_mouse.svg")
+    fig.savefig(out / "fig_per_mouse.svg", metadata={"Date": None})
     plt.close(fig)
 
 

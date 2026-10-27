@@ -57,13 +57,17 @@ DEVICE_ENV = "AIND_GLMHMM_DEVICE"
 def _compute():
     """float64, on the CPU unless ``AIND_GLMHMM_DEVICE=gpu``.
 
-    The CPU is the default because the work suits it: the E-step is a sequential scan over
-    trials (latency-bound on a GPU), and the M-step solves Newton systems of a few dozen
-    unknowns on compressed rows. The CPU is also the only device that works with the pinned
-    stack: jax-cuda12-plugin 0.6.1 caps cuBLAS below 12.9 but not cuSOLVER, and with the
-    cuSOLVER pip resolves, ``jnp.linalg.solve`` on a GPU fails with ``gpusolverDnCreate ...
-    cuSolver internal error``. That was verified on a V100 with cuSOLVER 11.7.5 and 11.7.3.
-    Set ``AIND_GLMHMM_DEVICE=gpu`` once that is fixed.
+    The CPU is the default because of the CUDA libraries pip resolves for jax-cuda12-plugin
+    0.6.1. The plugin caps cuBLAS below 12.9 but not cuSOLVER, and cuSOLVER 11.7.5 (CUDA 12.9)
+    over cuBLAS 12.8 makes ``jnp.linalg.solve`` on a GPU fail with ``gpusolverDnCreate ...
+    cuSolver internal error``. Pinning ``nvidia-cusolver-cu12==11.7.3.90``,
+    ``nvidia-cusparse-cu12==12.5.8.93`` and ``nvidia-nvjitlink-cu12==12.8.93`` fixes it
+    (verified 2026-10-27 on V100, A100 and L40S, in clean environments).
+
+    With that pin, use ``AIND_GLMHMM_DEVICE=gpu`` for a large pooled fit. At 4.9M trials and
+    K = 10 the GPU E-step is 5-6x faster than 8 CPU cores, and the L = 10 M-step 25-130x
+    faster. Keep small fits, such as one mouse's refit, on the CPU, where they run about twice
+    as fast.
     """
     device = os.environ.get(DEVICE_ENV, "cpu").lower()
     with enable_x64(), jax.default_device(jax.devices(device)[0]):

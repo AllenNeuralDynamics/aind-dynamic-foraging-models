@@ -14,7 +14,8 @@ try:
     import tensorflow_probability.substrates.jax  # noqa: F401
 
     # Tests also call internals (Newton, E-step) that bypass the package's CPU default; on a
-    # GPU host those would hit the cuSOLVER failure the default exists for (model._compute).
+    # GPU host whose CUDA libraries are not pinned, those would hit the cuSOLVER failure that
+    # the default exists for (model._compute).
     jax.config.update("jax_platforms", "cpu")
 except ImportError as error:  # pragma: no cover - depends on the installed extra
     IMPORT_ERROR = error

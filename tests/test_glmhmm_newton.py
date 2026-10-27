@@ -65,6 +65,23 @@ class TestLogisticNewton(unittest.TestCase):
                 values.append(float(logistic_objective(theta, X, targets, weights, 1e-4)))
         self.assertTrue(np.all(np.diff(values) >= -1e-9), values)
 
+    def test_makes_progress_from_a_flat_far_start(self):
+        """Bias 10 on balanced data (curvature ~0): the step is huge, backtracking must reach it.
+
+        Eight halvings rejected every step here and left the iterate stuck at the start.
+        """
+        X = np.ones((10_000, 1))
+        targets = np.tile([0.0, 1.0], 5_000)
+        weights = np.ones(10_000)
+        with enable_x64():
+            start = jnp.array([10.0])
+            first = fit_logistic(start, X, targets, weights, 0.25, num_steps=1)
+            final = fit_logistic(start, X, targets, weights, 0.25, num_steps=10)
+            before = float(logistic_objective(start, X, targets, weights, 0.25))
+            after_one = float(logistic_objective(first, X, targets, weights, 0.25))
+        self.assertGreater(after_one, before + 1000.0)  # one step already moves far
+        self.assertAlmostEqual(float(final[0]), 0.0, places=6)  # the MAP bias is 0
+
     def test_k1_parity_with_unpenalised_sklearn_on_su2022(self):
         """With a negligible prior and unit weights, Newton equals sklearn's MLE."""
         rng = np.random.default_rng(2)

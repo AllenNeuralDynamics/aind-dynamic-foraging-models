@@ -11,9 +11,12 @@ converge in a handful of iterations from the previous EM iterate. dynamax's stoc
 nor regularised; that is the reason this module exists.
 
 Each step uses the analytic gradient and Hessian, solves for the Newton direction, and
-backtracks from step 1 by halving until the Armijo condition holds (at most 8 halvings; if none
-holds, the iterate is kept). The full step is almost always accepted, so a step costs one
-objective evaluation. The objective therefore never decreases, which keeps EM monotone.
+backtracks from step 1 by halving until the Armijo condition holds. The objective is concave,
+so the Newton direction is an ascent direction and a small enough step always improves it; the
+halving cap (50, down to a step of ~1e-15) only guards against a direction that is not finite.
+From a far start the curvature can be nearly flat and the full step huge, so many halvings
+may be needed. Near the optimum the full step is accepted, so a step costs one objective
+evaluation. The objective never decreases, which keeps EM monotone.
 
 The data enter only through the rows of X, their outcomes and their weights, so callers pass
 *unique* rows with summed weights (see ``emissions.prepare_m_step``): exact, and for short
@@ -26,7 +29,7 @@ against a prior term of 1/sigma^2 ~ 1e-4 and are badly conditioned in float32.
 import jax
 import jax.numpy as jnp
 
-_MAX_HALVINGS = 8
+_MAX_HALVINGS = 50
 _ARMIJO = 1e-4
 
 

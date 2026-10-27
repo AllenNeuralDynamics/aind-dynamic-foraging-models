@@ -245,7 +245,8 @@ def dirichlet_map(counts, concentration):
     jnp.ndarray
         Probabilities, same shape as ``counts``.
     """
-    mass = jnp.maximum(counts + concentration - 1.0, 0.0)
+    # Offset first: counts + concentration - 1 rounds a tiny count away at concentration 1.
+    mass = jnp.maximum(counts + (concentration - 1.0), 0.0)
     total = mass.sum(-1, keepdims=True)
     uniform = jnp.ones_like(mass) / mass.shape[-1]
     return jnp.where(total > 0, mass / jnp.where(total > 0, total, 1.0), uniform)

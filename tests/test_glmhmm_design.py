@@ -80,6 +80,14 @@ class TestDefaultDesign(unittest.TestCase):
         with self.assertRaises(KeyError):
             build_inputs([0, 1], [0, 1], 1, design="nope")
 
+    def test_rejects_fractional_choices(self):
+        """A fractional choice is malformed input, not a left or right code after truncation."""
+        for bad in ([0, 1.9], [0, -0.5], [2.5, 1]):
+            with self.assertRaises(ValueError):
+                default_design(bad, [0, 0], 1)
+        np.testing.assert_array_equal(default_design([0.0, 1.0], [0, 1], 1),
+                                      default_design([0, 1], [0, 1], 1))
+
 
 @unittest.skipUnless(DEPS_PRESENT, "needs the glmhmm extra")
 class TestSu2022Parity(unittest.TestCase):

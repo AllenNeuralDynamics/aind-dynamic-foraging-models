@@ -256,7 +256,9 @@ al. 2022, *Nat Neurosci* 25:201) over **left / right / ignore** choices, on
 
 - Two emissions, both exactly normalised over the three outcomes: `hurdle` (per state, an
   engagement GLM on unsigned history and a side GLM on signed history) and `reference`
-  (per state, one multinomial GLM with ignore as the zero-logit class, as in `ssm`).
+  (per state, one multinomial GLM with ignore as the zero-logit class, as in Faeze's `ssm`
+  fits). How they differ, and which to use:
+  [`glm_hmm/README.md`](src/aind_dynamic_foraging_models/glm_hmm/README.md).
 - Regressors (`design.py`): RewC and UnrC lags (signed), Ignored and Rewarded lags (unsigned),
   and a bias; trial 0 of every session sees the bias alone.
 - Fitting (`model.py`): EM over many variable-length sessions, bucketed by length with exact

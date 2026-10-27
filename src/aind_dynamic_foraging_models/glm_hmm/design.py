@@ -66,10 +66,12 @@ def default_design(choices, rewards, n_lags):
         Shape (T, 4 * n_lags + 1): the regressor blocks described in the module docstring
         plus the bias column (no mask column; :func:`build_inputs` appends it).
     """
-    choices = np.asarray(choices, dtype=int)
+    choices = np.asarray(choices)
     rewards = np.asarray(rewards, dtype=float)
+    # Validate before casting: an int cast would turn a malformed 1.9 into a valid 1.
     if not np.isin(choices, (LEFT, RIGHT, IGNORE)).all():
         raise ValueError("choices must be 0 (left), 1 (right) or 2 (ignore)")
+    choices = choices.astype(int)
     if not np.isin(rewards, (0, 1)).all():
         raise ValueError("rewards must be 0 or 1")
     ignored = choices == IGNORE

@@ -249,6 +249,14 @@ class TestDirichlet(unittest.TestCase):
         np.testing.assert_allclose(mle[1], [1 / 3] * 3)
         np.testing.assert_allclose(smoothed[0], [4 / 7, 2 / 7, 1 / 7])
 
+    def test_map_keeps_tiny_counts_at_alpha_one(self):
+        """At alpha = 1 the MLE of tiny expected counts is their ratio, not uniform or zero."""
+        with enable_x64():
+            tiny = np.asarray(dirichlet_map(jnp.array([1e-17, 2e-17]), 1.0))
+            rare = np.asarray(dirichlet_map(jnp.array([5.0, 1e-17]), 1.0))
+        np.testing.assert_allclose(tiny, [1 / 3, 2 / 3])
+        self.assertGreater(rare[1], 0.0)
+
     def test_log_prior_is_finite_with_zero_transitions_at_alpha_one(self):
         """xlogy keeps 0 * log 0 = 0, where tfp's Dirichlet would give NaN."""
         model, params, _ = _model_and_params("reference")

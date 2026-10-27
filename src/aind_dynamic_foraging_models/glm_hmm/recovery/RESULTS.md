@@ -31,45 +31,36 @@ tables below are regenerated from `results/*.json`:
   the share of trials whose most likely smoothed state is the true one, beside the same share
   under the true parameters (the oracle). Raw weights are reported too.
 
-## Figures
-
-| figure | shows |
-|---|---|
-| `fig_recovery_weights.svg` | true vs recovered weights and transitions, 400 sessions |
-| `fig_recovery_vs_size.svg` | class-probability, weight and transition error, and the decoding gap to the oracle, vs simulated trials |
-| `fig_reference_split.svg` | reference emission: side contrast (right − left) vs common mode ((right + left) / 2) |
-| `fig_model_selection.svg` | held-out log likelihood vs fitted K, relative to the true model |
-| `fig_per_mouse.svg` | per-mouse refits: weight error to each mouse's own truth, and held-out likelihood |
-
 ## Findings
 
 1. **The hurdle model is recovered, and the errors shrink at the √N rate of a consistent
-   estimator.** At 400 sessions (about 190k trials):
-   - median weight error 0.02 and RMSE 0.04;
-   - transitions within about 1e-3;
+   estimator** (Fig. 1). At 400 sessions (about 190k trials):
+   - median weight error 0.02 and RMSE 0.04 (Fig. 2, top left);
+   - transitions within about 1e-3 (Fig. 2, top right);
    - class probabilities within 0.003;
-   - decoding equal to the oracle;
+   - decoding equal to the oracle (Fig. 1, right);
    - every fit converged and reached a log joint above the truth's (as a maximum should).
 2. **The reference model recovers its probabilities, transitions and decoding just as well, but
-   not every raw weight.** The error sits in one combination: the common mode of the left and
-   right logits of state 0, the state that almost never ignores (p(ignore | no history) ≈ 0).
+   not every raw weight** (Fig. 1; Fig. 2, bottom). The error sits in one combination: the
+   common mode of the left and right logits of state 0, the state that almost never ignores
+   (p(ignore | no history) ≈ 0).
    - Adding the same amount to both of its logits changes only p(ignore), which the data
      bound but do not pin.
    - Its side contrast is recovered (RMSE 0.35 at 400 sessions), and both combinations of the
-     other two states are recovered to within 0.07.
+     other two states are recovered to within 0.07 (Fig. 3).
    - Consequence: compare reference fits through their side contrasts and class
      probabilities, never through raw logits; this matters for the Faeze cross-check. Report
      a state's p(ignore), not its engagement or common-mode weights.
-3. **K selection finds the true K for both emissions.** The held-out score rises to K = 3 and
-   is flat or slightly lower after it. At K = 3 the fitted model is within 1 (hurdle) and 4
-   (reference) millinats per trial of the true model.
+3. **K selection finds the true K for both emissions** (Fig. 4). The held-out score rises to
+   K = 3 and is flat or slightly lower after it. At K = 3 the fitted model is within 1
+   (hurdle) and 4 (reference) millinats per trial of the true model.
 4. **The per-mouse protocol** was run on 12 mice with 14 context sessions each, the real
    held-out cohort's median, and an *assumed* between-mouse spread of N(0, 0.3²) on every
    weight:
    - The refit improves held-out prediction for every mouse, closing most of the gap from
-     zero-shot to the mouse's own oracle.
+     zero-shot to the mouse's own oracle (Fig. 5, right).
    - For hurdle, the typical weight moves toward the mouse's truth: median error improves for
-     12/12 mice.
+     12/12 mice (Fig. 5, left).
    - Weakly constrained coefficients get noisier under the subject prior (σ = 2, centred at
      0), so RMSE is mixed. Hurdle state 0 improves for 12/12 mice, but the rarely used state
      1 improves for 2/12.
@@ -81,7 +72,8 @@ tables below are regenerated from `results/*.json`:
      sensitivity variant and not implemented here.
 
 5. **The implementation agrees with ssm, the package Ashwood et al. and Faeze used**
-   (`ssm_parity.py`; reference emission, the same data, start and priors).
+   (`ssm_parity.py`; reference emission, the same data, start and priors; no figure, see the
+   "Cross-check against ssm" tables below).
    - At the truth, at the shared start, and at our fit, the two packages compute the same log
      likelihood to about 1e-11 nats over 45,700 trials.
    - From the same start, our EM reaches an 11-nat higher likelihood than ssm's, about 6×
@@ -90,6 +82,58 @@ tables below are regenerated from `results/*.json`:
      two well-determined states (within 0.01), and both scatter on the never-ignoring state.
      That state is weak in both packages, so this is the model's identifiability and not a
      library artefact.
+
+## Figures
+
+Regenerated from `results/*.json` by `python parameter_recovery.py --plot`. "Oracle" is the
+same quantity under the true parameters. Colours: hurdle and reference emission (Fig. 1, 4,
+5) or true state (Fig. 2, 3).
+
+**Figure 1. Recovery against data size.** Simulated sessions at 25, 100 and 400 (x axis:
+simulated trials, log scale); dots are the 3 seeds, lines their mean. Left to right:
+- class-probability error, mean |p fit − p true| per trial;
+- median |w fit − w true| over all weights;
+- max |A fit − A true| over transitions;
+- state decoding, oracle accuracy minus fit accuracy.
+
+The dashed line is ∝ 1/√N, anchored at hurdle's smallest size.
+
+![Figure 1](fig_recovery_vs_size.svg)
+
+**Figure 2. Recovered weights and transitions at 400 sessions (seed 0).** Top row hurdle,
+bottom row reference.
+- **Left:** every recovered weight against its true value, one colour per state; the legend
+  gives each state's occupancy and RMSE. The grey line is identity, and points beyond the axes
+  are clipped to the edge.
+- **Right:** the recovered transition matrix, with true values in brackets; shading is log10 of
+  the recovered probability.
+
+![Figure 2](fig_recovery_weights.svg)
+
+**Figure 3. Reference emission: which combination of the left and right weights is recovered**
+(400 sessions, seed 0).
+- **Left:** side contrast (right − left).
+- **Right:** common mode ((right + left) / 2).
+
+The legend gives each state's RMSE. State 0, the one that almost never ignores, has a
+well-recovered side contrast but an unidentified common mode.
+
+![Figure 3](fig_reference_split.svg)
+
+**Figure 4. K selection.** Each emission is fitted at K = 1–5 on 100 simulated sessions, from
+the K = 3 truth. The y axis is the held-out log likelihood on 50 other sessions, relative to
+the true model, in millinats per trial. The dashed line marks the true model, and the grey band
+the true K.
+
+![Figure 4](fig_model_selection.svg)
+
+**Figure 5. The per-mouse protocol, 12 simulated mice per emission.** Each line is one mouse.
+- **Left:** median |weight − the mouse's own true weight|, under the global fit and after that
+  mouse's refit.
+- **Right:** held-out likelihood minus the mouse's oracle, for zero-shot, refit and oracle (the
+  oracle sits at 0).
+
+![Figure 5](fig_per_mouse.svg)
 
 <!-- BEGIN tables (plot_recovery.py) -->
 

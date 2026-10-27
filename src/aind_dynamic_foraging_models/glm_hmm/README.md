@@ -44,8 +44,9 @@ reasons.
   compiler, so it cannot be installed next to the rest of our stack. dynamax is the JAX
   state-space-model library from the same lab, written with Kevin Murphy's group, and it is
   actively maintained.
-- **A hurdle emission.** `ssm` offers only the multinomial with a reference class. The hurdle
-  (engagement × side) emission is new here, and it is the one that recovers better.
+- **A hurdle emission.** `ssm` ships only the multinomial with a reference class; a hurdle
+  emission would need a custom observation class there. The hurdle (engagement × side)
+  emission is new here, and it is the one that recovers better.
 - **What the study protocol needs:**
   - variable-length sessions with exact masking (`ssm` loops over sessions in Python);
   - explicit priors for Ashwood et al.'s global → per-mouse MAP recipe;
@@ -60,7 +61,8 @@ Newton M-steps, masking and a length-bucketed EM driver. The versions dynamax ne
 (`dynamax==1.0.3`, one `tfp-nightly` build) are pinned in the `[glmhmm]` extra.
 
 **Comparability with `ssm`.** For the reference emission, both packages compute the same
-likelihood to about 1e-11 nats, so results stay comparable with Ashwood et al. and Faeze.
+likelihood to about 1e-11 nats, so results stay comparable with Faeze's fits. Ashwood et al.
+used `ssm`'s binary form (C = 2) on left / right choices only.
 
 ## Regressors (both emissions)
 
@@ -97,8 +99,9 @@ Two separate logistic regressions per state:
 
 ## `reference`: one multinomial, ignore as the zero logit
 
-One multinomial regression per state, as in `ssm`'s `InputDrivenObservations` (C = 3), which
-Ashwood et al. and Faeze used:
+One multinomial regression per state: `ssm`'s `InputDrivenObservations` with C = 3, as in
+Faeze's fits. (Ashwood et al. 2022 used the binary form, C = 2, on left / right choices
+only; the 3-class form with ignore as the zero-logit reference is Faeze's.)
 
     logit_left = W_k,left · x_t     logit_right = W_k,right · x_t     logit_ignore = 0
 
@@ -128,7 +131,7 @@ m = (W_right + W_left) / 2 (the common mode):
 | side preference and engagement | separate | a stronger preference raises p(respond) |
 | parameters per state (L = 5) | 22 | 42 |
 | M-step per state | two logistic regressions | one multinomial (42 × 42 Hessian) |
-| comparable with | the wrapper's engage / LR_engaged split, logistic choice kernels | Ashwood et al. 2022, `ssm`, Faeze's fits |
+| comparable with | the wrapper's engage / LR_engaged split, logistic choice kernels | Faeze's 3-class `ssm` fits |
 
 **Neither model contains the other.** The hurdle's log-odds of left against ignore are not
 linear in x, and the reference cannot keep side history out of p(ignore). So which fits
@@ -186,7 +189,7 @@ and its scripts and tables are added under `benchmarks/` by
   It has fewer parameters and is recovered better, every weight included. Its halves map
   onto the wrapper's engagement and `LR_engaged` metrics, and its side weights read
   directly as a choice kernel.
-- **`reference`** is for comparing with published and earlier GLM-HMM fits (Ashwood et al.,
-  `ssm`, Faeze), or when side history may drive disengagement.
+- **`reference`** is for comparing with Faeze's 3-class `ssm` fits, or when side history may
+  drive disengagement.
 
 Pick the emission with `GLMHMM(num_states, n_lags, emission="hurdle" | "reference")`.

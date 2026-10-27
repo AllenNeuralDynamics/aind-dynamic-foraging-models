@@ -1,4 +1,4 @@
-"""Cross-check against Linderman's ``ssm`` (what Ashwood et al. and Faeze used).
+"""Cross-check against Linderman's ``ssm`` (as Faeze used it; Ashwood et al. used its C = 2 form).
 
 The reference emission is ``ssm``'s ``InputDrivenObservations`` with ``C = 3`` and sticky
 transitions, so both implementations can fit the same model to the same data from the same

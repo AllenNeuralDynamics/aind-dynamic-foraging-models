@@ -15,7 +15,8 @@ Two parameterisations, both exactly normalised over the three outcomes:
 
 ``reference``
     Per state k, one multinomial GLM over every regressor, ignore as the zero-logit class
-    (``ssm``'s ``InputDrivenObservations``, as in Ashwood et al. 2022 and Faeze's fit)::
+    (``ssm``'s ``InputDrivenObservations`` with C = 3, as in Faeze's fit; Ashwood et al. 2022
+    used its binary C = 2 form, on left / right choices only)::
 
         logit_left = W_k,left . x,  logit_right = W_k,right . x,  logit_ignore = 0
 

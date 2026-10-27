@@ -71,9 +71,10 @@ tables below are regenerated from `results/*.json`:
      shrinkage: penalise θ − θ_global instead of θ). It is listed in study 14's plan as a
      sensitivity variant and not implemented here.
 
-5. **The implementation agrees with ssm, the package Ashwood et al. and Faeze used**
-   (`ssm_parity.py`; reference emission, the same data, start and priors; no figure, see the
-   "Cross-check against ssm" tables below).
+5. **The implementation agrees with ssm in the 3-class form Faeze used** (Ashwood et al. used
+   ssm's binary C = 2 form, on left / right choices only)
+   (`ssm_parity.py`: reference emission, with the same data, start and priors. There is no
+   figure; see the "Cross-check against ssm" tables below).
    - At the truth, at the shared start, and at our fit, the two packages compute the same log
      likelihood to about 1e-11 nats over 45,700 trials.
    - From the same start, our EM reaches an 11-nat higher likelihood than ssm's, about 6×

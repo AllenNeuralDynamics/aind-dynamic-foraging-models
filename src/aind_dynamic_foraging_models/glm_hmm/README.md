@@ -23,19 +23,17 @@ An input-driven hidden Markov model with GLM emissions (Ashwood et al. 2022, *Na
 
 Faeze's earlier GLM-HMM was an `ssm` fit with the reference emission, on about 400 mice and
 mature sessions only. It had no held-out mice and could not be compared directly with our
-RNN models of behaviour (the GRU and disRNN). This package re-implements the model for six
+RNN models of behaviour (the GRU and disRNN). This package re-implements the model for five
 reasons.
 
-- **One shared framework.** The GLM-HMM runs through the same stack as the GRU:
+- **One shared framework.** The GLM-HMM runs through the same stack as the GRU
+  ([the dynamic-foraging BFM framework](https://allenneuraldynamics.github.io/aind-dynamic-foraging-bfm-atlas/#/about)):
   - the wrapper's `GLMHMMTrainer` and the dispatcher's `model=glmhmm`, via `run_hpc`;
   - the same data loader, train / eval split and held-out cohort;
   - the same metric code and W&B keys as study 02's 3-way GRU.
 
   So Faeze's model, and the new hurdle variant, are scored on exactly the GRU's trials
   (study 14).
-- **AI-native.** It is JAX on dynamax: the same accelerator stack and environments as the
-  GRU. It is jit-compiled and runs on a CPU or a GPU, it is launched with the same Hydra,
-  W&B, HPC and Beaker tooling, and it is written as small pure functions with tests.
 - **Faster fitting.** The M-step is an exact Newton solve on compressed rows, and E-steps are
   vectorised over length buckets of sessions. On the same data, from the same start, this EM
   reaches a higher likelihood than `ssm`'s, about 6× faster (8.8 s vs 55.3 s on 45,700

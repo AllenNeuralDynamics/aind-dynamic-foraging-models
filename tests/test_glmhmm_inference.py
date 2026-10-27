@@ -90,6 +90,50 @@ class TestBruteForce(unittest.TestCase):
 
 
 @unittest.skipUnless(DEPS_PRESENT, "needs the glmhmm extra")
+class TestRareState(unittest.TestCase):
+    """A state with predicted probability below 1e-8 that later trials support.
+
+    dynamax's ``hmm_smoother`` zeroes such a state (``isclose`` to 0 at 1e-8); the two-filter
+    smoother does not. Switching costs 1e-9 so the rare state stays above the separate 1e-15
+    floor in dynamax's normalisation, which this test is not about.
+    """
+
+    def test_smoothed_posteriors_match_enumeration(self):
+        """Smoothed posteriors and E-step counts equal brute force when a switch is rare."""
+        model = GLMHMM(2, N_LAGS, "hurdle")
+        zeros = np.zeros(5)
+        with enable_x64():
+            # State 0 responds (engagement bias +7), state 1 ignores (-7).
+            params, _ = model.initialize(
+                initial_probs=np.array([1 - 1e-9, 1e-9]),
+                transition_matrix=np.array([[1 - 1e-9, 1e-9], [1e-9, 1 - 1e-9]]),
+                side_weights=np.zeros((2, 5)),
+                engage_weights=np.stack([np.append(zeros[:4], 7.0), np.append(zeros[:4], -7.0)]),
+            )
+        choices = np.array([0, 1, 0, 2, 2, 2, 2, 2])
+        rewards = np.zeros(8, dtype=int)
+        x = build_inputs(choices, rewards, N_LAGS)
+        with enable_x64():
+            class_lp = np.asarray(model.emission_component.class_log_probs(params.emissions, x))
+        lp_y = class_lp[np.arange(len(choices)), :, choices]
+        log_pi = np.log(np.asarray(params.initial.probs))
+        log_A = np.log(np.asarray(params.transitions.transition_matrix))
+        paths = np.array(list(itertools.product(range(2), repeat=len(choices))))
+        scores = log_pi[paths[:, 0]] + lp_y[np.arange(len(choices)), paths].sum(1)
+        scores += log_A[paths[:, :-1], paths[:, 1:]].sum(1)
+        weights = np.exp(scores - logsumexp(scores))
+        expected = np.stack([(weights[:, None] * (paths == k)).sum(0) for k in range(2)], 1)
+        self.assertGreater(expected[-1, 1], 0.99)  # the data do support the switch
+        post = state_posteriors(model, params, make_buckets([(choices, rewards)], N_LAGS))[0]
+        np.testing.assert_allclose(post["smoothed"], expected, atol=1e-9)
+        with enable_x64():
+            bucket = make_buckets([(choices, rewards)], N_LAGS)[0]
+            _, _, transitions, _ = _bucket_e_step(model, params, bucket.labels, bucket.inputs)
+        expected_switches = (weights * ((paths[:, :-1] == 0) & (paths[:, 1:] == 1)).sum(1)).sum()
+        self.assertAlmostEqual(float(np.asarray(transitions)[0, 1]), expected_switches, places=8)
+
+
+@unittest.skipUnless(DEPS_PRESENT, "needs the glmhmm extra")
 class TestPaddingInvariance(unittest.TestCase):
     """Bucket size, trailing padding and filler rows change nothing."""
 

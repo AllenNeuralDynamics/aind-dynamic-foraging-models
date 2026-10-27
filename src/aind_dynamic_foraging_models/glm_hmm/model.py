@@ -35,7 +35,7 @@ import numpy as np
 from dynamax.hidden_markov_model.inference import (
     hmm_filter,
     hmm_posterior_mode,
-    hmm_smoother,
+    hmm_two_filter_smoother,
 )
 from dynamax.hidden_markov_model.models.abstractions import HMM
 from dynamax.hidden_markov_model.models.initial import StandardHMMInitialState
@@ -266,6 +266,25 @@ def make_buckets(sessions, n_lags, design="default", bucket_size=64):
     return buckets
 
 
+def _smoother(initial_probs, transition_matrix, logliks):
+    """Forward-backward posteriors of one session.
+
+    dynamax's two-filter smoother (the one its own E-step uses), not ``hmm_smoother``: the
+    latter zeroes any state whose predicted probability is within 1e-8 of 0 (``isclose``),
+    which drops a state that later trials strongly support -- reachable here, since the
+    alpha = 1 global fit can drive transitions that low. dynamax also sums transition
+    probabilities, with the same cutoff and into padding too, so that output is unused;
+    ``compute_trans_probs=False`` cannot be passed because it is not a static argument of
+    dynamax's jitted smoother.
+
+    Known limit: dynamax's filters raise any normalised probability below 1e-15 to 1e-15.
+    That changes a one-step predictive probability by at most ~1e-15, but a state held
+    below 1e-15 and then strongly supported by later trials (transitions near 1e-12) gets
+    a slightly inflated smoothed posterior.
+    """
+    return hmm_two_filter_smoother(initial_probs, transition_matrix, logliks)
+
+
 @partial(jax.jit, static_argnums=0)
 def _bucket_e_step(model, params, labels, inputs):
     """Sufficient statistics of one bucket under ``params``.
@@ -278,10 +297,7 @@ def _bucket_e_step(model, params, labels, inputs):
     def one(y, x):
         """Statistics of one session."""
         initial_probs, transition_matrix, logliks = model._inference_args(params, y, x)
-        # dynamax also sums transition probabilities (into padding too, hence unused here);
-        # ``compute_trans_probs=False`` cannot be passed because it is not a static argument
-        # of dynamax's jitted smoother.
-        post = hmm_smoother(initial_probs, transition_matrix, logliks)
+        post = _smoother(initial_probs, transition_matrix, logliks)
         mask = x[:, -1]
         # p(z_t = i, z_{t+1} = j | y) = filtered_t(i) A_ij smoothed_{t+1}(j) / predicted_{t+1}(j)
         predicted = post.predicted_probs[1:]
@@ -491,7 +507,7 @@ def _bucket_posteriors(model, params, labels, inputs):
     def one(y, x):
         """Posteriors of one session."""
         initial_probs, transition_matrix, logliks = model._inference_args(params, y, x)
-        post = hmm_smoother(initial_probs, transition_matrix, logliks)
+        post = _smoother(initial_probs, transition_matrix, logliks)
         # Padding is likelihood-neutral for filtering and smoothing, but not for Viterbi: a
         # max-product through padded steps can change the best final real state. Identity
         # transitions into padded trials carry every path through unchanged.

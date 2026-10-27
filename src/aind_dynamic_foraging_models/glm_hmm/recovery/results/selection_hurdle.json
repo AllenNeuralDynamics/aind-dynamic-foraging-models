@@ -1,0 +1,44 @@
+{
+ "rows": [
+  {
+   "num_states": 1,
+   "heldout_log_lik": -13938.920469421977,
+   "n_trials": 23805,
+   "heldout_likelihood": 0.5568018132347643,
+   "train_log_joint": -26803.099536897316
+  },
+  {
+   "num_states": 2,
+   "heldout_log_lik": -13647.883697207066,
+   "n_trials": 23805,
+   "heldout_likelihood": 0.563650981541045,
+   "train_log_joint": -26255.938260259365
+  },
+  {
+   "num_states": 3,
+   "heldout_log_lik": -13402.470158758637,
+   "n_trials": 23805,
+   "heldout_likelihood": 0.5694919002814801,
+   "train_log_joint": -26011.319842882316
+  },
+  {
+   "num_states": 4,
+   "heldout_log_lik": -13414.092269333252,
+   "n_trials": 23805,
+   "heldout_likelihood": 0.5692139300061454,
+   "train_log_joint": -26105.278438691366
+  },
+  {
+   "num_states": 5,
+   "heldout_log_lik": -13433.579258429969,
+   "n_trials": 23805,
+   "heldout_likelihood": 0.5687481569848617,
+   "train_log_joint": -26185.832689282055
+  }
+ ],
+ "oracle_likelihood": 0.570109614343519,
+ "true_k": 3,
+ "experiment": "selection",
+ "emission": "hurdle",
+ "seconds": 167.32871913909912
+}

@@ -81,6 +81,20 @@ bayes = [
                   # writer, which cannot store the string attributes ArviZ attaches
 ]
 
+glmhmm = [
+    # Same jax bound as [bayes]: the disRNN wrapper pins jax[cuda12]==0.6.1.
+    'jax>=0.4.25,<0.7',
+    'dynamax==1.0.3',
+    # PINNED TO ONE NIGHTLY ON PURPOSE. dynamax declares tfp-nightly with no version, and
+    # nightlies differ in what jax and numpy they work with: under jax 0.6.1 + numpy 2.4.6
+    # the 2025 builds (dev20250601, dev20250901) fail 47 of dynamax's 62 HMM tests on
+    # np.reshape(newshape=...), which numpy 2.4 removed, while dev20260101 onwards pass all
+    # 62. This build is dated to dynamax 1.0.3's release (2026-10-13) and passes 62/62.
+    'tfp-nightly==0.26.0.dev20261013',
+    'jaxtyping==0.3.11',
+    'fastprogress==1.1.6',
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
@@ -117,6 +131,10 @@ omit = [
     "*__init__*",
     "*/hierarchical_bayes/*",
     "*/tests/test_hb_*",
+    # glm_hmm needs the `glmhmm` extra; its own CI job measures it (.coveragerc-glmhmm).
+    "*/glm_hmm/*",
+    "*/tests/test_glmhmm_*",
+    "*/tests/_glmhmm_*",
 ]
 source = ["aind_dynamic_foraging_models", "tests"]
 

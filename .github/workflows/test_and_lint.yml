@@ -59,3 +59,29 @@ jobs:
       run: |
         coverage run --rcfile=.coveragerc-hb -m unittest discover -s tests -p "test_hb_*.py" -v
         coverage report --rcfile=.coveragerc-hb
+
+  # The GLM-HMM subpackage needs dynamax and a pinned tfp-nightly (the [glmhmm] extra).
+  # 3.12 to match beaker/Dockerfile, where it runs.
+  glm-hmm:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [ '3.12' ]
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v3
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: python -m pip install -e .[dev,glmhmm]
+    - name: Run linter checks
+      run: flake8 src/aind_dynamic_foraging_models/glm_hmm tests/test_glmhmm_*.py tests/_glmhmm_*.py && interrogate --verbose src/aind_dynamic_foraging_models/glm_hmm
+    - name: Run GLM-HMM tests with coverage
+      # AIND_GLMHMM_REQUIRE_DEPS=1: this job installs [glmhmm], so a failed import is a bug,
+      # not a reason to skip.
+      env:
+        AIND_GLMHMM_REQUIRE_DEPS: "1"
+      run: |
+        coverage run --rcfile=.coveragerc-glmhmm -m unittest discover -s tests -p "test_glmhmm_*.py" -v
+        coverage report --rcfile=.coveragerc-glmhmm

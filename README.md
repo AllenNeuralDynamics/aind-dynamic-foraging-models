@@ -245,3 +245,26 @@ the per-session MLE fitting in `generative_model`.
 - Design decisions and their rationale: [`src/aind_dynamic_foraging_models/hierarchical_bayes/docs/design-decisions.md`](src/aind_dynamic_foraging_models/hierarchical_bayes/docs/design-decisions.md)
 - Validation against the reference Stan implementation, and performance measurements:
   [`src/aind_dynamic_foraging_models/hierarchical_bayes/benchmarks/RESULTS.md`](src/aind_dynamic_foraging_models/hierarchical_bayes/benchmarks/RESULTS.md)
+
+## GLM-HMM
+
+`aind_dynamic_foraging_models.glm_hmm` fits an input-driven HMM with GLM emissions (Ashwood et
+al. 2022, *Nat Neurosci* 25:201) over **left / right / ignore** choices, on
+[dynamax](https://github.com/probml/dynamax).
+
+    pip install aind-dynamic-foraging-models[glmhmm]
+
+- Two emissions, both exactly normalised over the three outcomes: `hurdle` (per state, an
+  engagement GLM on unsigned history and a side GLM on signed history) and `reference`
+  (per state, one multinomial GLM with ignore as the zero-logit class, as in `ssm`).
+- Regressors (`design.py`): RewC and UnrC lags (signed), Ignored and Rewarded lags (unsigned),
+  and a bias; trial 0 of every session sees the bias alone.
+- Fitting (`model.py`): EM over many variable-length sessions, bucketed by length with exact
+  masking. The emission M-step is exact Newton with a Gaussian prior; pi and A use a Dirichlet
+  MAP. Priors are arguments, so one model serves a near-flat global fit (`GLOBAL_PRIOR`) and
+  per-subject MAP refits started from it (`SUBJECT_PRIOR`).
+- Scoring: `predictive_log_probs` is the forward filter's one-step-ahead
+  log p(y_t | y_<t) per class. It is the held-out quantity, and it never uses later trials.
+  `state_posteriors` gives filtered and smoothed posteriors and Viterbi paths.
+- `tfp-nightly` is pinned to one build in the extra: dynamax leaves it unpinned, and only some
+  nightlies work with jax 0.6.1 and numpy 2.4.

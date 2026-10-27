@@ -2,17 +2,20 @@
 
 Three modes, all on the ``train`` sessions of a cohort file written by ``dump_cohort.py``:
 
-    python time_fit.py COHORT.npz parts    hurdle 10 5   # one iteration, split by step
+    python time_fit.py COHORT.npz parts    hurdle 10 5   # steady iteration cost, by step
     python time_fit.py COHORT.npz converge hurdle 10 5   # one restart to convergence
     python time_fit.py COHORT.npz refits   hurdle 10 5   # 30 per-mouse refits
 
-``parts`` compiles with one EM call, then times three iterations. It splits them into the
-E-step, the host-side aggregation of the posteriors and the M-step, and reports the one-time
-row compression separately. ``converge`` fits K = 1 and then one K-state restart from its
-weights plus noise, as the trainer does, up to ``--max-iters``, and saves the log-joint
-trajectory next to the cohort file. ``refits`` refits 30 training mice under the subject
-prior from that restart's parameters and scores their eval sessions, as the trainer's
-K-selection step does. Each mode prints one line starting with its name in capitals.
+``parts`` compiles with one EM call, then times calls of 3 and 6 iterations. Their
+difference is the steady cost of complete EM iterations, split into the E-step, the host-side
+aggregation of the posteriors and the M-step. What remains of a call is reported as its fixed
+cost: setup, the final scoring E-step and the row compression.
+
+``converge`` fits K = 1 and then one K-state restart from its weights plus noise, as the
+trainer does, up to ``--max-iters``, and saves the log-joint trajectory next to the cohort
+file. ``refits`` refits 30 training mice under the subject prior from that restart's
+parameters and scores their eval sessions, as the trainer's K-selection step does. Each mode
+prints one line starting with its name in capitals.
 """
 
 import argparse
@@ -71,18 +74,34 @@ def sessions(cohort, split, subjects=None):
 
 
 def time_parts(model, buckets):
-    """Compile with one EM iteration, then time three and split them by step."""
+    """Steady cost of one EM iteration, split by step, plus the fixed cost of a call.
+
+    One call compiles. Then two calls of 3 and 6 iterations, both from the compiled start, run
+    the same setup, row compression and final scoring E-step. Their difference is therefore
+    exactly 3 complete EM iterations (E-step, aggregation, M-step), and dividing it by 3 gives
+    the steady cost of one.
+    """
     params, props = model.initialize(jax.random.PRNGKey(0), noise_scale=0.2)
     first = fit_em(model, params, props, buckets, GLOBAL_PRIOR, max_iters=1, tol=0.0)
-    for key in TIMES:
-        TIMES[key] = 0.0
-    started = time.time()
-    fit = fit_em(model, first.params, props, buckets, GLOBAL_PRIOR, max_iters=3, tol=0.0)
-    seconds = time.time() - started
-    # max_iters=3 runs 4 E-steps, 3 aggregations and 3 M-steps, after one row compression.
-    return (f"steady {(seconds - TIMES['compress']) / 3:.2f}s per iteration + row compression "
-            f"{TIMES['compress']:.1f}s per fit_em call [E-step {TIMES['e_step'] / 4:.2f}s, "
-            f"aggregate {TIMES['aggregate'] / 3:.2f}s, M-step {TIMES['m_step'] / 3:.2f}s]; "
+    calls = {}
+    for n_iters in (3, 6):
+        for key in TIMES:
+            TIMES[key] = 0.0
+        started = time.time()
+        fit = fit_em(model, first.params, props, buckets, GLOBAL_PRIOR, max_iters=n_iters,
+                     tol=0.0)
+        calls[n_iters] = (time.time() - started, dict(TIMES), fit)
+    (short, steps_short, _), (long, steps_long, fit) = calls[3], calls[6]
+    per_iter = (long - short) / 3
+
+    def step(name):
+        """Steady seconds per iteration of one step, from the same difference."""
+        return (steps_long[name] - steps_short[name]) / 3
+
+    return (f"steady {per_iter:.2f}s per EM iteration [E-step {step('e_step'):.2f}s, "
+            f"aggregate {step('aggregate'):.2f}s, M-step {step('m_step'):.2f}s]; fixed "
+            f"{short - 3 * per_iter:.1f}s per fit_em call (setup, final scoring E-step, and "
+            f"row compression {steps_short['compress']:.1f}s); "
             f"log joints {np.round(fit.log_joint, 3).tolist()}")
 
 

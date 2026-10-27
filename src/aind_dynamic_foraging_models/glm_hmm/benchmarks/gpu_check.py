@@ -1,4 +1,4 @@
-"""Check that GPU linear algebra works, and report which CUDA libraries were loaded.
+"""Check that linear algebra runs on the GPU, and report the CUDA libraries loaded.
 
     python gpu_check.py
 
@@ -16,10 +16,14 @@ from jax.experimental import enable_x64
 LIBRARIES = ("libcusolver", "libcublas", "libnvJitLink", "libcusparse", "libcudart")
 
 
-def run(label, fn):
-    """Print ``label: ok <value>``, or ``label: FAIL <error>``."""
+def run(label, fn, device):
+    """Print ``label: ok <value>`` if ``fn`` ran on ``device``, else ``label: FAIL <why>``."""
     try:
-        print(f"{label}: ok {float(fn()):.6f}")
+        result = fn()
+        if result.devices() != {device}:
+            print(f"{label}: FAIL ran on {sorted(map(str, result.devices()))}, not {device}")
+            return
+        print(f"{label}: ok {float(result):.6f} on {device}")
     except Exception as error:  # report every failure the same way, then carry on
         print(f"{label}: FAIL {type(error).__name__}: {str(error).splitlines()[0][:150]}")
 
@@ -31,17 +35,22 @@ def loaded_libraries():
 
 
 def main():
-    """Run the checks."""
+    """Run every check on the first GPU; exit with an error if jax sees none."""
     print("jax", jax.__version__, jax.devices())
-    a = jnp.eye(20) * 2.0 + 0.1
-    run("matmul f32", lambda: (a @ a).sum())
-    run("solve f32", lambda: jnp.linalg.solve(a, jnp.ones(20)).sum())
-    with enable_x64():
-        a64 = jnp.eye(20, dtype=jnp.float64) * 2.0 + 0.1
-        run("solve f64", lambda: jnp.linalg.solve(a64, jnp.ones(20)).sum())
-        run("cholesky f64", lambda: jnp.linalg.cholesky(a64).sum())
-        run("batched solve f64", lambda: jnp.linalg.solve(
-            jnp.broadcast_to(a64, (10, 20, 20)), jnp.ones((10, 20, 1))).sum())
+    try:
+        gpu = jax.devices("gpu")[0]
+    except RuntimeError as error:
+        raise SystemExit(f"FAIL: jax sees no GPU ({error}), so there is nothing to check")
+    with jax.default_device(gpu):
+        a = jnp.eye(20) * 2.0 + 0.1
+        run("matmul f32", lambda: (a @ a).sum(), gpu)
+        run("solve f32", lambda: jnp.linalg.solve(a, jnp.ones(20)).sum(), gpu)
+        with enable_x64():
+            a64 = jnp.eye(20, dtype=jnp.float64) * 2.0 + 0.1
+            run("solve f64", lambda: jnp.linalg.solve(a64, jnp.ones(20)).sum(), gpu)
+            run("cholesky f64", lambda: jnp.linalg.cholesky(a64).sum(), gpu)
+            run("batched solve f64", lambda: jnp.linalg.solve(
+                jnp.broadcast_to(a64, (10, 20, 20)), jnp.ones((10, 20, 1))).sum(), gpu)
     print("loaded:", *loaded_libraries(), sep="\n  ")
 
 

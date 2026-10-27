@@ -19,6 +19,50 @@ An input-driven hidden Markov model with GLM emissions (Ashwood et al. 2022, *Na
 | `align.py` | state matching |
 | `recovery/` | parameter recovery and the `ssm` cross-check |
 
+## Why this re-implementation, and why on dynamax
+
+Faeze's earlier GLM-HMM was an `ssm` fit with the reference emission, on about 400 mice and
+mature sessions only. It had no held-out mice and could not be compared directly with our
+neural models. This package re-implements the model for six reasons.
+
+- **One shared framework.** The GLM-HMM runs through the same stack as the GRU:
+  - the wrapper's `GLMHMMTrainer` and the dispatcher's `model=glmhmm`, via `run_hpc`;
+  - the same data loader, train / eval split and held-out cohort;
+  - the same metric code and W&B keys as study 02's 3-way GRU.
+
+  So Faeze's model, and the new hurdle variant, are scored on exactly the GRU's trials
+  (study 14).
+- **AI-native.** It is JAX on dynamax: the same accelerator stack and environments as the
+  GRU. It is jit-compiled and runs on a CPU or a GPU, it is launched with the same Hydra,
+  W&B, HPC and Beaker tooling, and it is written as small pure functions with tests.
+- **Faster fitting.** The M-step is an exact Newton solve on compressed rows, and E-steps are
+  vectorised over length buckets of sessions. On the same data, from the same start, this EM
+  reaches a higher likelihood than `ssm`'s, about 6× faster (8.8 s vs 55.3 s on 45,700
+  trials; `recovery/RESULTS.md`, finding 5). A GPU makes the production fit a further
+  2.7–5.6× faster (see "How well it works").
+- **`ssm` is unmaintained.** Its last commits were two small patches in May 2025, after
+  nothing since October 2022. It has no tagged release, and it needs numpy < 2 and a C
+  compiler, so it cannot be installed next to the rest of our stack. dynamax is the JAX
+  state-space-model library from the same lab, written with Kevin Murphy's group, and it is
+  actively maintained.
+- **A hurdle emission.** `ssm` offers only the multinomial with a reference class. The hurdle
+  (engagement × side) emission is new here, and it is the one that recovers better.
+- **What the study protocol needs:**
+  - variable-length sessions with exact masking (`ssm` loops over sessions in Python);
+  - explicit priors for Ashwood et al.'s global → per-mouse MAP recipe;
+  - forward-filter, one-step-ahead scoring for the held-out likelihood;
+  - state alignment across mice;
+  - posteriors and Viterbi paths for later neural studies.
+
+**Why dynamax as a framework rather than copied code.** It provides the HMM machinery: the
+filter, the two-filter smoother, Viterbi, sampling, and the Dirichlet transition and initial
+components. The model-specific parts plug in as `HMMEmissions` subclasses: the emissions, the
+Newton M-steps, masking and a length-bucketed EM driver. The versions dynamax needs
+(`dynamax==1.0.3`, one `tfp-nightly` build) are pinned in the `[glmhmm]` extra.
+
+**Comparability with `ssm`.** For the reference emission, both packages compute the same
+likelihood to about 1e-11 nats, so results stay comparable with Ashwood et al. and Faeze.
+
 ## Regressors (both emissions)
 
 For lags l = 1..L, with s = +1 for right, −1 for left and 0 for ignore, and r the reward:

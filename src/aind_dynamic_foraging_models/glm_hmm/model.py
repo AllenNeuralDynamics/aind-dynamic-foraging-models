@@ -511,9 +511,13 @@ def _bucket_posteriors(model, params, labels, inputs):
         # Padding is likelihood-neutral for filtering and smoothing, but not for Viterbi: a
         # max-product through padded steps can change the best final real state. Identity
         # transitions into padded trials carry every path through unchanged.
-        into_real = x[1:, -1] > 0
-        K = transition_matrix.shape[0]
-        matrices = jnp.where(into_real[:, None, None], transition_matrix, jnp.eye(K))
+        if x.shape[0] == 1:
+            # A one-trial bucket has no transitions; dynamax's Viterbi still indexes one.
+            matrices = transition_matrix
+        else:
+            into_real = x[1:, -1] > 0
+            K = transition_matrix.shape[0]
+            matrices = jnp.where(into_real[:, None, None], transition_matrix, jnp.eye(K))
         return (
             post.filtered_probs,
             post.smoothed_probs,

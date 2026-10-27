@@ -192,11 +192,14 @@ class TestPaddingInvariance(unittest.TestCase):
 
     def test_viterbi_and_posteriors_do_not_depend_on_padding(self):
         """Identity transitions into padding keep the most likely path unchanged."""
+        # A one-trial session included: its bucket has no transitions at bucket_size=1.
+        sessions = self.sessions + [(np.array([2]), np.array([0]))]
         tight = state_posteriors(self.model, self.params,
-                                 make_buckets(self.sessions, N_LAGS, bucket_size=1))
+                                 make_buckets(sessions, N_LAGS, bucket_size=1))
         wide = state_posteriors(self.model, self.params,
-                                make_buckets(self.sessions, N_LAGS, bucket_size=256))
-        for index in range(len(self.sessions)):
+                                make_buckets(sessions, N_LAGS, bucket_size=256))
+        self.assertEqual(tight[len(sessions) - 1]["viterbi"].shape, (1,))
+        for index in range(len(sessions)):
             np.testing.assert_array_equal(tight[index]["viterbi"], wide[index]["viterbi"])
             np.testing.assert_allclose(tight[index]["smoothed"], wide[index]["smoothed"],
                                        atol=1e-10)

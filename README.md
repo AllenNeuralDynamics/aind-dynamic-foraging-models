@@ -268,3 +268,10 @@ al. 2022, *Nat Neurosci* 25:201) over **left / right / ignore** choices, on
   `state_posteriors` gives filtered and smoothed posteriors and Viterbi paths.
 - `tfp-nightly` is pinned to one build in the extra: dynamax leaves it unpinned, and only some
   nightlies work with jax 0.6.1 and numpy 2.4.
+- Device: float64 on the CPU by default; `AIND_GLMHMM_DEVICE=gpu` moves the fits to a GPU.
+  GPU linear solves need the CUDA solver libraries pinned, as `model._compute` explains. A
+  GPU is faster for a large pooled fit, but not for one mouse's refit.
+- Validation: `glm_hmm/recovery/` simulates from known parameters and refits them, and
+  cross-checks the likelihood against `ssm` (`RESULTS.md`). The study version, including a
+  factorial of designed strategies, is
+  AllenNeuralDynamics/aind-dynamic-foraging-bfm-studies#50.

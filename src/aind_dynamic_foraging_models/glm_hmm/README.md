@@ -101,11 +101,47 @@ a hurdle state's engagement weights a_k.
 - For both emissions, report a state's p(ignore) rather than its engagement or common-mode
   weights.
 
+## How well it works
+
+**Recovery: both emissions work, and the hurdle recovers better.** The full report is
+[`recovery/RESULTS.md`](recovery/RESULTS.md). Parameters fitted to real mice were used to
+simulate closed-loop sessions, which were then refitted with the production protocol.
+- **Both emissions** recover the class probabilities, transitions and state decoding.
+  - At 400 simulated sessions, decoding matches the oracle (the same decoding under the true
+    parameters).
+  - Errors shrink at the 1/√N rate.
+  - K selection finds the true K for both.
+  - The likelihood matches `ssm` to about 1e-11 nats.
+- **The hurdle is recovered more accurately, and fully.** At 400 sessions:
+
+  | | `hurdle` | `reference` |
+  |---|---|---|
+  | class-probability error | 0.0034 | 0.0048 |
+  | median weight error | 0.020 | 0.053 |
+  | weight RMSE | 0.04 | 1.80 |
+  | transition error | 0.0008 | 0.0026 |
+  | gap to the true model, K selection (millinats/trial) | 1 | 4 |
+
+  The reference's large weight RMSE comes from the common mode it cannot pin down (see
+  "How they differ"). In per-mouse refits, the hurdle's median weight error improves for
+  12/12 mice and the reference's for 6/12.
+- These are simulations. Which emission fits real mice better is study 14's held-out
+  comparison.
+
+**Speed.** On study 14's cohort (4.9M trials, K = 10), a GPU runs one EM restart to
+convergence 2.7× (hurdle) to 5.6× (reference) faster than 8 CPU cores at L = 5. Per-mouse
+refits are about 2× faster on the CPU. A GPU needs the CUDA solver pin described in
+`model._compute`. The benchmark is in
+[AllenNeuralDynamics/aind-dynamic-foraging-bfm-wrapper#111](https://github.com/AllenNeuralDynamics/aind-dynamic-foraging-bfm-wrapper/issues/111),
+and its scripts and tables are added under `benchmarks/` by
+[models#83](https://github.com/AllenNeuralDynamics/aind-dynamic-foraging-models/pull/83).
+
 ## Choosing
 
 - **`hurdle`** is the default (`emission: hurdle` in the dispatcher's `model/glmhmm.yaml`).
-  It has fewer parameters and is better identified, its halves map onto the wrapper's
-  engagement and `LR_engaged` metrics, and its side weights read directly as a choice kernel.
+  It has fewer parameters and is recovered better, every weight included. Its halves map
+  onto the wrapper's engagement and `LR_engaged` metrics, and its side weights read
+  directly as a choice kernel.
 - **`reference`** is for comparing with published and earlier GLM-HMM fits (Ashwood et al.,
   `ssm`, Faeze), or when side history may drive disengagement.
 

@@ -109,9 +109,10 @@ simulate closed-loop sessions, which were then refitted with the production prot
 - **Both emissions** recover the class probabilities, transitions and state decoding.
   - At 400 simulated sessions, decoding matches the oracle (the same decoding under the true
     parameters).
-  - Errors shrink at the 1/√N rate.
+  - Probability errors shrink at about the 1/√N rate.
   - K selection finds the true K for both.
-  - The likelihood matches `ssm` to about 1e-11 nats.
+  - The reference likelihood matches `ssm` to about 1e-11 nats; `ssm` has no hurdle
+    emission to compare.
 - **The hurdle is recovered more accurately, and fully.** At 400 sessions:
 
   | | `hurdle` | `reference` |

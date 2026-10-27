@@ -1,0 +1,35 @@
+{
+ "n_trials": 45700,
+ "n_sessions": 100,
+ "ours_iters": 78,
+ "ours_seconds": 8.758826494216919,
+ "ssm_iters": 71,
+ "ssm_seconds": 55.32494401931763,
+ "ours_ll_at_truth": -26253.61026869006,
+ "ours_ll_at_start": -27692.143336272547,
+ "ours_ll_at_ours": -26243.74648483779,
+ "ours_ll_at_ssm": -26254.794374805715,
+ "ssm_ll_at_truth": -26253.610268690063,
+ "ssm_ll_at_start": -27692.14333627254,
+ "ssm_ll_at_ours": -26243.746484837782,
+ "predictive_mae_ours_vs_truth": 0.011195106896936438,
+ "predictive_mae_ssm_vs_truth": 0.011134490923572195,
+ "predictive_mae_ssm_vs_ours": 0.0024449373288087006,
+ "ours_side_rmse_to_truth_by_state": [
+  2.8861632904465604,
+  0.08168278223414681,
+  0.09689189435502052
+ ],
+ "ours_transition_max_err": 0.006236863501123291,
+ "ssm_side_rmse_to_truth_by_state": [
+  2.474865468262417,
+  0.08333606095292617,
+  0.0969892548094207
+ ],
+ "ssm_transition_max_err": 0.0048029026041421785,
+ "ssm_vs_ours_side_rmse_by_state": [
+  2.31851657879407,
+  0.009271325003849721,
+  0.0018714288874513282
+ ]
+}

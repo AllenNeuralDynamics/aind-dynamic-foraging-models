@@ -146,3 +146,6 @@ dmypy.json
 /.codeocean
 
 tests/results/*.patch
+
+# GLM-HMM ssm cross-check intermediates
+src/aind_dynamic_foraging_models/glm_hmm/recovery/results/*.npz

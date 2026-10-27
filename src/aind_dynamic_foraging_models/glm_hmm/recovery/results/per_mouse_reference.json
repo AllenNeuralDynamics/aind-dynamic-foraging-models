@@ -1,0 +1,369 @@
+{
+ "rows": [
+  {
+   "mouse": 0,
+   "n_eval_trials": 7474,
+   "global_weight_rmse": 4.8375796742202155,
+   "refit_weight_rmse": 4.813256172155875,
+   "global_weight_median_err": 0.35441541640789814,
+   "refit_weight_median_err": 0.30030277881086853,
+   "refit_relabelled": true,
+   "global_weight_rmse_by_state": [
+    8.36655963994486,
+    0.3309206672117353,
+    0.3125741776659987
+   ],
+   "refit_weight_rmse_by_state": [
+    8.328477448810183,
+    0.3210884024785913,
+    0.18886651064667637
+   ],
+   "context_occupancy": [
+    974,
+    3378,
+    2162
+   ],
+   "alignment_quality_global": 0.7297264143106565,
+   "alignment_quality_refit": 0.8327510016062943,
+   "refit_em_iters": 20,
+   "zero_shot_likelihood": 0.568962499029523,
+   "refit_likelihood": 0.5966006944853219,
+   "oracle_likelihood": 0.6064153596069944
+  },
+  {
+   "mouse": 1,
+   "n_eval_trials": 6398,
+   "global_weight_rmse": 4.878158641084338,
+   "refit_weight_rmse": 4.900884474201182,
+   "global_weight_median_err": 0.37987592149101124,
+   "refit_weight_median_err": 0.25472073448075677,
+   "refit_relabelled": true,
+   "global_weight_rmse_by_state": [
+    8.434269150352744,
+    0.3214150941686565,
+    0.3861235804841719
+   ],
+   "refit_weight_rmse_by_state": [
+    8.48010323286842,
+    0.28856301092734143,
+    0.24614312303556024
+   ],
+   "context_occupancy": [
+    958,
+    3196,
+    1707
+   ],
+   "alignment_quality_global": 0.83213653670282,
+   "alignment_quality_refit": 0.8794993575651798,
+   "refit_em_iters": 17,
+   "zero_shot_likelihood": 0.5257911860210639,
+   "refit_likelihood": 0.5606299345581448,
+   "oracle_likelihood": 0.5666082896246192
+  },
+  {
+   "mouse": 2,
+   "n_eval_trials": 6360,
+   "global_weight_rmse": 4.963754006466338,
+   "refit_weight_rmse": 4.915505684496991,
+   "global_weight_median_err": 0.35089819360187274,
+   "refit_weight_median_err": 0.3368793705607877,
+   "refit_relabelled": true,
+   "global_weight_rmse_by_state": [
+    8.584429325335009,
+    0.3759651576102744,
+    0.2877235977866288
+   ],
+   "refit_weight_rmse_by_state": [
+    8.480582813423378,
+    0.7268907340322535,
+    0.19476500818367629
+   ],
+   "context_occupancy": [
+    1236,
+    3653,
+    1982
+   ],
+   "alignment_quality_global": 0.7729873633212239,
+   "alignment_quality_refit": 0.6617973503778689,
+   "refit_em_iters": 102,
+   "zero_shot_likelihood": 0.5738459157462023,
+   "refit_likelihood": 0.5899253139802804,
+   "oracle_likelihood": 0.5987188707389893
+  },
+  {
+   "mouse": 3,
+   "n_eval_trials": 6583,
+   "global_weight_rmse": 4.963763573279415,
+   "refit_weight_rmse": 4.900497748154887,
+   "global_weight_median_err": 0.388505342787852,
+   "refit_weight_median_err": 0.48367082575866305,
+   "refit_relabelled": false,
+   "global_weight_rmse_by_state": [
+    8.578406861923137,
+    0.43047759102391187,
+    0.3774535589753563
+   ],
+   "refit_weight_rmse_by_state": [
+    8.460899553219242,
+    0.6277191036778588,
+    0.2525510170750652
+   ],
+   "context_occupancy": [
+    1083,
+    3338,
+    1777
+   ],
+   "alignment_quality_global": 0.7286237088413837,
+   "alignment_quality_refit": 0.6423694812467817,
+   "refit_em_iters": 36,
+   "zero_shot_likelihood": 0.5857102540012027,
+   "refit_likelihood": 0.5969123044853077,
+   "oracle_likelihood": 0.605391161339175
+  },
+  {
+   "mouse": 4,
+   "n_eval_trials": 6571,
+   "global_weight_rmse": 4.99393280744272,
+   "refit_weight_rmse": 5.000507580122905,
+   "global_weight_median_err": 0.33277110921842656,
+   "refit_weight_median_err": 0.4048647447707002,
+   "refit_relabelled": false,
+   "global_weight_rmse_by_state": [
+    8.634542298962595,
+    0.43291303099745504,
+    0.2745182157462485
+   ],
+   "refit_weight_rmse_by_state": [
+    8.64227328744596,
+    0.5262518100720799,
+    0.2222602845622896
+   ],
+   "context_occupancy": [
+    1226,
+    3043,
+    2059
+   ],
+   "alignment_quality_global": 0.56234103362316,
+   "alignment_quality_refit": 0.6462005728072958,
+   "refit_em_iters": 14,
+   "zero_shot_likelihood": 0.5531321166840687,
+   "refit_likelihood": 0.5646672088015369,
+   "oracle_likelihood": 0.579674497789081
+  },
+  {
+   "mouse": 5,
+   "n_eval_trials": 7241,
+   "global_weight_rmse": 4.825110550434486,
+   "refit_weight_rmse": 4.687124980303775,
+   "global_weight_median_err": 0.32878200743469876,
+   "refit_weight_median_err": 0.23495902768370386,
+   "refit_relabelled": true,
+   "global_weight_rmse_by_state": [
+    8.344032328691695,
+    0.355820212354767,
+    0.30917947210352253
+   ],
+   "refit_weight_rmse_by_state": [
+    8.110678411048536,
+    0.29686260030493866,
+    0.1902368314873913
+   ],
+   "context_occupancy": [
+    1018,
+    3693,
+    1596
+   ],
+   "alignment_quality_global": 0.821886530338169,
+   "alignment_quality_refit": 0.8808532552164161,
+   "refit_em_iters": 26,
+   "zero_shot_likelihood": 0.47938420073844723,
+   "refit_likelihood": 0.5094902565880465,
+   "oracle_likelihood": 0.5177695940729389
+  },
+  {
+   "mouse": 6,
+   "n_eval_trials": 6993,
+   "global_weight_rmse": 4.985738235339306,
+   "refit_weight_rmse": 5.231091803166168,
+   "global_weight_median_err": 0.33815297017844803,
+   "refit_weight_median_err": 0.4025354680446255,
+   "refit_relabelled": false,
+   "global_weight_rmse_by_state": [
+    8.621204806536616,
+    0.42324726653437506,
+    0.2616231814920824
+   ],
+   "refit_weight_rmse_by_state": [
+    9.040871974688578,
+    0.5736784423343964,
+    0.16276160956512997
+   ],
+   "context_occupancy": [
+    742,
+    3866,
+    2600
+   ],
+   "alignment_quality_global": 0.8347418467537784,
+   "alignment_quality_refit": 0.8308547423796184,
+   "refit_em_iters": 27,
+   "zero_shot_likelihood": 0.6362097379425604,
+   "refit_likelihood": 0.654976111562593,
+   "oracle_likelihood": 0.6582256972791886
+  },
+  {
+   "mouse": 7,
+   "n_eval_trials": 6859,
+   "global_weight_rmse": 4.8570855915424795,
+   "refit_weight_rmse": 4.531366433543003,
+   "global_weight_median_err": 0.3235800790633607,
+   "refit_weight_median_err": 0.2931877336213674,
+   "refit_relabelled": true,
+   "global_weight_rmse_by_state": [
+    8.39884506916652,
+    0.4217885534006382,
+    0.23523871081541298
+   ],
+   "refit_weight_rmse_by_state": [
+    7.839050901624922,
+    0.3519603740617246,
+    0.15890286952890129
+   ],
+   "context_occupancy": [
+    894,
+    2458,
+    2876
+   ],
+   "alignment_quality_global": 0.6898262477492303,
+   "alignment_quality_refit": 0.8166336717969,
+   "refit_em_iters": 43,
+   "zero_shot_likelihood": 0.561652548716814,
+   "refit_likelihood": 0.5804784909018728,
+   "oracle_likelihood": 0.5876083943642175
+  },
+  {
+   "mouse": 8,
+   "n_eval_trials": 7281,
+   "global_weight_rmse": 4.973728249575495,
+   "refit_weight_rmse": 4.778469287471726,
+   "global_weight_median_err": 0.4110707009861237,
+   "refit_weight_median_err": 0.3479288774554542,
+   "refit_relabelled": true,
+   "global_weight_rmse_by_state": [
+    8.594575667694665,
+    0.4722483282521744,
+    0.35237580877491115
+   ],
+   "refit_weight_rmse_by_state": [
+    8.256209470218849,
+    0.5345848428618096,
+    0.22478973193326726
+   ],
+   "context_occupancy": [
+    1120,
+    3653,
+    1499
+   ],
+   "alignment_quality_global": 0.7507528769998519,
+   "alignment_quality_refit": 0.615223692077175,
+   "refit_em_iters": 37,
+   "zero_shot_likelihood": 0.5406145076445901,
+   "refit_likelihood": 0.5623163828634108,
+   "oracle_likelihood": 0.5720516357341232
+  },
+  {
+   "mouse": 9,
+   "n_eval_trials": 6112,
+   "global_weight_rmse": 4.879454691605618,
+   "refit_weight_rmse": 5.204831485156262,
+   "global_weight_median_err": 0.27731898703170654,
+   "refit_weight_median_err": 0.49089249661412193,
+   "refit_relabelled": true,
+   "global_weight_rmse_by_state": [
+    8.441182458794765,
+    0.33305148372500015,
+    0.2504988399581819
+   ],
+   "refit_weight_rmse_by_state": [
+    8.976358662781562,
+    0.8219547494065094,
+    0.14208417806463242
+   ],
+   "context_occupancy": [
+    586,
+    3215,
+    2170
+   ],
+   "alignment_quality_global": 0.7523324746078208,
+   "alignment_quality_refit": 0.6524338687342489,
+   "refit_em_iters": 107,
+   "zero_shot_likelihood": 0.5596847676817001,
+   "refit_likelihood": 0.5826269110734666,
+   "oracle_likelihood": 0.590820226477086
+  },
+  {
+   "mouse": 10,
+   "n_eval_trials": 6971,
+   "global_weight_rmse": 4.9639681864718055,
+   "refit_weight_rmse": 4.7129908772112,
+   "global_weight_median_err": 0.3268693224704986,
+   "refit_weight_median_err": 0.3668472637695974,
+   "refit_relabelled": true,
+   "global_weight_rmse_by_state": [
+    8.581036612437208,
+    0.45611453442817845,
+    0.28409620977421357
+   ],
+   "refit_weight_rmse_by_state": [
+    8.132569218024196,
+    0.6800777062107655,
+    0.1888418745628106
+   ],
+   "context_occupancy": [
+    1276,
+    3356,
+    2254
+   ],
+   "alignment_quality_global": 0.7149987917908628,
+   "alignment_quality_refit": 0.8032188423232912,
+   "refit_em_iters": 96,
+   "zero_shot_likelihood": 0.5809531637542168,
+   "refit_likelihood": 0.5932023251432149,
+   "oracle_likelihood": 0.6000434250372475
+  },
+  {
+   "mouse": 11,
+   "n_eval_trials": 6051,
+   "global_weight_rmse": 5.028552633744937,
+   "refit_weight_rmse": 5.139416114002462,
+   "global_weight_median_err": 0.34813510459370495,
+   "refit_weight_median_err": 0.37702800355668575,
+   "refit_relabelled": false,
+   "global_weight_rmse_by_state": [
+    8.69482461377124,
+    0.40937135423472487,
+    0.30243148169333145
+   ],
+   "refit_weight_rmse_by_state": [
+    8.857048349986037,
+    0.8677076518937389,
+    0.20142476376846874
+   ],
+   "context_occupancy": [
+    1082,
+    2910,
+    2205
+   ],
+   "alignment_quality_global": 0.7679641980363382,
+   "alignment_quality_refit": 0.7510777629212934,
+   "refit_em_iters": 26,
+   "zero_shot_likelihood": 0.6640718366285853,
+   "refit_likelihood": 0.6773456314328036,
+   "oracle_likelihood": 0.6848069620218418
+  }
+ ],
+ "spread": 0.3,
+ "n_sessions": 28,
+ "experiment": "per_mouse",
+ "emission": "reference",
+ "seconds": 102.79870080947876
+}

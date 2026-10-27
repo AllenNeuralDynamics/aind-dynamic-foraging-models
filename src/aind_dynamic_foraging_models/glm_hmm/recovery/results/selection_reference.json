@@ -1,0 +1,44 @@
+{
+ "rows": [
+  {
+   "num_states": 1,
+   "heldout_log_lik": -14522.963104074486,
+   "n_trials": 24308,
+   "heldout_likelihood": 0.5502095302200696,
+   "train_log_joint": -27592.456163955725
+  },
+  {
+   "num_states": 2,
+   "heldout_log_lik": -14123.589989687678,
+   "n_trials": 24308,
+   "heldout_likelihood": 0.5593239757589263,
+   "train_log_joint": -27100.133817697293
+  },
+  {
+   "num_states": 3,
+   "heldout_log_lik": -13996.307802627925,
+   "n_trials": 24308,
+   "heldout_likelihood": 0.5622604038202113,
+   "train_log_joint": -27040.28287650181
+  },
+  {
+   "num_states": 4,
+   "heldout_log_lik": -14019.921548604103,
+   "n_trials": 24308,
+   "heldout_likelihood": 0.5617144671943985,
+   "train_log_joint": -27211.076897947758
+  },
+  {
+   "num_states": 5,
+   "heldout_log_lik": -14015.483377031549,
+   "n_trials": 24308,
+   "heldout_likelihood": 0.5618170347762453,
+   "train_log_joint": -27397.210461624854
+  }
+ ],
+ "oracle_likelihood": 0.5646949894006779,
+ "true_k": 3,
+ "experiment": "selection",
+ "emission": "reference",
+ "seconds": 232.04302597045898
+}

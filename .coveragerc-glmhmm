@@ -1,0 +1,13 @@
+# Coverage config for the GLM-HMM CI job only.
+#
+# The root pyproject omits */glm_hmm/* because the core matrix does not install the `glmhmm`
+# extra. That omit would also silence this job, which exists to measure those modules.
+[run]
+source = aind_dynamic_foraging_models.glm_hmm
+omit = *__init__*
+
+[report]
+exclude_lines =
+    if __name__ == .__main__.:
+    pragma: no cover
+fail_under = 80

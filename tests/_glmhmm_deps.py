@@ -10,8 +10,12 @@ import os
 IMPORT_ERROR = None
 try:
     import dynamax  # noqa: F401
-    import jax  # noqa: F401
+    import jax
     import tensorflow_probability.substrates.jax  # noqa: F401
+
+    # Tests also call internals (Newton, E-step) that bypass the package's CPU default; on a
+    # GPU host those would hit the cuSOLVER failure the default exists for (model._compute).
+    jax.config.update("jax_platforms", "cpu")
 except ImportError as error:  # pragma: no cover - depends on the installed extra
     IMPORT_ERROR = error
 

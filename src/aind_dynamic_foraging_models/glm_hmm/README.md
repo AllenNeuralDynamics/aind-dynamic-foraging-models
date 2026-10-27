@@ -23,7 +23,8 @@ An input-driven hidden Markov model with GLM emissions (Ashwood et al. 2022, *Na
 
 Faeze's earlier GLM-HMM was an `ssm` fit with the reference emission, on about 400 mice and
 mature sessions only. It had no held-out mice and could not be compared directly with our
-neural models. This package re-implements the model for six reasons.
+RNN models of behaviour (the GRU and disRNN). This package re-implements the model for six
+reasons.
 
 - **One shared framework.** The GLM-HMM runs through the same stack as the GRU:
   - the wrapper's `GLMHMMTrainer` and the dispatcher's `model=glmhmm`, via `run_hpc`;
@@ -52,7 +53,7 @@ neural models. This package re-implements the model for six reasons.
   - explicit priors for Ashwood et al.'s global → per-mouse MAP recipe;
   - forward-filter, one-step-ahead scoring for the held-out likelihood;
   - state alignment across mice;
-  - posteriors and Viterbi paths for later neural studies.
+  - posteriors and Viterbi paths for later studies of the ophys/ephys sessions.
 
 **Why dynamax as a framework rather than copied code.** It provides the HMM machinery: the
 filter, the two-filter smoother, Viterbi, sampling, and the Dirichlet transition and initial

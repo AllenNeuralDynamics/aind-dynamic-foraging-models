@@ -10,10 +10,14 @@ converge in a handful of iterations from the previous EM iterate. dynamax's stoc
 ``CategoricalRegressionHMM`` instead takes 50 Adam steps with no prior, which is neither exact
 nor regularised; that is the reason this module exists.
 
-Each step uses the analytic gradient and Hessian, solves for the Newton direction, and picks
-the largest step in {1, 1/2, ..., 1/128} that satisfies the Armijo condition (all candidates
-evaluated at once, so it stays jit-friendly). If none does, the iterate is kept. The objective
-therefore never decreases, which keeps EM monotone.
+Each step uses the analytic gradient and Hessian, solves for the Newton direction, and
+backtracks from step 1 by halving until the Armijo condition holds (at most 8 halvings; if none
+holds, the iterate is kept). The full step is almost always accepted, so a step costs one
+objective evaluation. The objective therefore never decreases, which keeps EM monotone.
+
+The data enter only through the rows of X, their outcomes and their weights, so callers pass
+*unique* rows with summed weights (see ``emissions.prepare_m_step``): exact, and for short
+history designs it shrinks millions of trials to a few thousand rows.
 
 Run these in float64 (``jax.experimental.enable_x64``): the Hessians sum millions of trials
 against a prior term of 1/sigma^2 ~ 1e-4 and are badly conditioned in float32.
@@ -22,7 +26,7 @@ against a prior term of 1/sigma^2 ~ 1e-4 and are badly conditioned in float32.
 import jax
 import jax.numpy as jnp
 
-_STEP_SIZES = 0.5 ** jnp.arange(8)
+_MAX_HALVINGS = 8
 _ARMIJO = 1e-4
 
 
@@ -51,12 +55,25 @@ def _newton(objective, grad_hess, theta, num_steps):
         grad, hess = grad_hess(theta)
         direction = jnp.linalg.solve(-hess, grad)
         current = objective(theta)
-        candidates = jax.vmap(lambda a: objective(theta + a * direction))(_STEP_SIZES)
-        accept = candidates >= current + _ARMIJO * _STEP_SIZES * (grad @ direction)
-        accept &= jnp.isfinite(candidates)
-        # Largest accepted step size; 0 if none is accepted.
-        alpha = jnp.max(jnp.where(accept, _STEP_SIZES, 0.0))
-        return theta + alpha * direction
+        slope = _ARMIJO * (grad @ direction)
+
+        def rejected(state):
+            """Keep halving while the Armijo condition fails."""
+            alpha, value, halvings = state
+            ok = jnp.isfinite(value) & (value >= current + alpha * slope)
+            return (~ok) & (halvings < _MAX_HALVINGS)
+
+        def halve(state):
+            """Try half the step."""
+            alpha, _, halvings = state
+            alpha = 0.5 * alpha
+            return alpha, objective(theta + alpha * direction), halvings + 1
+
+        alpha, value, _ = jax.lax.while_loop(
+            rejected, halve, (1.0, objective(theta + direction), 0)
+        )
+        accepted = jnp.isfinite(value) & (value >= current + alpha * slope)
+        return jnp.where(accepted, theta + alpha * direction, theta)
 
     return jax.lax.fori_loop(0, num_steps, step, theta)
 
@@ -92,7 +109,7 @@ def _logistic_grad_hess(theta, X, targets, weights, prior_precision):
     p = jax.nn.sigmoid(X @ theta)
     grad = X.T @ (weights * (targets - p)) - prior_precision * theta
     curvature = weights * p * (1.0 - p)
-    hess = -(X.T * curvature) @ X - prior_precision * jnp.eye(theta.shape[0])
+    hess = -X.T @ (X * curvature[:, None]) - prior_precision * jnp.eye(theta.shape[0])
     return grad, hess
 
 
@@ -178,14 +195,13 @@ def _multinomial_grad_hess(theta_flat, X, labels, weights, prior_precision, num_
     onehot = jax.nn.one_hot(labels, num_free + 1)[:, :num_free]
     grad = ((weights[:, None] * (onehot - probs)).T @ X).reshape(-1)
     grad = grad - prior_precision * theta_flat
-    # Block (c, c') = -X^T diag(w p_c (delta_cc' - p_c')) X.
-    blocks = []
+    # Block (c, c') = -X^T diag(w p_c (delta_cc' - p_c')) X; symmetric, so build c <= c'.
+    blocks = [[None] * num_free for _ in range(num_free)]
     for c in range(num_free):
-        row = []
-        for c2 in range(num_free):
-            factor = probs[:, c] * ((c == c2) - probs[:, c2])
-            row.append(-(X.T * (weights * factor)) @ X)
-        blocks.append(row)
+        for c2 in range(c, num_free):
+            factor = weights * probs[:, c] * ((c == c2) - probs[:, c2])
+            blocks[c][c2] = -X.T @ (X * factor[:, None])
+            blocks[c2][c] = blocks[c][c2].T
     hess = jnp.block(blocks) - prior_precision * jnp.eye(num_free * dim)
     return grad, hess
 

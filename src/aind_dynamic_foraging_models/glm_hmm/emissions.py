@@ -24,12 +24,21 @@ Gaussian prior on the weights, an exact Newton M-step (:mod:`.newton`), and a ma
 is the last input column; padded trials get log likelihood 0 for every state, which leaves the
 real trials' filtered and smoothed posteriors and the session's marginal likelihood unchanged
 as long as the padding is trailing.
+
+The M-step sees the data as *compressed rows*. Each regression block (hurdle: side, engagement;
+reference: one) depends on the trials only through (design row, outcome, posterior weight), so
+trials sharing a row and outcome are merged once per fit (:func:`compress_rows`) and their
+posteriors summed every EM iteration (:func:`aggregate`). This is exact. With a few lags of
+history the cohort's millions of trials collapse to thousands of rows; with long histories
+little merges, and the cost is that of the uncompressed fit. States are fitted one after
+another (``lax.map``), so memory does not grow with K.
 """
 
 from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 from dynamax.hidden_markov_model.models.abstractions import HMMEmissions
 from dynamax.parameters import ParameterProperties
 from tensorflow_probability.substrates.jax import distributions as tfd
@@ -49,6 +58,80 @@ class ParamsReferenceEmissions(NamedTuple):
     """Reference emission weights for left and right; ignore is the zero-logit class."""
 
     weights: jnp.ndarray  # (K, 2, 4L + 1)
+
+
+class CompressedRows(NamedTuple):
+    """Unique (design row, outcome) pairs of one regression block, and how trials map to them.
+
+    ``X`` (U, D) and ``targets`` (U,) are padded with zero rows up to a size on a fixed grid,
+    so fits on different subjects reuse compiled shapes; ``source`` (n,) indexes the flat
+    trials the block uses and ``inverse`` (n,) maps each of them to its row.
+    """
+
+    X: np.ndarray
+    targets: np.ndarray
+    source: np.ndarray
+    inverse: np.ndarray
+
+
+def _grid_size(n, minimum=256):
+    """Smallest size >= n of the form 2**k * {1, 1.25, 1.5, 1.75}, at least ``minimum``."""
+    size = minimum
+    while size < n:
+        size *= 2
+    for fraction in (0.625, 0.75, 0.875):
+        if size * fraction >= max(n, minimum):
+            return int(size * fraction)
+    return size
+
+
+def compress_rows(X, targets, source):
+    """Merge the trials ``source`` that share a design row and an outcome.
+
+    Parameters
+    ----------
+    X : np.ndarray
+        Design rows of all flat trials, shape (N, D).
+    targets : np.ndarray
+        Outcome of each flat trial, shape (N,).
+    source : np.ndarray
+        Indices of the trials this block uses.
+
+    Returns
+    -------
+    CompressedRows
+    """
+    keyed = np.ascontiguousarray(np.hstack([X[source], targets[source, None]]))
+    unique, inverse = np.unique(keyed, axis=0, return_inverse=True)
+    size = _grid_size(len(unique))
+    X_unique = np.zeros((size, X.shape[1]))
+    targets_unique = np.zeros(size)
+    X_unique[: len(unique)] = unique[:, :-1]
+    targets_unique[: len(unique)] = unique[:, -1]
+    return CompressedRows(X_unique, targets_unique, np.asarray(source), inverse.ravel())
+
+
+def aggregate(gamma, rows):
+    """Posterior weight of every compressed row and state: a sum over its trials.
+
+    Parameters
+    ----------
+    gamma : np.ndarray
+        Smoothed posteriors of all flat trials, shape (N, K).
+    rows : CompressedRows
+        The block's compression.
+
+    Returns
+    -------
+    np.ndarray
+        Shape (U, K).
+    """
+    used = gamma[rows.source]
+    return np.stack(
+        [np.bincount(rows.inverse, weights=used[:, k], minlength=len(rows.X))
+         for k in range(gamma.shape[1])],
+        axis=1,
+    )
 
 
 class _GLMEmissions(HMMEmissions):
@@ -204,8 +287,32 @@ class HurdleGLMEmissions(_GLMEmissions):
         log_ignore = jax.nn.log_sigmoid(-eta_engage)
         return jnp.stack([log_left, log_right, log_ignore], axis=-1)
 
+    def prepare_m_step(self, labels, inputs):
+        """Compress the side block (engaged trials) and the engagement block (all trials).
+
+        Parameters
+        ----------
+        labels : np.ndarray
+            Labels of the real trials, flattened, shape (N,).
+        inputs : np.ndarray
+            Their inputs, shape (N, 4L + 2).
+
+        Returns
+        -------
+        tuple of CompressedRows
+            (side, engagement).
+        """
+        engaged = labels != IGNORE
+        side = compress_rows(
+            np.asarray(self._side_design(inputs)), (labels == RIGHT) * 1.0, np.flatnonzero(engaged)
+        )
+        engage = compress_rows(
+            np.asarray(self._engage_design(inputs)), engaged * 1.0, np.arange(len(labels))
+        )
+        return side, engage
+
     def m_step(self, params, props, batch_stats, m_step_state, prior_sigma=100.0):
-        """Newton MAP update of both halves for every state.
+        """Newton MAP update of both halves, one state after another.
 
         Parameters
         ----------
@@ -214,8 +321,8 @@ class HurdleGLMEmissions(_GLMEmissions):
         props : ParamsHurdleEmissions
             Parameter properties; untrainable blocks are kept.
         batch_stats : tuple
-            ``(gamma, labels, inputs)`` flattened over real trials: smoothed posteriors
-            (N, K), labels (N,), inputs (N, 4L + 2). Rows with mask 0 carry no weight.
+            ``((X, targets, weights), (X, targets, weights))`` for the side and engagement
+            blocks: compressed rows (U, D), outcomes (U,) and summed posteriors (U, K).
         m_step_state : None
             Unused.
         prior_sigma : float
@@ -226,28 +333,22 @@ class HurdleGLMEmissions(_GLMEmissions):
         tuple
             (updated ParamsHurdleEmissions, None).
         """
-        gamma, labels, inputs = batch_stats
-        mask = inputs[:, self.columns["mask"]]
+        (X_side, t_side, w_side), (X_engage, t_engage, w_engage) = batch_stats
         precision = 1.0 / prior_sigma**2
-        engaged = (labels != IGNORE).astype(inputs.dtype)
+
+        def fit_block(theta, X, targets, weights):
+            """Every state's logistic regression on one block."""
+            return jax.lax.map(
+                lambda args: fit_logistic(args[0], X, targets, args[1], precision,
+                                          self.num_newton_steps),
+                (theta, weights.T),
+            )
+
         side_weights, engage_weights = params.side_weights, params.engage_weights
         if props.side_weights.trainable:
-            X = self._side_design(inputs)
-            targets = (labels == RIGHT).astype(inputs.dtype)
-            side_weights = jax.vmap(
-                lambda theta, g: fit_logistic(
-                    theta, X, targets, g * mask * engaged, precision, self.num_newton_steps
-                ),
-                in_axes=(0, 1),
-            )(side_weights, gamma)
+            side_weights = fit_block(side_weights, X_side, t_side, w_side)
         if props.engage_weights.trainable:
-            X = self._engage_design(inputs)
-            engage_weights = jax.vmap(
-                lambda theta, g: fit_logistic(
-                    theta, X, engaged, g * mask, precision, self.num_newton_steps
-                ),
-                in_axes=(0, 1),
-            )(engage_weights, gamma)
+            engage_weights = fit_block(engage_weights, X_engage, t_engage, w_engage)
         return params._replace(side_weights=side_weights, engage_weights=engage_weights), None
 
 
@@ -283,8 +384,26 @@ class ReferenceGLMEmissions(_GLMEmissions):
         X = inputs[..., self.columns["regressors"]]
         return jax.vmap(lambda w: reference_log_probs(w, X), out_axes=-2)(params.weights)
 
+    def prepare_m_step(self, labels, inputs):
+        """Compress the single block: every regressor column, every trial.
+
+        Parameters
+        ----------
+        labels : np.ndarray
+            Labels of the real trials, flattened, shape (N,).
+        inputs : np.ndarray
+            Their inputs, shape (N, 4L + 2).
+
+        Returns
+        -------
+        tuple of CompressedRows
+            One element.
+        """
+        X = np.asarray(inputs)[:, self.columns["regressors"]]
+        return (compress_rows(X, labels * 1.0, np.arange(len(labels))),)
+
     def m_step(self, params, props, batch_stats, m_step_state, prior_sigma=100.0):
-        """Newton MAP update of the multinomial GLM for every state.
+        """Newton MAP update of the multinomial GLM, one state after another.
 
         Parameters
         ----------
@@ -293,8 +412,8 @@ class ReferenceGLMEmissions(_GLMEmissions):
         props : ParamsReferenceEmissions
             Parameter properties; untrainable weights are kept.
         batch_stats : tuple
-            ``(gamma, labels, inputs)`` flattened over real trials; see
-            :meth:`HurdleGLMEmissions.m_step`.
+            ``((X, labels, weights),)``: compressed rows (U, D), class labels (U,) and
+            summed posteriors (U, K).
         m_step_state : None
             Unused.
         prior_sigma : float
@@ -307,17 +426,14 @@ class ReferenceGLMEmissions(_GLMEmissions):
         """
         if not props.weights.trainable:
             return params, None
-        gamma, labels, inputs = batch_stats
-        mask = inputs[:, self.columns["mask"]]
-        X = inputs[:, self.columns["regressors"]]
+        ((X, labels, weights),) = batch_stats
         labels = labels.astype(jnp.int32)
-        weights = jax.vmap(
-            lambda theta, g: fit_multinomial(
-                theta, X, labels, g * mask, 1.0 / prior_sigma**2, self.num_newton_steps
-            ),
-            in_axes=(0, 1),
-        )(params.weights, gamma)
-        return params._replace(weights=weights), None
+        new_weights = jax.lax.map(
+            lambda args: fit_multinomial(args[0], X, labels, args[1], 1.0 / prior_sigma**2,
+                                         self.num_newton_steps),
+            (params.weights, weights.T),
+        )
+        return params._replace(weights=new_weights), None
 
 
 def _tile(values, num_states, shape):

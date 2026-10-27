@@ -14,7 +14,8 @@ runs per bucket. Four details keep the result identical to an unpadded fit:
   smoother would also count transitions into padding);
 * filler sessions that only round a bucket's batch up to a power of two have no real trials,
   so they contribute nothing to the initial-state counts or the likelihood;
-* the emission M-step runs on the real trials only, flattened across buckets.
+* the emission M-step runs on the real trials only, flattened across buckets and merged
+  into unique design rows (exact; see :mod:`.emissions`).
 
 Priors (the :class:`Prior` passed to :func:`fit_em`) are arguments, not model attributes, so
 one model instance serves the global and every per-subject fit without re-compiling. The
@@ -43,7 +44,7 @@ from jax.experimental import enable_x64
 from jax.scipy.special import gammaln, logsumexp, xlogy
 
 from .design import build_inputs
-from .emissions import EMISSIONS
+from .emissions import EMISSIONS, aggregate
 
 
 class Prior(NamedTuple):
@@ -355,7 +356,9 @@ def fit_em(
         params = _float64(params)
         prior = Prior(*(float(v) for v in prior))
         labels_flat, inputs_flat, selectors = _flatten_real_trials(buckets)
-        labels_flat, inputs_flat = jnp.asarray(labels_flat), jnp.asarray(inputs_flat)
+        n_trials = len(labels_flat)
+        blocks = model.emission_component.prepare_m_step(labels_flat, inputs_flat)
+        block_rows = [(jnp.asarray(b.X), jnp.asarray(b.targets)) for b in blocks]
         history, converged = [], False
         for iteration in range(max_iters):
             loglik, initial_counts, transition_counts, gammas = 0.0, 0.0, 0.0, []
@@ -364,14 +367,18 @@ def fit_em(
                 loglik, initial_counts, transition_counts = (
                     loglik + ll, initial_counts + ic, transition_counts + tc
                 )
-                gammas.append(gamma.reshape(-1, model.num_states)[selector])
+                gammas.append(np.asarray(gamma).reshape(-1, model.num_states)[selector])
             history.append(float(loglik + model.log_prior(params, prior)))
             if verbose and iteration % 10 == 0:
                 print(f"EM iteration {iteration}: log joint {history[-1]:.4f}")
-            if len(history) > 1 and abs(history[-1] - history[-2]) < tol * len(labels_flat):
+            if len(history) > 1 and abs(history[-1] - history[-2]) < tol * n_trials:
                 converged = True
                 break
-            emission_stats = (jnp.concatenate(gammas), labels_flat, inputs_flat)
+            gamma = np.concatenate(gammas)
+            emission_stats = tuple(
+                (X, targets, jnp.asarray(aggregate(gamma, block)))
+                for (X, targets), block in zip(block_rows, blocks)
+            )
             params = _m_step(
                 model, params, props, initial_counts, transition_counts, emission_stats, prior
             )

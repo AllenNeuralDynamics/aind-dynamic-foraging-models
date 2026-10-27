@@ -207,6 +207,35 @@ class TestPaddingInvariance(unittest.TestCase):
 
 
 @unittest.skipUnless(DEPS_PRESENT, "needs the glmhmm extra")
+class TestComputeDevice(unittest.TestCase):
+    """Entry points run on the CPU unless AIND_GLMHMM_DEVICE says otherwise."""
+
+    def test_default_device_is_cpu(self):
+        """Inside the compute context, new arrays land on the CPU in float64."""
+        import os
+
+        import jax
+
+        from aind_dynamic_foraging_models.glm_hmm.model import DEVICE_ENV, _compute
+
+        previous = os.environ.pop(DEVICE_ENV, None)
+        try:
+            with _compute():
+                x = jnp.ones(3)
+            self.assertEqual(x.dtype, jnp.float64)
+            self.assertEqual(next(iter(x.devices())).platform, "cpu")
+            os.environ[DEVICE_ENV] = "no-such-device"
+            with self.assertRaises(RuntimeError):
+                with _compute():
+                    pass
+        finally:
+            os.environ.pop(DEVICE_ENV, None)
+            if previous is not None:
+                os.environ[DEVICE_ENV] = previous
+        del jax
+
+
+@unittest.skipUnless(DEPS_PRESENT, "needs the glmhmm extra")
 class TestDirichlet(unittest.TestCase):
     """The NaN-safe Dirichlet MAP update and log prior."""
 

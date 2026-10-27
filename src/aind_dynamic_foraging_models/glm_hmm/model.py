@@ -23,9 +23,12 @@ Dirichlet updates are done here rather than by dynamax's components, whose
 ``Dirichlet(...).mode()`` is NaN whenever a concentration is <= 1 -- exactly the alpha = 1
 maximum-likelihood setting of Ashwood et al.'s global fit.
 
-Everything runs in float64 (``jax.experimental.enable_x64``).
+Everything runs in float64 (``jax.experimental.enable_x64``), on the CPU by default (see
+:func:`_compute`).
 """
 
+import contextlib
+import os
 from functools import partial
 from typing import NamedTuple
 
@@ -45,6 +48,26 @@ from jax.scipy.special import gammaln, logsumexp, xlogy
 
 from .design import build_inputs
 from .emissions import EMISSIONS, aggregate
+
+
+DEVICE_ENV = "AIND_GLMHMM_DEVICE"
+
+
+@contextlib.contextmanager
+def _compute():
+    """float64, on the CPU unless ``AIND_GLMHMM_DEVICE=gpu``.
+
+    The CPU is the default because the work suits it: the E-step is a sequential scan over
+    trials (latency-bound on a GPU), and the M-step solves Newton systems of a few dozen
+    unknowns on compressed rows. The CPU is also the only device that works with the pinned
+    stack: jax-cuda12-plugin 0.6.1 caps cuBLAS below 12.9 but not cuSOLVER, and with the
+    cuSOLVER pip resolves, ``jnp.linalg.solve`` on a GPU fails with ``gpusolverDnCreate ...
+    cuSolver internal error``. That was verified on a V100 with cuSOLVER 11.7.5 and 11.7.3.
+    Set ``AIND_GLMHMM_DEVICE=gpu`` once that is fixed.
+    """
+    device = os.environ.get(DEVICE_ENV, "cpu").lower()
+    with enable_x64(), jax.default_device(jax.devices(device)[0]):
+        yield
 
 
 class Prior(NamedTuple):
@@ -371,7 +394,7 @@ def fit_em(
     -------
     FitResult
     """
-    with enable_x64():
+    with _compute():
         params = _float64(params)
         prior = Prior(*(float(v) for v in prior))
         labels_flat, inputs_flat, selectors = _flatten_real_trials(buckets)
@@ -487,7 +510,7 @@ def predictive_log_probs(model, params, buckets):
         session index -> array (T, 3), classes left, right, ignore.
     """
     out = {}
-    with enable_x64():
+    with _compute():
         params = _float64(params)
         for bucket in buckets:
             log_pred = np.asarray(
@@ -548,7 +571,7 @@ def state_posteriors(model, params, buckets):
         session index -> dict with ``filtered`` (T, K), ``smoothed`` (T, K), ``viterbi`` (T,).
     """
     out = {}
-    with enable_x64():
+    with _compute():
         params = _float64(params)
         for bucket in buckets:
             posteriors = _bucket_posteriors(model, params, bucket.labels, bucket.inputs)

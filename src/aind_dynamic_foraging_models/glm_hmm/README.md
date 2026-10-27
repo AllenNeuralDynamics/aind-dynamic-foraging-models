@@ -1,0 +1,112 @@
+# `glm_hmm`: a GLM-HMM over left / right / ignore
+
+An input-driven hidden Markov model with GLM emissions (Ashwood et al. 2022, *Nat Neurosci*
+25:201), built on [dynamax](https://github.com/probml/dynamax).
+- **States.** Each session is a sequence of hidden states z_t ∈ {1..K}, with a stationary
+  transition matrix A and an initial distribution π.
+- **Emissions.** In state k, the choice y_t ∈ {left, right, ignore} follows a GLM of the
+  trial history.
+- **Choice of emission.** The package has two of them, `hurdle` and `reference`. Both are
+  exactly normalised over the three outcomes, use the same regressors, and are scored by the
+  same code; they differ in how the three outcomes are tied to the regressors.
+
+| module | contents |
+|---|---|
+| `design.py` | the regressors |
+| `emissions.py` | the two emissions |
+| `newton.py` | the exact Newton M-steps |
+| `model.py` | EM over length-bucketed sessions, scoring and posteriors |
+| `align.py` | state matching |
+| `recovery/` | parameter recovery and the `ssm` cross-check |
+
+## Regressors (both emissions)
+
+For lags l = 1..L, with s = +1 for right, −1 for left and 0 for ignore, and r the reward:
+
+    side lags, signed:          RewC_l = s_{t-l} r_{t-l}        UnrC_l = s_{t-l} (1 - r_{t-l})
+    engagement lags, unsigned:  Ignored_l = [y_{t-l} = ignore]  Rewarded_l = r_{t-l}
+
+- Call them h_t (side lags plus a bias, 2L + 1 values) and e_t (engagement lags plus a bias,
+  2L + 1 values).
+- x_t is all four families plus one bias, 4L + 1 values.
+- Lags before the session start are 0, so trial 0 is predicted from the bias alone.
+
+## `hurdle`: respond or not, then which side
+
+Two separate logistic regressions per state:
+
+    p(respond | k)         = σ(a_k · e_t)
+    p(right | respond, k)  = σ(w_k · h_t)
+
+    p(ignore) = 1 - p(respond)
+    p(right)  = p(respond) · p(right | respond)
+    p(left)   = p(respond) · (1 - p(right | respond))
+
+- **Separation.** Whether the mouse engages depends only on unsigned history; which side it
+  picks depends only on signed history. The two halves are independent, given the state.
+- **Fitting.** The M-step is two independent weighted logistic regressions per state: side on
+  the responded trials, engagement on all trials.
+- **Parameters:** 2 (2L + 1) per state, 22 at L = 5.
+- **Reading the weights.** w_k is a choice kernel on responded trials, like a logistic
+  regression of the Su 2022 kind. a_k is an engagement kernel.
+- **Link to the wrapper's metrics.** The two halves line up with the wrapper's engagement
+  score and its `LR_engaged` score.
+
+## `reference`: one multinomial, ignore as the zero logit
+
+One multinomial regression per state, as in `ssm`'s `InputDrivenObservations` (C = 3), which
+Ashwood et al. and Faeze used:
+
+    logit_left = W_k,left · x_t     logit_right = W_k,right · x_t     logit_ignore = 0
+
+- **Coupling.** Each class logit sees every regressor, so side history can move p(ignore),
+  and engagement history can move the side.
+- **Fitting.** The M-step is one coupled Newton solve per state.
+- **Parameters:** 2 (4L + 1) per state, 42 at L = 5. The Hessian is 42 × 42, or 82 × 82 at
+  L = 10, which makes this the slowest M-step on a CPU.
+
+It is easiest to read in two combinations, with c = W_right − W_left (the side contrast) and
+m = (W_right + W_left) / 2 (the common mode):
+
+    p(right | respond)    = σ(c · x_t)
+    logit p(respond)      = m · x_t + log(2 cosh(c · x_t / 2))
+
+- **The side contrast c** plays the part of the hurdle's w, except that it may also load on
+  engagement regressors.
+- **Built-in coupling.** For a fixed common mode m, a stronger side preference |c · x| raises
+  p(respond). The hurdle has no such coupling.
+
+## How they differ
+
+| | `hurdle` | `reference` |
+|---|---|---|
+| structure | engagement × side, independent given the state | one 3-way softmax |
+| what each history family affects | side ← signed lags; engagement ← unsigned lags | every class ← every lag |
+| side preference and engagement | separate | a stronger preference raises p(respond) |
+| parameters per state (L = 5) | 22 | 42 |
+| M-step per state | two logistic regressions | one multinomial (42 × 42 Hessian) |
+| comparable with | the wrapper's engage / LR_engaged split, logistic choice kernels | Ashwood et al. 2022, `ssm`, Faeze's fits |
+
+**Neither model contains the other.** The hurdle's log-odds of left against ignore are not
+linear in x, and the reference cannot keep side history out of p(ignore). So which fits
+better is an empirical question: study 14 fits both and compares their held-out likelihoods.
+
+**Identifiability.** In a state that almost never ignores, the weights that set p(ignore) are
+bounded but not pinned: shifting them changes p(ignore) only slightly, which the data cannot
+resolve. For `reference` these are the common mode m, and in the parameter recovery this is
+the only part of a fit that was not recovered (`recovery/RESULTS.md`, finding 2, Fig. 3). The
+side contrast c and every class probability were recovered. The same applies in principle to
+a hurdle state's engagement weights a_k.
+- Compare `reference` fits through c and the class probabilities, never through raw W.
+- For both emissions, report a state's p(ignore) rather than its engagement or common-mode
+  weights.
+
+## Choosing
+
+- **`hurdle`** is the default (`emission: hurdle` in the dispatcher's `model/glmhmm.yaml`).
+  It has fewer parameters and is better identified, its halves map onto the wrapper's
+  engagement and `LR_engaged` metrics, and its side weights read directly as a choice kernel.
+- **`reference`** is for comparing with published and earlier GLM-HMM fits (Ashwood et al.,
+  `ssm`, Faeze), or when side history may drive disengagement.
+
+Pick the emission with `GLMHMM(num_states, n_lags, emission="hurdle" | "reference")`.

@@ -305,10 +305,35 @@ def _per_state_table(per_mouse):
     return lines
 
 
-def tables(size, selection, per_mouse):
+def _ssm_table(results):
+    """Cross-check against ssm (``ssm_parity.py``), if it has been run."""
+    path = results / "ssm_parity.json"
+    if not path.exists():
+        return []
+    r = json.loads(path.read_text())
+    lines = ["", f"### Cross-check against ssm (reference emission, {r['n_sessions']} sessions, "
+             f"{r['n_trials']:,} trials, same data, start and priors)", "",
+             "| parameters | log likelihood, this package | log likelihood, ssm |", "|---|---|---|"]
+    for name in ("truth", "start", "ours"):
+        lines.append(f"| {name} | {r[f'ours_ll_at_{name}']:.6f} | {r[f'ssm_ll_at_{name}']:.6f} |")
+    lines.append(f"| ssm's own fit | {r['ours_ll_at_ssm']:.6f} | (same parameters) |")
+    lines += ["", "| fit | EM iterations | seconds | predictive MAE vs truth | side-contrast RMSE "
+              "to truth by state | transition max err |", "|---|---|---|---|---|---|"]
+    for name in ("ours", "ssm"):
+        side = ", ".join(f"{v:.3f}" for v in r[f"{name}_side_rmse_to_truth_by_state"])
+        lines.append(f"| {'this package' if name == 'ours' else 'ssm'} | {r[f'{name}_iters']} | "
+                     f"{r[f'{name}_seconds']:.1f} | {r[f'predictive_mae_{name}_vs_truth']:.4f} | "
+                     f"{side} | {r[f'{name}_transition_max_err']:.4f} |")
+    side = ", ".join(f"{v:.3f}" for v in r["ssm_vs_ours_side_rmse_by_state"])
+    lines += ["", f"Between the two fits: predictive MAE {r['predictive_mae_ssm_vs_ours']:.4f}; "
+              f"side-contrast RMSE by state {side}."]
+    return lines
+
+
+def tables(size, selection, per_mouse, results=None):
     """Markdown tables of every number the figures show."""
     lines = (_size_table(size) + _reference_split_table(size) + _selection_table(selection)
-             + _per_mouse_table(per_mouse))
+             + _per_mouse_table(per_mouse) + (_ssm_table(results) if results else []))
     return "\n".join(lines) + "\n"
 
 
@@ -329,7 +354,8 @@ def plot_all(results, out):
     text = results_md.read_text()
     head, rest = text.split(begin)
     _, tail = rest.split(end)
-    results_md.write_text(head + begin + "\n\n" + tables(size, selection, per_mouse) + "\n"
+    results_md.write_text(head + begin + "\n\n" + tables(size, selection, per_mouse, results)
+                          + "\n"
                           + end + tail)
     print(f"wrote figures and the RESULTS.md tables to {out}")
 

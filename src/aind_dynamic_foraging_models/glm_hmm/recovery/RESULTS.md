@@ -80,6 +80,17 @@ tables below are regenerated from `results/*.json`:
      shrinkage: penalise θ − θ_global instead of θ). It is listed in study 14's plan as a
      sensitivity variant and not implemented here.
 
+5. **The implementation agrees with ssm, the package Ashwood et al. and Faeze used**
+   (`ssm_parity.py`; reference emission, the same data, start and priors).
+   - At the truth, at the shared start, and at our fit, the two packages compute the same log
+     likelihood to about 1e-11 nats over 45,700 trials.
+   - From the same start, our EM reaches an 11-nat higher likelihood than ssm's, about 6×
+     faster.
+   - Both fits predict equally well against the truth. They agree on the side contrasts of the
+     two well-determined states (within 0.01), and both scatter on the never-ignoring state.
+     That state is weak in both packages, so this is the model's identifiability and not a
+     library artefact.
+
 <!-- BEGIN tables (plot_recovery.py) -->
 
 ### Recovery against data size (mean over 3 seeds)
@@ -125,5 +136,21 @@ tables below are regenerated from `results/*.json`:
 | reference | 0 | 0.16 | 8.580 | 8.471 | 7/12 |
 | reference | 1 | 0.52 | 0.416 | 0.554 | 4/12 |
 | reference | 2 | 0.32 | 0.295 | 0.193 | 12/12 |
+
+### Cross-check against ssm (reference emission, 100 sessions, 45,700 trials, same data, start and priors)
+
+| parameters | log likelihood, this package | log likelihood, ssm |
+|---|---|---|
+| truth | -26253.610269 | -26253.610269 |
+| start | -27692.143336 | -27692.143336 |
+| ours | -26243.746485 | -26243.746485 |
+| ssm's own fit | -26254.794375 | (same parameters) |
+
+| fit | EM iterations | seconds | predictive MAE vs truth | side-contrast RMSE to truth by state | transition max err |
+|---|---|---|---|---|---|
+| this package | 78 | 8.8 | 0.0112 | 2.886, 0.082, 0.097 | 0.0062 |
+| ssm | 71 | 55.3 | 0.0111 | 2.475, 0.083, 0.097 | 0.0048 |
+
+Between the two fits: predictive MAE 0.0024; side-contrast RMSE by state 2.319, 0.009, 0.002.
 
 <!-- END tables -->

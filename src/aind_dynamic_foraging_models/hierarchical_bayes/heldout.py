@@ -247,6 +247,7 @@ def adapt_subjects_batched(
     session_mask=None,
     valid_mask=None,
     beta_max=10.0,
+    centered=False,
 ):
     """Condition many held-out subjects at once, as one batched model.
 
@@ -272,6 +273,12 @@ def adapt_subjects_batched(
         Trials to include.
     beta_max : float, optional
         Upper bound of ``softmax_inverse_temperature``.
+    centered : bool, optional
+        Sample the session-level parameters directly, ``theta ~ Normal(mu_p, sigma)``, rather
+        than as standardised offsets (the default). The non-centred form avoids the funnel
+        when the data constrain a session weakly; the centred form avoids the opposite
+        geometry when they constrain it strongly, which is the refit for subjects whose
+        non-centred fit diverged. ``mu_p`` and ``log_sigma`` keep their names either way.
     """
     from .model import _session_log_likelihoods
 
@@ -305,13 +312,19 @@ def adapt_subjects_batched(
     if n_context == 0:  # zero-shot for every subject at once
         return
 
-    theta_raw = numpyro.sample(
-        "theta_raw",
-        dist.Normal(0.0, 1.0).expand([n_subjects, n_context, n_params]).to_event(3),
-    )
-    params = hattori2019_session_params(
-        mu_p[:, None, :] + sigma[:, None, :] * theta_raw, beta_max=beta_max
-    )
+    if centered:
+        theta = numpyro.sample(
+            "theta",
+            dist.Normal(mu_p[:, None, :], sigma[:, None, :])
+            .expand([n_subjects, n_context, n_params]).to_event(3),
+        )
+    else:
+        theta_raw = numpyro.sample(
+            "theta_raw",
+            dist.Normal(0.0, 1.0).expand([n_subjects, n_context, n_params]).to_event(3),
+        )
+        theta = mu_p[:, None, :] + sigma[:, None, :] * theta_raw
+    params = hattori2019_session_params(theta, beta_max=beta_max)
 
     n_units = n_subjects * n_context
     flat = {name: value.reshape(n_units) for name, value in params.items()}
@@ -366,6 +379,9 @@ def fit_heldout_two_level(
     num_chains=4,
     beta_max=10.0,
     progress_bar=False,
+    centered=False,
+    target_accept_prob=0.8,
+    max_tree_depth=10,
 ):
     """Fit a two-level model to each held-out subject's context sessions, with diagnostics.
 
@@ -394,6 +410,11 @@ def fit_heldout_two_level(
         Upper bound of ``softmax_inverse_temperature``.
     progress_bar : bool, optional
         Show NumPyro's progress bar.
+    centered : bool, optional
+        Centred session level; see :func:`adapt_subjects_batched`.
+    target_accept_prob, max_tree_depth : optional
+        NUTS settings. A higher target acceptance takes smaller steps, the usual remedy for
+        divergences; the defaults are NumPyro's.
 
     Returns
     -------
@@ -409,7 +430,8 @@ def fit_heldout_two_level(
         context_choices, context_rewards, FIXED_HYPERPRIOR, rng_key=rng_key,
         session_mask=session_mask, valid_mask=valid_mask, num_warmup=num_warmup,
         num_samples=num_samples, num_chains=num_chains, beta_max=beta_max,
-        progress_bar=progress_bar,
+        progress_bar=progress_bar, centered=centered, target_accept_prob=target_accept_prob,
+        max_tree_depth=max_tree_depth,
     )
     return mcmc.get_samples(), subject_diagnostics(mcmc)
 
@@ -450,11 +472,13 @@ def subject_diagnostics(mcmc):
 
 def _run_adaptation(
     context_choices, context_rewards, population, *, rng_key, session_mask, valid_mask,
-    num_warmup, num_samples, num_chains, beta_max, progress_bar,
+    num_warmup, num_samples, num_chains, beta_max, progress_bar, centered=False,
+    target_accept_prob=0.8, max_tree_depth=10,
 ):
     """Run NUTS on :func:`adapt_subjects_batched`; chains are vectorised on one device."""
     mcmc = MCMC(
-        NUTS(adapt_subjects_batched),
+        NUTS(adapt_subjects_batched, target_accept_prob=target_accept_prob,
+             max_tree_depth=max_tree_depth),
         num_warmup=num_warmup,
         num_samples=num_samples,
         num_chains=num_chains,
@@ -463,7 +487,7 @@ def _run_adaptation(
     )
     mcmc.run(
         rng_key, context_choices, context_rewards, population,
-        session_mask, valid_mask, beta_max=beta_max,
+        session_mask, valid_mask, beta_max=beta_max, centered=centered,
         extra_fields=("diverging",),
     )
     return mcmc
@@ -944,3 +968,150 @@ def pooled_likelihood(log_lik, n_trials, relative_weights=None):
     per_draw_total = np.sum(np.asarray(relative_weights), axis=1, keepdims=True)
     total_se = float(np.asarray(_autocorrelated_se(per_draw_total))[0])
     return pooled, pooled * total_se / count
+
+
+def importance_sampled_session_marginal(
+    mu_p,
+    log_sigma,
+    choices,
+    rewards,
+    valid_mask=None,
+    *,
+    rng_key,
+    beta_max=10.0,
+    n_proposal=24000,
+    prior_fraction=0.2,
+    df=4.0,
+    scale_inflation=1.5,
+    chunk=2000,
+):
+    """Session-marginal likelihood of one subject's sessions by importance sampling.
+
+    Estimates the same quantity as :func:`batched_heldout_scores`' ``session_marginal``,
+
+    ``p(y | context) = integral of p(y | theta) p(theta | context) d theta``, where
+    ``p(theta | context) = (1 / D) sum_d Normal(theta; mu_p[d], sigma[d])``
+
+    is the predictive distribution of a fresh session's parameters, a mixture over the ``D``
+    posterior draws whose density is exact. The plain scorer samples ``theta`` from that
+    mixture, so on a long session a few draws carry the weight (high Pareto k-hat). Here
+    ``theta`` is drawn from a proposal centred on the session itself: a multivariate t
+    (``df`` degrees of freedom) at the session's mode under likelihood times mixture,
+    with the inverse Hessian there, inflated by ``scale_inflation``, as its scale. It is
+    mixed defensively with the mixture itself (weight ``prior_fraction``), so that every
+    weight is at most ``p(y | theta) / prior_fraction``: bounded, whatever the mode search
+    finds. Both estimators are unbiased for the same integral; this one has lower variance
+    where the session pins ``theta`` down.
+
+    Parameters
+    ----------
+    mu_p, log_sigma : array_like, shape (n_posterior_draws, n_params)
+        One subject's posterior draws, unconstrained scale.
+    choices, rewards : array_like, shape (n_sessions, n_trials)
+        That subject's sessions to score, padded on the trial axis.
+    valid_mask : array_like of bool, same shape, optional
+        Trials to include. Defaults to all trials.
+    rng_key : jax.Array
+        Key for the proposal draws.
+    beta_max : float, optional
+        Upper bound of ``softmax_inverse_temperature``.
+    n_proposal : int, optional
+        Proposal draws per session.
+    prior_fraction, df, scale_inflation : float, optional
+        Proposal shape, as above.
+    chunk : int, optional
+        Proposal draws per vectorised pass, which caps memory at ``chunk * n_posterior_draws``.
+
+    Returns
+    -------
+    dict of np.ndarray, each shape ``(n_sessions,)``
+        ``session_marginal`` (summed log likelihood), ``session_marginal_se`` (delta-method
+        standard error; the draws are independent), ``weight_ess``, ``pareto_k`` (of the
+        importance weights, judged as in :func:`batched_heldout_scores`), ``n_trials``, and
+        ``mode_found`` (whether the Hessian at the mode was positive definite; if not, the
+        proposal falls back to the mixture's own mean and covariance).
+    """
+    from jax.scipy.optimize import minimize
+    from jax.scipy.special import gammaln, logsumexp
+
+    mu_p = jnp.asarray(mu_p, dtype=jnp.float32)
+    sigma = jnp.exp(jnp.asarray(log_sigma, dtype=jnp.float32))
+    choices = jnp.asarray(choices, dtype=jnp.int32)
+    rewards = jnp.asarray(rewards, dtype=jnp.float32)
+    n_sessions, n_trials = choices.shape
+    if valid_mask is None:
+        valid_mask = jnp.ones_like(choices, dtype=bool)
+    valid_mask = jnp.asarray(valid_mask, dtype=bool)
+    n_draws, n_params = mu_p.shape
+    over_draws = _observed_prob_over_draws(n_trials, beta_max)
+
+    @jax.jit
+    def log_mixture(theta):                                   # (m, p) -> (m,)
+        z = (theta[:, None, :] - mu_p[None]) / sigma[None]
+        log_n = -0.5 * jnp.sum(z ** 2 + jnp.log(2 * jnp.pi), -1) - jnp.sum(jnp.log(sigma), -1)
+        return logsumexp(log_n, axis=1) - jnp.log(n_draws)
+
+    def log_lik(theta, c, r, m):                              # (k, p) -> (k,)
+        _, log_probs = over_draws(theta[:, None, :], c[None], r[None])
+        return jnp.sum(jnp.where(m[None], log_probs[:, 0, :], 0.0), axis=-1)
+
+    def chunked(fn, theta):
+        return jnp.concatenate([fn(theta[i:i + chunk]) for i in range(0, theta.shape[0], chunk)])
+
+    def mixture_sample(key, n):
+        k_pick, k_z = jax.random.split(key)
+        pick = jax.random.randint(k_pick, (n,), 0, n_draws)
+        return mu_p[pick] + sigma[pick] * jax.random.normal(k_z, (n, n_params))
+
+    # The mixture's own moments: the fallback scale when the session has no clean mode.
+    mix_mean = jnp.mean(mu_p, axis=0)
+    mix_cov = jnp.cov(mu_p, rowvar=False) + jnp.diag(jnp.mean(sigma ** 2, axis=0))
+
+    names = ("session_marginal", "session_marginal_se", "weight_ess", "pareto_k")
+    out = {name: np.zeros(n_sessions) for name in names}
+    out["n_trials"] = np.asarray(jnp.sum(valid_mask, axis=-1)).astype(int)
+    out["mode_found"] = np.zeros(n_sessions, dtype=bool)
+    n_t = int(round(n_proposal * (1.0 - prior_fraction)))
+
+    for s in range(n_sessions):
+        c, r, m = choices[s], rewards[s], valid_mask[s]
+        rng_key, k_start, k_t, k_g, k_mix = jax.random.split(rng_key, 5)
+
+        def neg_log_post(theta):
+            return -(log_lik(theta[None], c, r, m)[0] + log_mixture(theta[None])[0])
+
+        # Start from the best of a few hundred mixture draws, then polish.
+        starts = mixture_sample(k_start, 512)
+        start = starts[jnp.argmax(log_lik(starts, c, r, m) + log_mixture(starts))]
+        mode = minimize(neg_log_post, start, method="BFGS").x
+        hessian = jax.hessian(neg_log_post)(mode)
+        eig = jnp.linalg.eigvalsh(hessian)
+        found = bool(jnp.all(jnp.isfinite(mode)) and jnp.all(jnp.isfinite(eig))
+                     and jnp.min(eig) > 0)
+        center, cov = (mode, jnp.linalg.inv(hessian)) if found else (mix_mean, mix_cov)
+        shape = scale_inflation ** 2 * 0.5 * (cov + cov.T)
+        chol = jnp.linalg.cholesky(shape)
+
+        # Multivariate t draws, then the defensive mixture draws.
+        g = jax.random.gamma(k_g, df / 2.0, (n_t,)) * 2.0 / df
+        t_draws = center + (jax.random.normal(k_t, (n_t, n_params)) @ chol.T) / jnp.sqrt(g)[:, None]
+        theta = jnp.concatenate([t_draws, mixture_sample(k_mix, n_proposal - n_t)])
+
+        dev = jax.scipy.linalg.solve_triangular(chol, (theta - center).T, lower=True).T
+        log_t = (gammaln((df + n_params) / 2.0) - gammaln(df / 2.0)
+                 - 0.5 * n_params * jnp.log(df * jnp.pi) - jnp.sum(jnp.log(jnp.diag(chol)))
+                 - 0.5 * (df + n_params) * jnp.log1p(jnp.sum(dev ** 2, -1) / df))
+        log_prior = chunked(log_mixture, theta)
+        log_q = jnp.logaddexp(jnp.log1p(-prior_fraction) + log_t,
+                              jnp.log(prior_fraction) + log_prior)
+        log_w = np.asarray(
+            chunked(lambda th: log_lik(th, c, r, m), theta) + log_prior - log_q, dtype=np.float64)
+
+        top = log_w.max()
+        w = np.exp(log_w - top)
+        out["session_marginal"][s] = top + np.log(w.mean())
+        out["session_marginal_se"][s] = np.std(w / w.mean(), ddof=1) / np.sqrt(w.size)
+        out["weight_ess"][s] = w.sum() ** 2 / np.sum(w ** 2)
+        out["pareto_k"][s] = _pareto_k(log_w[:, None])[0]
+        out["mode_found"][s] = found
+    return out

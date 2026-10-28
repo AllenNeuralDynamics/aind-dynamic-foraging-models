@@ -24,32 +24,42 @@ Measured 2026-10-27 on the Allen HPC. Discussion and follow-ups:
 - **Same answers on both devices.** At 4.9M trials, GPU and CPU log joints agree to within
   0.005. A 13-mouse real-data run through the wrapper's trainer gives identical scores on both
   (log joint −29643.79, K-selection 0.62246, zero-shot 0.49801, matched 0.52822).
-- **Run the pooled global fit on a GPU.** It is 2.7–5.6× faster at L = 5 and ≈ 5–9× at
-  L = 10: the E-step is about 6× faster, and the L = 10 M-step 27–130×.
+- **Run the pooled global fit on a GPU.** One restart to convergence is 2.7–5.6× faster at
+  L = 5. A steady iteration is 3–5× faster at L = 5 and 5–25× at L = 10: the E-step is 6–8×
+  faster, and the L = 10 M-step 20–160×.
 - **Run per-mouse refits on the CPU**, where they are about 2× faster. One mouse has a few
   thousand trials, so launch latency and recompiles for new bucket shapes dominate on a GPU.
 - **Remaining GPU bottlenecks** (models#82):
   - the host-side aggregation of the posteriors, about 1 s per iteration;
   - a one-time row compression of 37–107 s per `fit_em` call.
 
-## Each part of one EM iteration, in seconds (`time_fit.py parts`)
+## Steady cost of one EM iteration, in seconds (`time_fit.py parts`)
 
-| | CPU (8 cores) | V100 | A100 | L40S |
+Measured as the difference between calls of 6 and 3 iterations, so setup, the final scoring
+E-step and row compression drop out (jobs 27512167–70: CPU node n254, V100, A100, L40S).
+
+| whole iteration | CPU (8 cores) | V100 | A100 | L40S |
 |---|---|---|---|---|
-| E-step, L = 5 hurdle | 6.37 | 1.05 | 1.12 | 1.17 |
-| E-step, L = 10 reference | 8.33 | 1.34 | 1.26 | 1.34 |
-| M-step, L = 5 hurdle | 0.05 | 0.01 | 0.01 | 0.02 |
-| M-step, L = 10 hurdle | 11.14 | 0.41 | 0.16 | 0.42 |
-| M-step, L = 10 reference | 34.18 | 0.70 | 0.26 | 2.09 (weak float64) |
-| host aggregation, L = 5 hurdle | 2.86 | 1.19 | 0.91 | 0.91 |
+| L = 5 hurdle | 10.07 | 3.43 | 2.16 | 2.23 |
+| L = 5 reference | 8.72 | 2.47 | 1.63 | 2.05 |
+| L = 10 hurdle | 28.02 | 5.33 | 2.53 | 3.19 |
+| L = 10 reference | 47.99 | 4.16 | 1.88 | 4.26 |
 
-## A whole iteration in steady state (row compression excluded), in seconds
-
-| | CPU | V100 | A100 | L40S |
+| one step, per iteration | CPU (8 cores) | V100 | A100 | L40S |
 |---|---|---|---|---|
-| L = 5 hurdle | ≈ 8 | 3.0–3.7 | 2.9–3.1 | — |
-| L = 10 hurdle | ≈ 24.5 | 4.93 | ≈ 3.5 | 4.06 |
-| L = 10 reference | ≈ 47 | ≈ 4.5–5 | ≈ 3.2 | 5.34 |
+| E-step, L = 5 hurdle | 8.30 | 1.02 | 1.18 | 1.06 |
+| E-step, L = 10 reference | 8.77 | 1.05 | 1.22 | 1.48 |
+| M-step, L = 5 hurdle | 0.06 | 0.01 | 0.01 | 0.02 |
+| M-step, L = 10 hurdle | 16.20 | 0.42 | 0.16 | 0.41 |
+| M-step, L = 10 reference | 40.86 | 0.69 | 0.26 | 2.09 (weak float64) |
+| host aggregation, L = 5 hurdle | 1.53 | 0.50 | 0.93 | 0.96 |
+
+- **Per `fit_em` call**, a further fixed 61–121 s on CPU and 32–87 s on GPU. Most of it is
+  the row compression (30–107 s), which is run 11 times per production run (models#82).
+- **What the whole-iteration figure also includes:** moving the posteriors to the host and
+  the Python loop over buckets, which is why the steps do not add up to it.
+- **Noise:** single runs. On the shared CPU node a step can come out larger than the whole
+  iteration (reference L = 5: E-step 9.42 s against 8.72 s).
 
 ## One K = 10 restart to convergence, L = 5, tol 1e-6 nats/trial (`converge`, `refits`)
 
@@ -66,12 +76,16 @@ Measured 2026-10-27 on the Allen HPC. Discussion and follow-ups:
 ## One K = 10 production run: 10 restarts plus 763 per-mouse refits
 
 The refits cover 614 training mice for K selection and 149 held-out mice.
+- **Global fit:** 10 × (iterations × steady cost + fixed cost per call), with hurdle 317
+  iterations and reference 220. L = 10 assumes the L = 5 iteration counts.
+- **Refits:** 763 × 8.5 s on CPU, or × 17.6 s on GPU.
+- Ranges span the emissions and the GPU types.
 
 | setup | L = 5 | L = 10 (≈) |
 |---|---|---|
-| all CPU | about 9–9.5 h | about 23–30 h |
-| global fit on GPU, refits on CPU | about 3.2–4.4 h | about 5–6 h |
-| all GPU (the trainer as of models#81) | about 5–6 h | about 7–8 h |
+| all CPU | about 9–11 h | about 27–31 h |
+| global fit on GPU, refits on CPU | about 3–5 h | about 3–7 h |
+| all GPU (the trainer as of models#81) | about 5–7 h | about 5–9 h |
 
 ## Caveats
 
@@ -119,10 +133,31 @@ paths it loaded.
 
 ## Raw result lines
 
-These are from the timing jobs, which ran an earlier copy of `time_fit.py` (field names
-differ slightly). Before the row compression was timed on its own, "per EM iteration" counted
-one compression spread over 3 iterations. Some lines below carry an explicit "steady" figure
-instead. Log joints are trimmed.
+Steady-cost lines from this `time_fit.py` (the 6-minus-3-iteration difference), with log
+joints trimmed:
+
+    CPU  27512167  PARTS hurdle K=10 L=5     steady 10.07s [E-step 8.30s, aggregate 1.53s, M-step 0.06s]; fixed 77.5s per call (compression 66.6s)
+    CPU  27512167  PARTS reference K=10 L=5  steady 8.72s [E-step 9.42s, aggregate 0.90s, M-step 0.25s]; fixed 61.0s per call (compression 48.1s)
+    CPU  27512167  PARTS hurdle K=10 L=10    steady 28.02s [E-step 8.92s, aggregate 2.07s, M-step 16.20s]; fixed 121.1s per call (compression 107.0s)
+    CPU  27512167  PARTS reference K=10 L=10 steady 47.99s [E-step 8.77s, aggregate 1.14s, M-step 40.86s]; fixed 106.4s per call (compression 64.7s)
+    V100 27512168  PARTS hurdle K=10 L=5     steady 3.43s [E-step 1.02s, aggregate 0.50s, M-step 0.01s]; fixed 52.8s per call (compression 50.3s)
+    V100 27512168  PARTS reference K=10 L=5  steady 2.47s [E-step 0.93s, aggregate 1.06s, M-step 0.02s]; fixed 40.6s per call (compression 37.8s)
+    V100 27512168  PARTS hurdle K=10 L=10    steady 5.33s [E-step 1.47s, aggregate 2.51s, M-step 0.42s]; fixed 87.0s per call (compression 83.2s)
+    V100 27512168  PARTS reference K=10 L=10 steady 4.16s [E-step 1.05s, aggregate 1.47s, M-step 0.69s]; fixed 58.3s per call (compression 53.0s)
+    A100 27512169  PARTS hurdle K=10 L=5     steady 2.16s [E-step 1.18s, aggregate 0.93s, M-step 0.01s]; fixed 42.1s per call (compression 39.1s)
+    A100 27512169  PARTS reference K=10 L=5  steady 1.63s [E-step 1.16s, aggregate 0.49s, M-step 0.01s]; fixed 34.8s per call (compression 31.9s)
+    A100 27512169  PARTS hurdle K=10 L=10    steady 2.53s [E-step 1.29s, aggregate 1.08s, M-step 0.16s]; fixed 65.6s per call (compression 61.9s)
+    A100 27512169  PARTS reference K=10 L=10 steady 1.88s [E-step 1.22s, aggregate 0.63s, M-step 0.26s]; fixed 45.1s per call (compression 39.9s)
+    L40S 27512170  PARTS hurdle K=10 L=5     steady 2.23s [E-step 1.06s, aggregate 0.96s, M-step 0.02s]; fixed 45.1s per call (compression 41.7s)
+    L40S 27512170  PARTS reference K=10 L=5  steady 2.05s [E-step 1.18s, aggregate 0.49s, M-step 0.02s]; fixed 31.8s per call (compression 29.7s)
+    L40S 27512170  PARTS hurdle K=10 L=10    steady 3.19s [E-step 1.28s, aggregate 1.07s, M-step 0.41s]; fixed 66.0s per call (compression 63.3s)
+    L40S 27512170  PARTS reference K=10 L=10 steady 4.26s [E-step 1.48s, aggregate 0.62s, M-step 2.09s]; fixed 42.3s per call (compression 38.3s)
+
+Earlier lines, from a first version of the script. Its "per EM iteration" divided a
+3-iteration call by 3, so it includes one row compression and an extra scoring E-step; its
+"steady" figures subtract only the compression. These lines are kept as the source of the
+end-to-end and refit numbers (FULL, REFITS, LONG), which are whole-fit wall times and are
+not affected:
 
     CPU  27510209  ITERS hurdle K=10 L=5    per EM iteration 35.52s [E-step 6.37s, host aggregate 2.86s, M-step 0.05s]
     CPU  27510209  ITERS reference K=10 L=5 per EM iteration 30.48s [E-step 7.34s, host aggregate 1.50s, M-step 0.17s]

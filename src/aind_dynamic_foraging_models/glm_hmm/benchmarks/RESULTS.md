@@ -100,6 +100,13 @@ K = 10, hurdle, L = 5, the same cohort; seconds per EM iteration of each restart
 | 40 (Xeon Gold 6238, 88-core node, about half used) | 7.3 | 12.35 (threads) | 5.9× faster |
 | 40, **20** restarts at once (Xeon Gold 6238R, 112-core node, 106 cores in use) | — | 26.0 (threads) | — |
 
+At **L = 10**, 32 cores (jobs 27517506 and 27517507, which shared one node):
+
+| emission | one restart alone | 10 restarts at once, each | restart phase | memory, 10 at once |
+|---|---|---|---|---|
+| hurdle | 15.1 | 45.8 | 3.3× faster | 28 GB |
+| reference | 26.3 | 130.6 | 2.0× faster | 37 GB |
+
 - **Speed-up** is 10 × (alone) / (each, at once): the restart phase's wall clock when the
   restarts need equal iteration counts. The slowest restart sets it.
 - **Threads match processes**, so the GIL is not what limits them. Ten restarts in threads use
@@ -117,6 +124,10 @@ K = 10, hurdle, L = 5, the same cohort; seconds per EM iteration of each restart
 - **Refits:** 30 refits of 20 iterations took 33 s one at a time and 9 s in 10 threads
   (3.5×), with identical log joints (job 27515988, each mouse compressed on its own; an
   earlier run shared one mouse's compression among mice of equal size and is discarded).
+- **≈ L = 10, K = 10, 20 restarts as two rounds of 10:** hurdle 2 × 317 × 46 s ≈ 8 h
+  (≈ 13 h if restarts run to the 500 cap); reference 2 × 220 × 131 s ≈ 16 h (≈ 36 h at the
+  cap), before refits. Iteration counts are the L = 5 ones; L = 10 was not run to
+  convergence.
 - **Data hash:** `prepare_data`'s digest of the whole cohort takes 2.1 s, once per
   `fit_em` call.
 - **≈ production run** (K = 10, L = 5, hurdle, 32 cores, `num_workers` 10): on a lightly

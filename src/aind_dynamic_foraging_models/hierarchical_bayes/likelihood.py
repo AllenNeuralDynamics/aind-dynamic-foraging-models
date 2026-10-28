@@ -219,3 +219,133 @@ def hattori2019_log_likelihood(
     if valid_mask is None:
         return jnp.sum(log_prob)
     return jnp.sum(jnp.where(jnp.asarray(valid_mask, dtype=bool), log_prob, 0.0))
+
+
+def _ctt_stay_logits(
+    choice_history,
+    reward_history,
+    learn_rate,
+    threshold,
+    softmax_inverse_temperature,
+    bias_l,
+):
+    """Per-trial ``[left, right]`` logits of the CompareToThreshold forager.
+
+    The forager tracks one latent ``value``, starting at ``threshold``. On every trial after
+    the first it stays with probability ``sigmoid(beta * (value - threshold) + bias)``, where
+    the bias applies only when the previous choice was left; the first trial is uniform.
+    Writing that as a two-action softmax with logit ``stay_logit`` on the previous action
+    and ``0`` on the other lets the CTT scorer share the softmax machinery used for
+    Hattori2019. After each trial the value is updated: on a switch (and after the first
+    trial) it resets toward the threshold, ``threshold + alpha * (reward - threshold)``;
+    otherwise ``value + alpha * (reward - value)``.
+
+    Returns
+    -------
+    jnp.ndarray, shape (n_trials, N_ACTIONS)
+        Logits whose softmax is the per-trial choice probability (before clipping).
+    """
+    choice_history = jnp.asarray(choice_history, dtype=jnp.int32)
+    reward_history = jnp.asarray(reward_history, dtype=jnp.float32)
+    n_trials = choice_history.shape[0]
+
+    def _step(carry, trial):
+        """Emit the pre-update value, then apply the reset-or-delta update."""
+        value, previous_choice, is_first = carry
+        choice, reward = trial
+        switched = jnp.logical_or(is_first, choice != previous_choice)
+        reset = threshold + learn_rate * (reward - threshold)
+        delta = value + learn_rate * (reward - value)
+        value_next = jnp.where(switched, reset, delta)
+        return (value_next, choice, jnp.bool_(False)), value
+
+    # The carry must keep the dtype the update produces (float64 under JAX x64).
+    value_dtype = jnp.result_type(threshold, learn_rate, reward_history)
+    value_0 = jnp.asarray(threshold, dtype=value_dtype)
+    _, values = jax.lax.scan(
+        _step,
+        (value_0, jnp.int32(0), jnp.bool_(True)),
+        (choice_history, reward_history),
+    )
+
+    # Previous choice per trial; trial 0 has none and gets zero logits (uniform).
+    previous = jnp.concatenate([jnp.zeros(1, dtype=jnp.int32), choice_history[:-1]])
+    stay_logit = softmax_inverse_temperature * (values - threshold) + jnp.where(
+        previous == L, bias_l, 0.0
+    )
+    is_first = jnp.arange(n_trials) == 0
+    stay_logit = jnp.where(is_first, 0.0, stay_logit)
+    return jax.nn.one_hot(previous, N_ACTIONS) * stay_logit[:, None]
+
+
+def ctt_choice_prob(
+    choice_history,
+    reward_history,
+    learn_rate,
+    threshold,
+    softmax_inverse_temperature,
+    bias_l,
+):
+    """Per-trial choice probabilities for the CompareToThreshold forager.
+
+    Matches ``ForagerCompareThreshold`` with ``number_of_learning_rate=1``,
+    ``choice_kernel="none"`` and ``reset_to_threshold=True`` (the ``CompareToThreshold``
+    preset), teacher-forced over an observed history. As in the numpy forager the stay
+    probability is clipped to ``[1e-12, 1 - 1e-12]``. ``bias_l`` is the numpy ``biasL``.
+
+    Parameters
+    ----------
+    choice_history : array_like of int, shape (n_trials,)
+        Observed actions, 0 for left and 1 for right.
+    reward_history : array_like of float, shape (n_trials,)
+        Observed outcomes.
+    learn_rate : float
+        Value learning rate, in [0, 1].
+    threshold : float
+        Comparison threshold; also the initial value and the reset point.
+    softmax_inverse_temperature : float
+        Steepness of the stay probability.
+    bias_l : float
+        Stay-logit bias, applied only when the previous choice was left.
+
+    Returns
+    -------
+    jnp.ndarray, shape (N_ACTIONS, n_trials)
+        Probability of each action on each trial, before that trial's update.
+    """
+    logits = _ctt_stay_logits(
+        choice_history, reward_history, learn_rate, threshold,
+        softmax_inverse_temperature, bias_l,
+    )
+    choice_prob = jnp.clip(jax.nn.softmax(logits, axis=-1), 1e-12, 1.0 - 1e-12)
+    return choice_prob.T
+
+
+def ctt_log_likelihood(choice_history, reward_history, valid_mask=None, **params):
+    """Total log likelihood of an observed choice history under the CTT forager.
+
+    Computed by log-softmax of the logits, without :func:`ctt_choice_prob`'s clip, so it
+    is the same likelihood the held-out scorers use and keeps its gradient in the tails.
+
+    Parameters
+    ----------
+    choice_history, reward_history : array_like, shape (n_trials,)
+        Observed actions and outcomes.
+    valid_mask : array_like of bool, shape (n_trials,), optional
+        Trials to include. Defaults to all trials.
+    **params
+        Forager parameters, passed through to :func:`ctt_choice_prob`.
+
+    Returns
+    -------
+    jnp.ndarray
+        Scalar sum of per-trial log probabilities of the observed actions.
+    """
+    choice_history = jnp.asarray(choice_history, dtype=jnp.int32)
+    logits = _ctt_stay_logits(choice_history, reward_history, **params)
+    log_prob = jax.nn.log_softmax(logits, axis=-1)[
+        jnp.arange(choice_history.shape[0]), choice_history
+    ]
+    if valid_mask is None:
+        return jnp.sum(log_prob)
+    return jnp.sum(jnp.where(jnp.asarray(valid_mask, dtype=bool), log_prob, 0.0))

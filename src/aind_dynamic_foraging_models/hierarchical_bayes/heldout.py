@@ -998,9 +998,10 @@ def importance_sampled_session_marginal(
     ``theta`` is drawn from a proposal centred on the session itself: a multivariate t
     (``df`` degrees of freedom) at the session's mode under likelihood times mixture,
     with the inverse Hessian there, inflated by ``scale_inflation``, as its scale. It is
-    mixed defensively with the mixture itself (weight ``prior_fraction``), so that every
-    weight is at most ``p(y | theta) / prior_fraction``: bounded, whatever the mode search
-    finds. Both estimators are unbiased for the same integral; this one has lower variance
+    mixed defensively with the mixture itself (at least ``prior_fraction`` of the draws), so
+    every weight is at most ``p(y | theta) / prior_fraction``: bounded, whatever the mode
+    search finds. The two components get fixed draw counts (a stratified sample), and the
+    standard error is computed within each. Both estimators are unbiased for the same integral; this one has lower variance
     where the session pins ``theta`` down.
 
     Parameters
@@ -1026,7 +1027,7 @@ def importance_sampled_session_marginal(
     -------
     dict of np.ndarray, each shape ``(n_sessions,)``
         ``session_marginal`` (summed log likelihood), ``session_marginal_se`` (delta-method
-        standard error; the draws are independent), ``weight_ess``, ``pareto_k`` (of the
+        standard error of the stratified estimate, conditional on the posterior draws), ``weight_ess``, ``pareto_k`` (of the
         importance weights, judged as in :func:`batched_heldout_scores`), ``n_trials``, and
         ``mode_found`` (whether the Hessian at the mode was positive definite; if not, the
         proposal falls back to the mixture's own mean and covariance).
@@ -1071,20 +1072,29 @@ def importance_sampled_session_marginal(
     out = {name: np.zeros(n_sessions) for name in names}
     out["n_trials"] = np.asarray(jnp.sum(valid_mask, axis=-1)).astype(int)
     out["mode_found"] = np.zeros(n_sessions, dtype=bool)
-    n_t = int(round(n_proposal * (1.0 - prior_fraction)))
+    # A fixed allocation (stratified), at least the requested defensive share; the proposal
+    # density uses the realised share, so it matches the draws exactly.
+    n_t = int(np.floor(n_proposal * (1.0 - prior_fraction)))
+    n_prior = n_proposal - n_t
+    realised_prior = n_prior / n_proposal
+
+    def neg_log_post(theta, c, r, m):
+        return -(log_lik(theta[None], c, r, m)[0] + log_mixture(theta[None])[0])
+
+    @jax.jit
+    def find_mode(start, c, r, m):
+        """BFGS from ``start`` and the Hessian there; compiled once for every session."""
+        mode = minimize(neg_log_post, start, args=(c, r, m), method="BFGS").x
+        return mode, jax.hessian(neg_log_post)(mode, c, r, m)
 
     for s in range(n_sessions):
         c, r, m = choices[s], rewards[s], valid_mask[s]
         rng_key, k_start, k_t, k_g, k_mix = jax.random.split(rng_key, 5)
 
-        def neg_log_post(theta):
-            return -(log_lik(theta[None], c, r, m)[0] + log_mixture(theta[None])[0])
-
         # Start from the best of a few hundred mixture draws, then polish.
         starts = mixture_sample(k_start, 512)
         start = starts[jnp.argmax(log_lik(starts, c, r, m) + log_mixture(starts))]
-        mode = minimize(neg_log_post, start, method="BFGS").x
-        hessian = jax.hessian(neg_log_post)(mode)
+        mode, hessian = find_mode(start, c, r, m)
         eig = jnp.linalg.eigvalsh(hessian)
         found = bool(jnp.all(jnp.isfinite(mode)) and jnp.all(jnp.isfinite(eig))
                      and jnp.min(eig) > 0)
@@ -1095,22 +1105,25 @@ def importance_sampled_session_marginal(
         # Multivariate t draws, then the defensive mixture draws.
         g = jax.random.gamma(k_g, df / 2.0, (n_t,)) * 2.0 / df
         t_draws = center + (jax.random.normal(k_t, (n_t, n_params)) @ chol.T) / jnp.sqrt(g)[:, None]
-        theta = jnp.concatenate([t_draws, mixture_sample(k_mix, n_proposal - n_t)])
+        theta = jnp.concatenate([t_draws, mixture_sample(k_mix, n_prior)])
 
         dev = jax.scipy.linalg.solve_triangular(chol, (theta - center).T, lower=True).T
         log_t = (gammaln((df + n_params) / 2.0) - gammaln(df / 2.0)
                  - 0.5 * n_params * jnp.log(df * jnp.pi) - jnp.sum(jnp.log(jnp.diag(chol)))
                  - 0.5 * (df + n_params) * jnp.log1p(jnp.sum(dev ** 2, -1) / df))
         log_prior = chunked(log_mixture, theta)
-        log_q = jnp.logaddexp(jnp.log1p(-prior_fraction) + log_t,
-                              jnp.log(prior_fraction) + log_prior)
+        log_q = jnp.logaddexp(jnp.log1p(-realised_prior) + log_t,
+                              jnp.log(realised_prior) + log_prior)
         log_w = np.asarray(
             chunked(lambda th: log_lik(th, c, r, m), theta) + log_prior - log_q, dtype=np.float64)
 
         top = log_w.max()
         w = np.exp(log_w - top)
         out["session_marginal"][s] = top + np.log(w.mean())
-        out["session_marginal_se"][s] = np.std(w / w.mean(), ddof=1) / np.sqrt(w.size)
+        # Stratified: the variance is within each component's draws, weighted by its count.
+        variance = sum(part.size * np.var(part, ddof=1) for part in (w[:n_t], w[n_t:])
+                       if part.size > 1) / w.size ** 2
+        out["session_marginal_se"][s] = np.sqrt(variance) / w.mean()
         out["weight_ess"][s] = w.sum() ** 2 / np.sum(w ** 2)
         out["pareto_k"][s] = _pareto_k(log_w[:, None])[0]
         out["mode_found"][s] = found

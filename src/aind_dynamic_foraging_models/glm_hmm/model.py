@@ -82,6 +82,9 @@ class Prior(NamedTuple):
     sigma: float = 100.0  # standard deviation of the Gaussian prior on every GLM weight
     alpha: float = 1.0  # Dirichlet concentration of pi and of every row of A
     stickiness: float = 0.0  # extra Dirichlet concentration on the diagonal of A
+    # Centre of the Gaussian prior: emission parameters shaped like the model's (for a subject
+    # refit, the global fit's weights), or None for zero.
+    mean: object = None
 
 
 # Ashwood et al. 2022: a near-flat global fit, then per-animal MAP fits.
@@ -246,7 +249,7 @@ class GLMHMM(HMM):
         concentration = prior.alpha * jnp.ones((K, K)) + prior.stickiness * jnp.eye(K)
         lp = _dirichlet_log_prob(params.initial.probs, prior.alpha * jnp.ones(K))
         lp += jnp.sum(_dirichlet_log_prob(params.transitions.transition_matrix, concentration))
-        return lp + self.emission_component.log_prior(params.emissions, prior.sigma)
+        return lp + self.emission_component.log_prior(params.emissions, prior.sigma, prior.mean)
 
 
 def _dirichlet_log_prob(x, concentration):
@@ -382,7 +385,7 @@ def _m_step(model, params, props, initial_counts, transition_counts, emission_st
             transition_matrix=dirichlet_map(transition_counts, concentration)
         )
     emissions, _ = model.emission_component.m_step(
-        params.emissions, props.emissions, emission_stats, None, prior.sigma
+        params.emissions, props.emissions, emission_stats, None, prior.sigma, prior.mean
     )
     return ParamsGLMHMM(initial, transitions, emissions)
 
@@ -462,7 +465,8 @@ def fit_em(
         raise ValueError("prepared data was made for another emission, lag count or data set")
     with _compute():
         params = _float64(params)
-        prior = Prior(*(float(v) for v in prior))
+        prior = Prior(float(prior.sigma), float(prior.alpha), float(prior.stickiness),
+                      None if prior.mean is None else _float64(prior.mean))
         selectors, n_trials, blocks = prepared.selectors, prepared.n_trials, prepared.blocks
         block_rows = [(jnp.asarray(b.X), jnp.asarray(b.targets)) for b in blocks]
         history, converged = [], False

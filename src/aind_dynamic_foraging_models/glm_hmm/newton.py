@@ -81,8 +81,8 @@ def _newton(objective, grad_hess, theta, num_steps):
     return jax.lax.fori_loop(0, num_steps, step, theta)
 
 
-def logistic_objective(theta, X, targets, weights, prior_precision):
-    """Weighted Bernoulli log likelihood minus a zero-mean Gaussian penalty.
+def logistic_objective(theta, X, targets, weights, prior_precision, prior_mean=0.0):
+    """Weighted Bernoulli log likelihood minus a Gaussian penalty around ``prior_mean``.
 
     Parameters
     ----------
@@ -96,6 +96,8 @@ def logistic_objective(theta, X, targets, weights, prior_precision):
         Non-negative per-trial weights, shape (N,).
     prior_precision : float
         1 / sigma^2.
+    prior_mean : float or jnp.ndarray
+        Centre of the prior, shape (D,) or scalar (default 0).
 
     Returns
     -------
@@ -104,26 +106,26 @@ def logistic_objective(theta, X, targets, weights, prior_precision):
     """
     eta = X @ theta
     loglik = targets * eta - jax.nn.softplus(eta)
-    return jnp.sum(weights * loglik) - 0.5 * prior_precision * jnp.sum(theta**2)
+    return jnp.sum(weights * loglik) - 0.5 * prior_precision * jnp.sum((theta - prior_mean) ** 2)
 
 
-def _logistic_grad_hess(theta, X, targets, weights, prior_precision):
+def _logistic_grad_hess(theta, X, targets, weights, prior_precision, prior_mean=0.0):
     """Analytic gradient and Hessian of :func:`logistic_objective`."""
     p = jax.nn.sigmoid(X @ theta)
-    grad = X.T @ (weights * (targets - p)) - prior_precision * theta
+    grad = X.T @ (weights * (targets - p)) - prior_precision * (theta - prior_mean)
     curvature = weights * p * (1.0 - p)
     hess = -X.T @ (X * curvature[:, None]) - prior_precision * jnp.eye(theta.shape[0])
     return grad, hess
 
 
-def fit_logistic(theta0, X, targets, weights, prior_precision, num_steps=5):
+def fit_logistic(theta0, X, targets, weights, prior_precision, num_steps=5, prior_mean=0.0):
     """MAP weights of a weighted logistic regression, by Newton's method.
 
     Parameters
     ----------
     theta0 : jnp.ndarray
         Starting weights, shape (D,).
-    X, targets, weights, prior_precision
+    X, targets, weights, prior_precision, prior_mean
         See :func:`logistic_objective`.
     num_steps : int
         Newton iterations.
@@ -134,8 +136,8 @@ def fit_logistic(theta0, X, targets, weights, prior_precision, num_steps=5):
         Shape (D,).
     """
     return _newton(
-        lambda t: logistic_objective(t, X, targets, weights, prior_precision),
-        lambda t: _logistic_grad_hess(t, X, targets, weights, prior_precision),
+        lambda t: logistic_objective(t, X, targets, weights, prior_precision, prior_mean),
+        lambda t: _logistic_grad_hess(t, X, targets, weights, prior_precision, prior_mean),
         theta0,
         num_steps,
     )
@@ -161,7 +163,8 @@ def reference_log_probs(theta, X):
     return jax.nn.log_softmax(logits, axis=-1)
 
 
-def multinomial_objective(theta_flat, X, labels, weights, prior_precision, num_free):
+def multinomial_objective(theta_flat, X, labels, weights, prior_precision, num_free,
+                          prior_mean=0.0):
     """Weighted reference-class multinomial log likelihood minus a Gaussian penalty.
 
     Parameters
@@ -178,6 +181,8 @@ def multinomial_objective(theta_flat, X, labels, weights, prior_precision, num_f
         1 / sigma^2.
     num_free : int
         Number of non-reference classes (C - 1).
+    prior_mean : float or jnp.ndarray
+        Centre of the prior, shape (num_free * D,) or scalar (default 0).
 
     Returns
     -------
@@ -187,17 +192,19 @@ def multinomial_objective(theta_flat, X, labels, weights, prior_precision, num_f
     theta = theta_flat.reshape(num_free, -1)
     log_probs = reference_log_probs(theta, X)
     loglik = jnp.take_along_axis(log_probs, labels[:, None], axis=-1)[:, 0]
-    return jnp.sum(weights * loglik) - 0.5 * prior_precision * jnp.sum(theta_flat**2)
+    penalty = 0.5 * prior_precision * jnp.sum((theta_flat - prior_mean) ** 2)
+    return jnp.sum(weights * loglik) - penalty
 
 
-def _multinomial_grad_hess(theta_flat, X, labels, weights, prior_precision, num_free):
+def _multinomial_grad_hess(theta_flat, X, labels, weights, prior_precision, num_free,
+                           prior_mean=0.0):
     """Analytic gradient and Hessian of :func:`multinomial_objective`."""
     theta = theta_flat.reshape(num_free, -1)
     dim = theta.shape[1]
     probs = jnp.exp(reference_log_probs(theta, X))[:, :num_free]  # (N, C-1)
     onehot = jax.nn.one_hot(labels, num_free + 1)[:, :num_free]
     grad = ((weights[:, None] * (onehot - probs)).T @ X).reshape(-1)
-    grad = grad - prior_precision * theta_flat
+    grad = grad - prior_precision * (theta_flat - prior_mean)
     # Block (c, c') = -X^T diag(w p_c (delta_cc' - p_c')) X; symmetric, so build c <= c'.
     blocks = [[None] * num_free for _ in range(num_free)]
     for c in range(num_free):
@@ -209,7 +216,7 @@ def _multinomial_grad_hess(theta_flat, X, labels, weights, prior_precision, num_
     return grad, hess
 
 
-def fit_multinomial(theta0, X, labels, weights, prior_precision, num_steps=5):
+def fit_multinomial(theta0, X, labels, weights, prior_precision, num_steps=5, prior_mean=0.0):
     """MAP weights of a weighted reference-class multinomial regression, by Newton's method.
 
     Parameters
@@ -220,6 +227,8 @@ def fit_multinomial(theta0, X, labels, weights, prior_precision, num_steps=5):
         See :func:`multinomial_objective`.
     num_steps : int
         Newton iterations.
+    prior_mean : float or jnp.ndarray
+        Centre of the prior, shape (C - 1, D) or scalar (default 0).
 
     Returns
     -------
@@ -227,9 +236,10 @@ def fit_multinomial(theta0, X, labels, weights, prior_precision, num_steps=5):
         Shape (C - 1, D).
     """
     num_free = theta0.shape[0]
+    mean = jnp.broadcast_to(prior_mean, theta0.shape).reshape(-1)
     theta_flat = _newton(
-        lambda t: multinomial_objective(t, X, labels, weights, prior_precision, num_free),
-        lambda t: _multinomial_grad_hess(t, X, labels, weights, prior_precision, num_free),
+        lambda t: multinomial_objective(t, X, labels, weights, prior_precision, num_free, mean),
+        lambda t: _multinomial_grad_hess(t, X, labels, weights, prior_precision, num_free, mean),
         theta0.reshape(-1),
         num_steps,
     )

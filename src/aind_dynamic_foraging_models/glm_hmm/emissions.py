@@ -224,8 +224,8 @@ class _GLMEmissions(HMMEmissions):
         mask = inputs[:, self.columns["mask"]]
         return jnp.where(mask[:, None] > 0, loglik, 0.0)
 
-    def log_prior(self, params, prior_sigma=100.0):
-        """Zero-mean Gaussian log density of every weight.
+    def log_prior(self, params, prior_sigma=100.0, prior_mean=None):
+        """Gaussian log density of every weight, around ``prior_mean`` (default zero).
 
         Parameters
         ----------
@@ -233,6 +233,8 @@ class _GLMEmissions(HMMEmissions):
             Emission parameters.
         prior_sigma : float
             Prior standard deviation.
+        prior_mean : NamedTuple, optional
+            Centre of the prior, shaped like ``params`` (e.g. the global fit's weights).
 
         Returns
         -------
@@ -240,6 +242,8 @@ class _GLMEmissions(HMMEmissions):
             Scalar.
         """
         leaves = jax.tree_util.tree_leaves(params)
+        if prior_mean is not None:   # log N(w; m, s) = log N(w - m; 0, s), computed the same way
+            leaves = [w - m for w, m in zip(leaves, jax.tree_util.tree_leaves(prior_mean))]
         return sum(jnp.sum(tfd.Normal(0.0, prior_sigma).log_prob(w)) for w in leaves)
 
     def initialize_m_step_state(self, params, props):
@@ -312,7 +316,7 @@ class HurdleGLMEmissions(_GLMEmissions):
         )
         return side, engage
 
-    def m_step(self, params, props, batch_stats, m_step_state, prior_sigma=100.0):
+    def m_step(self, params, props, batch_stats, m_step_state, prior_sigma=100.0, prior_mean=None):
         """Newton MAP update of both halves, one state after another.
 
         Parameters
@@ -328,6 +332,8 @@ class HurdleGLMEmissions(_GLMEmissions):
             Unused.
         prior_sigma : float
             Gaussian prior standard deviation.
+        prior_mean : ParamsHurdleEmissions, optional
+            Centre of the prior (default zero).
 
         Returns
         -------
@@ -336,20 +342,23 @@ class HurdleGLMEmissions(_GLMEmissions):
         """
         (X_side, t_side, w_side), (X_engage, t_engage, w_engage) = batch_stats
         precision = 1.0 / prior_sigma**2
+        if prior_mean is None:
+            prior_mean = jax.tree_util.tree_map(jnp.zeros_like, params)
 
-        def fit_block(theta, X, targets, weights):
+        def fit_block(theta, X, targets, weights, mean):
             """Every state's logistic regression on one block."""
             return jax.lax.map(
                 lambda args: fit_logistic(args[0], X, targets, args[1], precision,
-                                          self.num_newton_steps),
-                (theta, weights.T),
+                                          self.num_newton_steps, args[2]),
+                (theta, weights.T, mean),
             )
 
         side_weights, engage_weights = params.side_weights, params.engage_weights
         if props.side_weights.trainable:
-            side_weights = fit_block(side_weights, X_side, t_side, w_side)
+            side_weights = fit_block(side_weights, X_side, t_side, w_side, prior_mean.side_weights)
         if props.engage_weights.trainable:
-            engage_weights = fit_block(engage_weights, X_engage, t_engage, w_engage)
+            engage_weights = fit_block(engage_weights, X_engage, t_engage, w_engage,
+                                       prior_mean.engage_weights)
         return params._replace(side_weights=side_weights, engage_weights=engage_weights), None
 
 
@@ -403,7 +412,7 @@ class ReferenceGLMEmissions(_GLMEmissions):
         X = np.asarray(inputs)[:, self.columns["regressors"]]
         return (compress_rows(X, labels * 1.0, np.arange(len(labels))),)
 
-    def m_step(self, params, props, batch_stats, m_step_state, prior_sigma=100.0):
+    def m_step(self, params, props, batch_stats, m_step_state, prior_sigma=100.0, prior_mean=None):
         """Newton MAP update of the multinomial GLM, one state after another.
 
         Parameters
@@ -419,6 +428,8 @@ class ReferenceGLMEmissions(_GLMEmissions):
             Unused.
         prior_sigma : float
             Gaussian prior standard deviation.
+        prior_mean : ParamsReferenceEmissions, optional
+            Centre of the prior (default zero).
 
         Returns
         -------
@@ -429,10 +440,11 @@ class ReferenceGLMEmissions(_GLMEmissions):
             return params, None
         ((X, labels, weights),) = batch_stats
         labels = labels.astype(jnp.int32)
+        mean = jnp.zeros_like(params.weights) if prior_mean is None else prior_mean.weights
         new_weights = jax.lax.map(
             lambda args: fit_multinomial(args[0], X, labels, args[1], 1.0 / prior_sigma**2,
-                                         self.num_newton_steps),
-            (params.weights, weights.T),
+                                         self.num_newton_steps, args[2]),
+            (params.weights, weights.T, mean),
         )
         return params._replace(weights=new_weights), None
 

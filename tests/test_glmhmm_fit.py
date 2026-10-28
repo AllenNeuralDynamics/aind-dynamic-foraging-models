@@ -182,9 +182,13 @@ class TestSpecialCasesAndRefits(unittest.TestCase):
                       prepared._replace(n_lags=N_LAGS + 1)):
             with self.assertRaises(ValueError):
                 fit_em(model, start, props, self.buckets, max_iters=1, prepared=wrong)
-        # A bucket list of the same length but other sessions is refused too.
-        other_sessions = make_buckets(self.sessions[:-3], N_LAGS)
-        for wrong_buckets in (self.buckets[:1], other_sessions):
+        # Other sessions are refused too, even with identical bucket shapes and trial counts.
+        flipped = [(np.where(c == 2, 2, 1 - c), r) for c, r in self.sessions]
+        same_shapes = make_buckets(flipped, N_LAGS)
+        self.assertEqual([b.inputs.shape for b in same_shapes],
+                         [b.inputs.shape for b in self.buckets])
+        for wrong_buckets in (self.buckets[:1], make_buckets(self.sessions[:-3], N_LAGS),
+                              same_shapes):
             with self.assertRaises(ValueError):
                 fit_em(model, start, props, wrong_buckets, max_iters=1, prepared=prepared)
 

@@ -9,8 +9,8 @@ MODE
   refits   per-mouse refits of 3*R training mice: one at a time, then R threads
 
 Each restart runs A, then B EM iterations (tol 0) after a warm-up that compiles every bucket
-shape. Row compression is computed once and reused, as ``prepare_data`` now does (this script
-predates it and patches ``prepare_m_step`` instead). Per-iteration time is
+shape. Row compression is computed once per data set (``prepare_data``) and shared by the
+global restarts; each refit compresses its own mouse. Per-iteration time is
 (T_B - T_A) / (B - A), with every worker busy for the whole window. Results: RESULTS.md.
 """
 import multiprocessing as mp
@@ -40,25 +40,15 @@ def setup(npz, emission, K, L, cores=None):
                         np.split(d["train_rewards"].astype(int), s)))
     subjects = d["train_subjects"]
     model = M.GLMHMM(K, L, emission)
-    cls = type(model.emission_component)
-    prep, cache, lock = cls.prepare_m_step, {}, threading.Lock()
-
-    def cached(self, labels, inputs):
-        """Compress once per data shape, then reuse."""
-        key = labels.shape
-        with lock:
-            if key not in cache:
-                cache[key] = prep(self, labels, inputs)
-        return cache[key]
-
-    cls.prepare_m_step = cached
     buckets = M.make_buckets(sessions, L)
+    prepared = M.prepare_data(model, buckets)
     _, props = model.initialize()
     p0, _ = model.initialize(jax.random.PRNGKey(99), noise_scale=0.2)
     t = time.time()
-    M.fit_em(model, p0, props, buckets, M.GLOBAL_PRIOR, max_iters=1, tol=0.0)
+    M.fit_em(model, p0, props, buckets, M.GLOBAL_PRIOR, max_iters=1, tol=0.0,
+             prepared=prepared)
     STATE.update(M=M, jax=jax, model=model, props=props, buckets=buckets, sessions=sessions,
-                 subjects=subjects, L=L, warmup=time.time() - t)
+                 subjects=subjects, L=L, prepared=prepared, warmup=time.time() - t)
 
 
 def restart(seed):
@@ -69,7 +59,7 @@ def restart(seed):
     for n in (A, B):
         t = time.time()
         r = M.fit_em(model, params, STATE["props"], STATE["buckets"], M.GLOBAL_PRIOR,
-                     max_iters=n, tol=0.0)
+                     max_iters=n, tol=0.0, prepared=STATE["prepared"])
         out[n] = time.time() - t
     lj = np.asarray(r.log_joint)
     dtype = str(np.asarray(r.params.emissions[0]).dtype)

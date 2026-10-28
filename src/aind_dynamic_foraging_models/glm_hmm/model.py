@@ -28,6 +28,7 @@ Everything runs in float64 (``jax.experimental.enable_x64``), on the CPU by defa
 """
 
 import contextlib
+import hashlib
 import os
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
@@ -128,6 +129,21 @@ class PreparedData(NamedTuple):
     n_trials: int  # real trials
     selectors: list  # per bucket, the flat indices of its real trials
     blocks: tuple  # CompressedRows per regression block of the emission M-step
+    digest: str  # of the buckets' contents (:func:`_buckets_digest`)
+
+
+def _buckets_digest(buckets):
+    """A hash of every bucket's labels and inputs, in order: identifies the data.
+
+    About a second at 4.9M trials, against several seconds for one EM iteration.
+    """
+    h = hashlib.blake2b(digest_size=16)
+    for bucket in buckets:
+        for array in (bucket.labels, bucket.inputs):
+            array = np.ascontiguousarray(array)
+            h.update(str((array.shape, array.dtype.str)).encode())
+            h.update(array.data)
+    return h.hexdigest()
 
 
 class GLMHMM(HMM):
@@ -404,7 +420,8 @@ def prepare_data(model, buckets):
     with _compute():
         labels_flat, inputs_flat, selectors = _flatten_real_trials(buckets)
         blocks = tuple(model.emission_component.prepare_m_step(labels_flat, inputs_flat))
-    return PreparedData(model.emission, model.n_lags, len(labels_flat), selectors, blocks)
+    return PreparedData(model.emission, model.n_lags, len(labels_flat), selectors, blocks,
+                        _buckets_digest(buckets))
 
 
 def fit_em(
@@ -441,9 +458,8 @@ def fit_em(
     if prepared is None:
         prepared = prepare_data(model, buckets)
     elif ((prepared.emission, prepared.n_lags) != (model.emission, model.n_lags)
-          or [len(s) for s in prepared.selectors]
-          != [int((b.inputs[..., -1] > 0).sum()) for b in buckets]):
-        raise ValueError("prepared data was made for another emission, lag count or bucket list")
+          or prepared.digest != _buckets_digest(buckets)):
+        raise ValueError("prepared data was made for another emission, lag count or data set")
     with _compute():
         params = _float64(params)
         prior = Prior(*(float(v) for v in prior))

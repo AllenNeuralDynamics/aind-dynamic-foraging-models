@@ -441,7 +441,8 @@ def fit_em(
     if prepared is None:
         prepared = prepare_data(model, buckets)
     elif ((prepared.emission, prepared.n_lags) != (model.emission, model.n_lags)
-          or len(prepared.selectors) != len(buckets)):
+          or [len(s) for s in prepared.selectors]
+          != [int((b.inputs[..., -1] > 0).sum()) for b in buckets]):
         raise ValueError("prepared data was made for another emission, lag count or bucket list")
     with _compute():
         params = _float64(params)

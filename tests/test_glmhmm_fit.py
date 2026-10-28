@@ -182,8 +182,11 @@ class TestSpecialCasesAndRefits(unittest.TestCase):
                       prepared._replace(n_lags=N_LAGS + 1)):
             with self.assertRaises(ValueError):
                 fit_em(model, start, props, self.buckets, max_iters=1, prepared=wrong)
-        with self.assertRaises(ValueError):
-            fit_em(model, start, props, self.buckets[:1], max_iters=1, prepared=prepared)
+        # A bucket list of the same length but other sessions is refused too.
+        other_sessions = make_buckets(self.sessions[:-3], N_LAGS)
+        for wrong_buckets in (self.buckets[:1], other_sessions):
+            with self.assertRaises(ValueError):
+                fit_em(model, start, props, wrong_buckets, max_iters=1, prepared=prepared)
 
     def test_frozen_initial_and_transitions_are_kept(self):
         """Untrainable pi and A survive EM unchanged; the emissions still move."""

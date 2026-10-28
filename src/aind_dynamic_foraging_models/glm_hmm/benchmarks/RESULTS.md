@@ -92,26 +92,28 @@ The refits cover 614 training mice for K selection and 149 held-out mice.
 
 K = 10, hurdle, L = 5, the same cohort; seconds per EM iteration of each restart:
 
-| cores (node CPU) | one restart alone | 10 restarts at once, each | restart phase |
+| cores (node) | one restart alone | 10 restarts at once, each | restart phase |
 |---|---|---|---|
-| 8 (Xeon Gold 6238) | 8.9 | 29.1 (threads) | 3.1× faster |
-| 16 (Xeon Gold 6238R, busy 112-core node) | — | 28.0 (threads) | — |
-| 32 (Xeon E5-2630 v4, 40-core node) | 6.1 | 12.0 (threads), 12.3 (processes) | 5.1× faster |
+| 8 (Xeon Gold 6238, 88-core node) | 8.9 | 29.1 (threads) | 3.1× faster |
+| 16 (Xeon Gold 6238R, 112-core node shared with other jobs) | — | 28.0 (threads) | — |
+| 32 (Xeon E5-2630 v4, 40-core node, nearly to itself) | 6.1 | 12.0 (threads), 12.3 (processes) | 5.1× faster |
 
 - **Speed-up** is 10 × (alone) / (each, at once): the restart phase's wall clock when the
   restarts need equal iteration counts. The slowest restart sets it.
 - **Threads match processes**, so the GIL is not what limits them. Ten restarts in threads use
   31 GB; ten processes use 5.4 GB each.
-- **Not 10×: memory bandwidth.** One restart alone keeps about 2 of 8 cores busy, yet the
-  16-core run, on a node shared with other jobs, was no faster than 8 cores.
+- **Not 10×.** One restart alone keeps about 2 of 8 cores busy (SLURM CPU time over wall
+  time). The 16-core run, on a node shared with other jobs, was no faster than 8 cores, so
+  node load matters; why, and whether 64 cores would buy more, is not measured.
 - **Same fits.** Seed 0's log joint is identical alone and in threads on the same node, and
   every result is float64. Across nodes it differs in the fourth decimal (−2397424.1955 on
   32 cores, −2397424.1953 on 8): XLA's thread count changes the order of sums.
 - **Refits:** 30 refits of 20 iterations took 24 s one at a time and 8 s in 10 threads
   (3.2×), with identical log joints.
-- **≈ production run** (K = 10, L = 5, hurdle, 32 cores, `num_workers` 10): restarts
-  317 × 12 s ≈ 65 min, refits 763 × 8.5 s / 3.2 ≈ 35 min, so ≈ 2 h against 9–11 h on 8 cores
-  one fit at a time.
+- **≈ production run** (K = 10, L = 5, hurdle, 32 cores, `num_workers` 10): on a lightly
+  loaded node, restarts 317 × 12 s ≈ 65 min and refits 763 × 8.5 s / 3.2 ≈ 35 min, so ≈ 2 h;
+  allow 2–4 h on a shared node. One fit at a time on 8 cores takes 9–11 h. The slowest
+  restart sets the restart phase: one that runs to the 500-iteration cap takes ≈ 100 min.
 
 ## Caveats
 

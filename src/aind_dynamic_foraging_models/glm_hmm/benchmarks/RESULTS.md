@@ -31,7 +31,8 @@ Measured 2026-10-27 on the Allen HPC. Discussion and follow-ups:
   thousand trials, so launch latency and recompiles for new bucket shapes dominate on a GPU.
 - **Remaining GPU bottlenecks** (models#82):
   - the host-side aggregation of the posteriors, about 1 s per iteration;
-  - a one-time row compression of 37–107 s per `fit_em` call.
+  - a row compression of 37–107 s, once per `fit_em` call when this was measured, and now
+    once per run (`prepare_data`, shared by `fit_with_restarts`).
 
 ## Steady cost of one EM iteration, in seconds (`time_fit.py parts`)
 
@@ -87,6 +88,31 @@ The refits cover 614 training mice for K selection and 149 held-out mice.
 | global fit on GPU, refits on CPU | about 3–5 h | about 3–7 h |
 | all GPU (the trainer as of models#81) | about 5–7 h | about 5–9 h |
 
+## Restarts and refits at once (`bench_parallel.py`, `max_workers` / the trainer's `num_workers`)
+
+K = 10, hurdle, L = 5, the same cohort; seconds per EM iteration of each restart:
+
+| cores (node CPU) | one restart alone | 10 restarts at once, each | restart phase |
+|---|---|---|---|
+| 8 (Xeon Gold 6238) | 8.9 | 29.1 (threads) | 3.1× faster |
+| 16 (Xeon Gold 6238R, busy 112-core node) | — | 28.0 (threads) | — |
+| 32 (Xeon E5-2630 v4, 40-core node) | 6.1 | 12.0 (threads), 12.3 (processes) | 5.1× faster |
+
+- **Speed-up** is 10 × (alone) / (each, at once): the restart phase's wall clock when the
+  restarts need equal iteration counts. The slowest restart sets it.
+- **Threads match processes**, so the GIL is not what limits them. Ten restarts in threads use
+  31 GB; ten processes use 5.4 GB each.
+- **Not 10×: memory bandwidth.** One restart alone keeps about 2 of 8 cores busy, yet the
+  16-core run, on a node shared with other jobs, was no faster than 8 cores.
+- **Same fits.** Seed 0's log joint is identical alone and in threads on the same node, and
+  every result is float64. Across nodes it differs in the fourth decimal (−2397424.1955 on
+  32 cores, −2397424.1953 on 8): XLA's thread count changes the order of sums.
+- **Refits:** 30 refits of 20 iterations took 24 s one at a time and 8 s in 10 threads
+  (3.2×), with identical log joints.
+- **≈ production run** (K = 10, L = 5, hurdle, 32 cores, `num_workers` 10): restarts
+  317 × 12 s ≈ 65 min, refits 763 × 8.5 s / 3.2 ≈ 35 min, so ≈ 2 h against 9–11 h on 8 cores
+  one fit at a time.
+
 ## Caveats
 
 - **Host-side variation:** host steps depend on the node's CPU.
@@ -130,6 +156,14 @@ paths it loaded.
        sbatch slurm/time_fit.sbatch PYTHON cohort.npz parts hurdle 10 5
        sbatch --gres=gpu:a100:1 --export=ALL,AIND_GLMHMM_DEVICE=gpu \
            slurm/time_fit.sbatch PYTHON cohort.npz converge hurdle 10 5
+
+4. Concurrency (CPU only):
+
+       sbatch -p aind --ntasks=1 -c 32 --mem=180G --wrap \
+           "PYTHON bench_parallel.py cohort.npz hurdle 10 5 threads 10"
+
+   `MODE` is `seq`, `threads`, `procs` or `refits`; jobs 27514561 and 27514563 (32 and 8
+   cores).
 
 ## Raw result lines
 

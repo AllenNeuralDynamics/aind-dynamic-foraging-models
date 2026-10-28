@@ -29,6 +29,7 @@ Everything runs in float64 (``jax.experimental.enable_x64``), on the CPU by defa
 
 import contextlib
 import os
+from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from typing import NamedTuple
 
@@ -113,6 +114,20 @@ class FitResult(NamedTuple):
     params: ParamsGLMHMM
     log_joint: np.ndarray  # log p(y, theta) per EM iteration
     converged: bool
+
+
+class PreparedData(NamedTuple):
+    """Buckets in the form the EM loop uses; from :func:`prepare_data`.
+
+    Row compression takes about a minute at 4.9M trials. It depends only on the data, the
+    emission and the lags, not on K or the parameters, so one result serves every restart.
+    """
+
+    emission: str
+    n_lags: int
+    n_trials: int  # real trials
+    selectors: list  # per bucket, the flat indices of its real trials
+    blocks: tuple  # CompressedRows per regression block of the emission M-step
 
 
 class GLMHMM(HMM):
@@ -372,8 +387,29 @@ def _flatten_real_trials(buckets):
     return np.concatenate(labels), np.concatenate(inputs), selectors
 
 
+def prepare_data(model, buckets):
+    """Flatten the real trials of ``buckets`` and compress them for ``model``'s M-step.
+
+    Parameters
+    ----------
+    model : GLMHMM
+        Any model with the emission and lags the fits will use (K does not matter).
+    buckets : list of SessionBucket
+        Data, from :func:`make_buckets`.
+
+    Returns
+    -------
+    PreparedData
+    """
+    with _compute():
+        labels_flat, inputs_flat, selectors = _flatten_real_trials(buckets)
+        blocks = tuple(model.emission_component.prepare_m_step(labels_flat, inputs_flat))
+    return PreparedData(model.emission, model.n_lags, len(labels_flat), selectors, blocks)
+
+
 def fit_em(
-    model, params, props, buckets, prior=GLOBAL_PRIOR, max_iters=300, tol=1e-6, verbose=False
+    model, params, props, buckets, prior=GLOBAL_PRIOR, max_iters=300, tol=1e-6, verbose=False,
+    prepared=None,
 ):
     """Fit by EM from ``params`` until the log joint stops improving.
 
@@ -394,17 +430,23 @@ def fit_em(
         criterion means the same for one subject's sessions and for a whole cohort.
     verbose : bool
         Print the log joint every 10 iterations.
+    prepared : PreparedData, optional
+        :func:`prepare_data` of these ``buckets``, to skip the row compression. Computed here
+        when omitted.
 
     Returns
     -------
     FitResult
     """
+    if prepared is None:
+        prepared = prepare_data(model, buckets)
+    elif ((prepared.emission, prepared.n_lags) != (model.emission, model.n_lags)
+          or len(prepared.selectors) != len(buckets)):
+        raise ValueError("prepared data was made for another emission, lag count or bucket list")
     with _compute():
         params = _float64(params)
         prior = Prior(*(float(v) for v in prior))
-        labels_flat, inputs_flat, selectors = _flatten_real_trials(buckets)
-        n_trials = len(labels_flat)
-        blocks = model.emission_component.prepare_m_step(labels_flat, inputs_flat)
+        selectors, n_trials, blocks = prepared.selectors, prepared.n_trials, prepared.blocks
         block_rows = [(jnp.asarray(b.X), jnp.asarray(b.targets)) for b in blocks]
         history, converged = [], False
         # max_iters M-steps; the log joint is evaluated before each and once more after the
@@ -439,9 +481,15 @@ def fit_em(
 
 def fit_with_restarts(
     model, buckets, key, num_restarts=1, prior=GLOBAL_PRIOR, noise_scale=0.2, max_iters=300,
-    tol=1e-6, **init_kwargs,
+    tol=1e-6, max_workers=1, prepared=None, **init_kwargs,
 ):
     """Run :func:`fit_em` from several noisy starts and keep the best log joint.
+
+    The starts share one row compression, and with ``max_workers > 1`` they run in a thread
+    pool. Each start is seeded by its own key, so the fits do not depend on ``max_workers``.
+    One CPU fit keeps only about two cores busy: on study 14's cohort (4.9M trials, K = 10),
+    ten starts at once finish 3x sooner than one after another on 8 cores, and 5x on 32
+    (``benchmarks/RESULTS.md``). Not measured on a GPU.
 
     Parameters
     ----------
@@ -459,6 +507,10 @@ def fit_with_restarts(
         Emission-weight noise per start (Ashwood et al.: 0.2 around the GLM weights).
     max_iters, tol
         See :func:`fit_em`.
+    max_workers : int
+        Starts fitted at once.
+    prepared : PreparedData, optional
+        :func:`prepare_data` of ``buckets``; computed here when omitted.
     **init_kwargs
         Passed to :meth:`GLMHMM.initialize` (e.g. starting emission weights).
 
@@ -467,10 +519,19 @@ def fit_with_restarts(
     tuple
         (best FitResult, list of every FitResult in start order).
     """
-    results = []
-    for restart_key in jax.random.split(key, num_restarts):
-        params, props = model.initialize(restart_key, noise_scale=noise_scale, **init_kwargs)
-        results.append(fit_em(model, params, props, buckets, prior, max_iters, tol))
+    if prepared is None:
+        prepared = prepare_data(model, buckets)
+    starts = [model.initialize(k, noise_scale=noise_scale, **init_kwargs)
+              for k in jax.random.split(key, num_restarts)]
+
+    def fit(start):
+        return fit_em(model, *start, buckets, prior, max_iters, tol, prepared=prepared)
+
+    if max_workers > 1:
+        with ThreadPoolExecutor(max_workers) as pool:
+            results = list(pool.map(fit, starts))
+    else:
+        results = [fit(start) for start in starts]
     best = max(results, key=lambda r: r.log_joint[-1])
     return best, results
 

@@ -20,6 +20,7 @@ if DEPS_PRESENT:
         fit_with_restarts,
         make_buckets,
         match_by_weights,
+        prepare_data,
     )
     from aind_dynamic_foraging_models.glm_hmm.design import build_inputs
     from aind_dynamic_foraging_models.glm_hmm.newton import fit_logistic
@@ -153,6 +154,36 @@ class TestSpecialCasesAndRefits(unittest.TestCase):
         best, results = fit_with_restarts(GLMHMM(2, N_LAGS, "hurdle"), self.buckets,
                                           jax.random.PRNGKey(3), num_restarts=2, max_iters=20)
         self.assertEqual(best.log_joint[-1], max(r.log_joint[-1] for r in results))
+
+    def test_parallel_restarts_match_sequential(self):
+        """Restarts run at once give the same fits, in the same order, as one at a time."""
+        model = GLMHMM(2, N_LAGS, "hurdle")
+        key = jax.random.PRNGKey(7)
+        _, sequential = fit_with_restarts(model, self.buckets, key, num_restarts=3, max_iters=15)
+        _, parallel = fit_with_restarts(model, self.buckets, key, num_restarts=3, max_iters=15,
+                                        max_workers=3)
+        for one, other in zip(sequential, parallel):
+            np.testing.assert_array_equal(one.log_joint, other.log_joint)
+            for a, b in zip(jax.tree_util.tree_leaves(one.params),
+                            jax.tree_util.tree_leaves(other.params)):
+                np.testing.assert_array_equal(a, b)
+                self.assertEqual(np.asarray(a).dtype, np.float64)
+
+    def test_prepared_data_gives_the_same_fit(self):
+        """Reusing one row compression changes nothing; a mismatched one is refused."""
+        model = GLMHMM(2, N_LAGS, "hurdle")
+        start, props = model.initialize(jax.random.PRNGKey(8), noise_scale=0.3)
+        fresh = fit_em(model, start, props, self.buckets, max_iters=5, tol=0.0)
+        prepared = prepare_data(GLMHMM(1, N_LAGS, "hurdle"), self.buckets)  # K is irrelevant
+        reused = fit_em(model, start, props, self.buckets, max_iters=5, tol=0.0,
+                        prepared=prepared)
+        np.testing.assert_array_equal(fresh.log_joint, reused.log_joint)
+        for wrong in (prepared._replace(emission="reference"),
+                      prepared._replace(n_lags=N_LAGS + 1)):
+            with self.assertRaises(ValueError):
+                fit_em(model, start, props, self.buckets, max_iters=1, prepared=wrong)
+        with self.assertRaises(ValueError):
+            fit_em(model, start, props, self.buckets[:1], max_iters=1, prepared=prepared)
 
     def test_frozen_initial_and_transitions_are_kept(self):
         """Untrainable pi and A survive EM unchanged; the emissions still move."""

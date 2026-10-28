@@ -177,7 +177,9 @@ simulate closed-loop sessions, which were then refitted with the production prot
 
 **Speed.** On study 14's cohort (4.9M trials, K = 10), a GPU runs one EM restart to
 convergence 2.7× (hurdle) to 5.6× (reference) faster than 8 CPU cores at L = 5. Per-mouse
-refits are about 2× faster on the CPU. A GPU needs the CUDA solver pin described in
+refits are about 2× faster on the CPU. On a CPU, run the restarts and refits at once
+(`fit_with_restarts(..., max_workers=10)`, the trainer's `num_workers`): ten restarts finish
+3× sooner than one after another on 8 cores, and 5× on 32. A GPU needs the CUDA solver pin described in
 `model._compute`. The benchmark is in
 [AllenNeuralDynamics/aind-dynamic-foraging-bfm-wrapper#111](https://github.com/AllenNeuralDynamics/aind-dynamic-foraging-bfm-wrapper/issues/111),
 and its scripts and tables are added under `benchmarks/` by

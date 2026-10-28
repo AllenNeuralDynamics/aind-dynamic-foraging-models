@@ -26,6 +26,7 @@ from .model import (  # noqa: F401
     SUBJECT_PRIOR,
     FitResult,
     ParamsGLMHMM,
+    PreparedData,
     Prior,
     SessionBucket,
     dirichlet_map,
@@ -33,5 +34,6 @@ from .model import (  # noqa: F401
     fit_with_restarts,
     make_buckets,
     predictive_log_probs,
+    prepare_data,
     state_posteriors,
 )

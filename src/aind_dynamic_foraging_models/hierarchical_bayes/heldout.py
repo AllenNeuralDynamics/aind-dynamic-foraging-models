@@ -1077,6 +1077,10 @@ def importance_sampled_session_marginal(
     n_t = int(np.floor(n_proposal * (1.0 - prior_fraction)))
     n_prior = n_proposal - n_t
     realised_prior = n_prior / n_proposal
+    if n_t < 2 or n_prior < 2:
+        raise ValueError(
+            f"n_proposal={n_proposal} with prior_fraction={prior_fraction} gives {n_t} t and "
+            f"{n_prior} mixture draws; each needs at least 2 to estimate its variance.")
 
     def neg_log_post(theta, c, r, m):
         return -(log_lik(theta[None], c, r, m)[0] + log_mixture(theta[None])[0])
@@ -1121,8 +1125,8 @@ def importance_sampled_session_marginal(
         w = np.exp(log_w - top)
         out["session_marginal"][s] = top + np.log(w.mean())
         # Stratified: the variance is within each component's draws, weighted by its count.
-        variance = sum(part.size * np.var(part, ddof=1) for part in (w[:n_t], w[n_t:])
-                       if part.size > 1) / w.size ** 2
+        variance = sum(part.size * np.var(part, ddof=1)
+                       for part in (w[:n_t], w[n_t:])) / w.size ** 2
         out["session_marginal_se"][s] = np.sqrt(variance) / w.mean()
         out["weight_ess"][s] = w.sum() ** 2 / np.sum(w ** 2)
         out["pareto_k"][s] = _pareto_k(log_w[:, None])[0]

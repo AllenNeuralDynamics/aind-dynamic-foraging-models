@@ -273,6 +273,9 @@ al. 2022, *Nat Neurosci* 25:201) over **left / right / ignore** choices, on
 - Device: float64 on the CPU by default; `AIND_GLMHMM_DEVICE=gpu` moves the fits to a GPU.
   GPU linear solves need the CUDA solver libraries pinned, as `model._compute` explains. A
   GPU is faster for a large pooled fit, but not for one mouse's refit.
+- Benchmark: `glm_hmm/benchmarks/RESULTS.md` times CPU against V100, A100 and L40S on study
+  14's 4.9M-trial cohort, with the scripts to rerun it. The GPU decision is tracked in
+  [AllenNeuralDynamics/aind-dynamic-foraging-bfm-wrapper#111](https://github.com/AllenNeuralDynamics/aind-dynamic-foraging-bfm-wrapper/issues/111).
 - Validation: `glm_hmm/recovery/` simulates from known parameters and refits them, and
   cross-checks the likelihood against `ssm` (`RESULTS.md`). The study version, including a
   factorial of designed strategies, is

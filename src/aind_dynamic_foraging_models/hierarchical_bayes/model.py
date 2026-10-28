@@ -9,13 +9,20 @@ Parameter names follow ``generative_model``; see the module docstring of
 :mod:`~aind_dynamic_foraging_models.hierarchical_bayes.likelihood`.
 """
 
+from typing import Callable, NamedTuple
+
 import jax
 import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
 from jax.scipy.stats import norm
 
-from .likelihood import hattori2019_log_likelihood
+from .likelihood import (
+    _ctt_stay_logits,
+    ctt_log_likelihood,
+    hattori2019_log_likelihood,
+    hattori2019_value_trajectory,
+)
 
 # Session-level parameters of the Hattori2019 forager, in the order they occupy the
 # unconstrained parameter vector.
@@ -61,8 +68,117 @@ def hattori2019_session_params(theta_unconstrained, beta_max=10.0):
     }
 
 
-def _session_log_likelihoods(choice_history, reward_history, valid_mask, params):
+# Session-level parameters of the CompareToThreshold forager (the ``CompareToThreshold``
+# preset: one learning rate, no choice kernel, reset to threshold on a switch), in the order
+# they occupy the unconstrained parameter vector.
+CTT_PARAMS = (
+    "learn_rate",
+    "threshold",
+    "softmax_inverse_temperature",
+    "bias_l",
+)
+
+
+def ctt_session_params(theta_unconstrained, beta_max=10.0):
+    """Map unconstrained parameters onto the CTT forager's bounded ranges.
+
+    Mirrors :func:`hattori2019_session_params`: the learning rate is ``Phi(x)`` and the inverse
+    temperature ``Phi(x) * beta_max``, so a standard normal is uniform on each. The threshold
+    is ``2 * Phi(x) - 1``, uniform on ``(-1, 1)``, the MLE fitting bounds of
+    ``generative_model``'s compare-to-threshold params. ``bias_l`` passes through.
+
+    Parameters
+    ----------
+    theta_unconstrained : jnp.ndarray, shape (..., 4)
+        Unconstrained parameters, ordered as :data:`CTT_PARAMS`.
+    beta_max : float, optional
+        Upper bound of ``softmax_inverse_temperature``.
+
+    Returns
+    -------
+    dict of str to jnp.ndarray
+        Bounded parameters, keyed by :data:`CTT_PARAMS`.
+    """
+    return {
+        "learn_rate": _phi(theta_unconstrained[..., 0]),
+        "threshold": 2.0 * _phi(theta_unconstrained[..., 1]) - 1.0,
+        "softmax_inverse_temperature": _phi(theta_unconstrained[..., 2]) * beta_max,
+        "bias_l": theta_unconstrained[..., 3],
+    }
+
+
+def _hattori2019_logits(params, choices, rewards):
+    """Per-trial action logits of Hattori2019, shape ``(n_trials, N_ACTIONS)``."""
+    q_values, _ = hattori2019_value_trajectory(
+        choices, rewards,
+        learn_rate_rew=params["learn_rate_rew"],
+        learn_rate_unrew=params["learn_rate_unrew"],
+        forget_rate_unchosen=params["forget_rate_unchosen"],
+        softmax_inverse_temperature=params["softmax_inverse_temperature"],
+        bias_l=params["bias_l"],
+    )
+    return (params["softmax_inverse_temperature"] * q_values.T
+            + jnp.array([params["bias_l"], 0.0]))
+
+
+def _ctt_logits(params, choices, rewards):
+    """Per-trial action logits of the CTT forager, shape ``(n_trials, N_ACTIONS)``."""
+    return _ctt_stay_logits(choices, rewards, **params)
+
+
+class ForagerModel(NamedTuple):
+    """What the model-agnostic two-level machinery needs to know about one forager.
+
+    Attributes
+    ----------
+    params : tuple of str
+        Session-level parameter names, in unconstrained-vector order.
+    session_params : callable
+        ``(theta_unconstrained, beta_max) -> dict`` of bounded parameters.
+    log_likelihood : callable
+        ``(choices, rewards, valid_mask=..., **params) -> scalar`` for one session.
+    logits : callable
+        ``(params, choices, rewards) -> (n_trials, N_ACTIONS)`` logits whose softmax is the
+        per-trial choice probability; the held-out scorers use it for exact log probabilities.
+    """
+
+    params: tuple
+    session_params: Callable
+    log_likelihood: Callable
+    logits: Callable
+
+
+MODELS = {
+    "hattori2019": ForagerModel(
+        HATTORI2019_PARAMS, hattori2019_session_params, hattori2019_log_likelihood,
+        _hattori2019_logits,
+    ),
+    "ctt": ForagerModel(CTT_PARAMS, ctt_session_params, ctt_log_likelihood, _ctt_logits),
+}
+
+
+def get_model(model):
+    """Look up a :class:`ForagerModel` by name in :data:`MODELS`."""
+    try:
+        return MODELS[model]
+    except KeyError:
+        raise ValueError(f"unknown model {model!r}; expected one of {sorted(MODELS)}") from None
+
+
+def _session_log_likelihoods(choice_history, reward_history, valid_mask, params,
+                             model="hattori2019"):
     """Log likelihood of every session, vectorised over the session axis."""
+    if model != "hattori2019":
+        spec = get_model(model)
+
+        def _generic(choices, rewards, mask, session_params):
+            """Log likelihood of a single session under ``model``."""
+            return spec.log_likelihood(choices, rewards, valid_mask=mask, **session_params)
+
+        return jax.vmap(_generic)(
+            choice_history, reward_history, valid_mask,
+            {name: params[name] for name in spec.params},
+        )
 
     def _one(choices, rewards, mask, learn_rew, learn_unrew, forget, beta, bias):
         """Log likelihood of a single session."""

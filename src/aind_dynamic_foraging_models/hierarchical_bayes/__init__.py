@@ -6,6 +6,8 @@ This subpackage requires the optional ``bayes`` extra (JAX and NumPyro)::
 """
 
 from .likelihood import (  # noqa: F401
+    ctt_choice_prob,
+    ctt_log_likelihood,
     hattori2019_choice_prob,
     hattori2019_log_likelihood,
 )

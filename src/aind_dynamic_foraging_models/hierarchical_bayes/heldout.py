@@ -23,8 +23,8 @@ import numpyro
 import numpyro.distributions as dist
 from numpyro.infer import MCMC, NUTS
 
-from .likelihood import hattori2019_choice_prob, hattori2019_value_trajectory
-from .model import HATTORI2019_PARAMS, hattori2019_session_params
+from .likelihood import hattori2019_choice_prob
+from .model import HATTORI2019_PARAMS, get_model, hattori2019_session_params
 
 POPULATION_SITES = (
     "population_mean",
@@ -44,6 +44,30 @@ FIXED_HYPERPRIOR = {
     "log_sigma_mean": np.full(len(HATTORI2019_PARAMS), -1.0),
     "log_sigma_spread": np.ones(len(HATTORI2019_PARAMS)),
 }
+
+
+def fixed_hyperprior(model="hattori2019"):
+    """:data:`FIXED_HYPERPRIOR`, sized for ``model``'s parameter count.
+
+    Parameters
+    ----------
+    model : str, optional
+        A key of :data:`~aind_dynamic_foraging_models.hierarchical_bayes.model.MODELS`.
+
+    Returns
+    -------
+    dict of str to np.ndarray
+        The same priors on every parameter, one entry per :data:`POPULATION_SITES`.
+    """
+    if model == "hattori2019":
+        return FIXED_HYPERPRIOR
+    n_params = len(get_model(model).params)
+    return {
+        "population_mean": np.zeros(n_params),
+        "population_scale": np.ones(n_params),
+        "log_sigma_mean": np.full(n_params, -1.0),
+        "log_sigma_spread": np.ones(n_params),
+    }
 
 
 def population_point_estimate(samples):
@@ -248,6 +272,7 @@ def adapt_subjects_batched(
     valid_mask=None,
     beta_max=10.0,
     centered=False,
+    model="hattori2019",
 ):
     """Condition many held-out subjects at once, as one batched model.
 
@@ -279,13 +304,18 @@ def adapt_subjects_batched(
         when the data constrain a session weakly; the centred form avoids the opposite
         geometry when they constrain it strongly, which is the refit for subjects whose
         non-centred fit diverged. ``mu_p`` and ``log_sigma`` keep their names either way.
+    model : str, optional
+        Which forager, a key of
+        :data:`~aind_dynamic_foraging_models.hierarchical_bayes.model.MODELS`.
+        ``"hattori2019"`` (the default) or ``"ctt"``. ``population`` must be sized for it.
     """
     from .model import _session_log_likelihoods
 
     choice_history = jnp.asarray(choice_history, dtype=jnp.int32)
     reward_history = jnp.asarray(reward_history, dtype=jnp.float32)
     n_subjects, n_context, n_trials = choice_history.shape
-    n_params = len(HATTORI2019_PARAMS)
+    spec = get_model(model)
+    n_params = len(spec.params)
 
     if session_mask is None:
         session_mask = jnp.ones((n_subjects, n_context), dtype=bool)
@@ -324,7 +354,7 @@ def adapt_subjects_batched(
             dist.Normal(0.0, 1.0).expand([n_subjects, n_context, n_params]).to_event(3),
         )
         theta = mu_p[:, None, :] + sigma[:, None, :] * theta_raw
-    params = hattori2019_session_params(theta, beta_max=beta_max)
+    params = spec.session_params(theta, beta_max=beta_max)
 
     n_units = n_subjects * n_context
     flat = {name: value.reshape(n_units) for name, value in params.items()}
@@ -333,6 +363,7 @@ def adapt_subjects_batched(
         reward_history.reshape(n_units, n_trials),
         valid_mask.reshape(n_units, n_trials),
         flat,
+        model=model,
     ).reshape(n_subjects, n_context)
 
     numpyro.factor("context", jnp.sum(jnp.where(session_mask, log_lik, 0.0)))
@@ -350,8 +381,11 @@ def fit_adaptation_batched(
     num_samples=500,
     beta_max=10.0,
     progress_bar=False,
+    model="hattori2019",
 ):
     """Sample adapted posteriors for many held-out subjects in one run.
+
+    ``model`` selects the forager, as for :func:`adapt_subjects_batched`.
 
     Returns
     -------
@@ -363,6 +397,7 @@ def fit_adaptation_batched(
         context_choices, context_rewards, population, rng_key=rng_key,
         session_mask=session_mask, valid_mask=valid_mask, num_warmup=num_warmup,
         num_samples=num_samples, num_chains=1, beta_max=beta_max, progress_bar=progress_bar,
+        model=model,
     )
     return mcmc.get_samples()
 
@@ -382,6 +417,7 @@ def fit_heldout_two_level(
     centered=False,
     target_accept_prob=0.8,
     max_tree_depth=10,
+    model="hattori2019",
 ):
     """Fit a two-level model to each held-out subject's context sessions, with diagnostics.
 
@@ -415,6 +451,9 @@ def fit_heldout_two_level(
     target_accept_prob, max_tree_depth : optional
         NUTS settings. A higher target acceptance takes smaller steps, the usual remedy for
         divergences; the defaults are NumPyro's.
+    model : str, optional
+        Which forager, as for :func:`adapt_subjects_batched`. The fixed hyperprior is sized
+        for it by :func:`fixed_hyperprior`.
 
     Returns
     -------
@@ -427,11 +466,12 @@ def fit_heldout_two_level(
         that subject's ``mu_p`` and ``log_sigma``; and ``divergences``, the joint count.
     """
     mcmc = _run_adaptation(
-        context_choices, context_rewards, FIXED_HYPERPRIOR, rng_key=rng_key,
+        context_choices, context_rewards, fixed_hyperprior(model), rng_key=rng_key,
         session_mask=session_mask, valid_mask=valid_mask, num_warmup=num_warmup,
         num_samples=num_samples, num_chains=num_chains, beta_max=beta_max,
         progress_bar=progress_bar, centered=centered, target_accept_prob=target_accept_prob,
         max_tree_depth=max_tree_depth,
+        model=model,
     )
     return mcmc.get_samples(), subject_diagnostics(mcmc)
 
@@ -473,7 +513,7 @@ def subject_diagnostics(mcmc):
 def _run_adaptation(
     context_choices, context_rewards, population, *, rng_key, session_mask, valid_mask,
     num_warmup, num_samples, num_chains, beta_max, progress_bar, centered=False,
-    target_accept_prob=0.8, max_tree_depth=10,
+    target_accept_prob=0.8, max_tree_depth=10, model="hattori2019",
 ):
     """Run NUTS on :func:`adapt_subjects_batched`; chains are vectorised on one device."""
     mcmc = MCMC(
@@ -487,7 +527,7 @@ def _run_adaptation(
     )
     mcmc.run(
         rng_key, context_choices, context_rewards, population,
-        session_mask, valid_mask, beta_max=beta_max, centered=centered,
+        session_mask, valid_mask, beta_max=beta_max, centered=centered, model=model,
         extra_fields=("diverging",),
     )
     return mcmc
@@ -702,6 +742,7 @@ def batched_heldout_scores(
     n_draws=None,
     n_theta_per_draw=1,
     session_chunk=None,
+    model="hattori2019",
 ):
     """Score held-out sessions by both marginals, from one shared set of session draws.
 
@@ -748,6 +789,8 @@ def batched_heldout_scores(
     session_chunk : int, optional
         Sessions per vmapped pass, which caps peak memory. Defaults to a size derived from
         the device's own memory limit.
+    model : str, optional
+        Which forager the draws belong to, as for :func:`adapt_subjects_batched`.
 
     Returns
     -------
@@ -776,7 +819,7 @@ def batched_heldout_scores(
     if session_chunk is None:
         session_chunk = auto_session_chunk(n_trials, int(mu_p.shape[0]) * n_theta_per_draw)
 
-    over_draws = _observed_prob_over_draws(n_trials, beta_max)
+    over_draws = _observed_prob_over_draws(n_trials, beta_max, model)
     names = ("trial_marginal", "session_marginal", "session_marginal_se", "weight_ess",
              "pareto_k")
     out = {name: np.zeros(n_sessions) for name in names}
@@ -811,31 +854,24 @@ def batched_heldout_scores(
     return out
 
 
-def _observed_prob_over_draws(n_trials, beta_max):
+def _observed_prob_over_draws(n_trials, beta_max, model="hattori2019"):
     """Jitted replay of the observed action's probability, per draw, session and trial.
 
-    One replay (:func:`hattori2019_value_trajectory`) gives the pre-update Q values, and both
-    returned arrays come from the same logits, ``beta * Q + [bias_l, 0]``: the probability
-    by softmax, as :func:`hattori2019_choice_prob` computes it, and the log probability by
-    log-softmax, which stays exact where the probability underflows. The session-marginal
-    sums the latter; a floor on the probability would cap how badly a confidently wrong draw
-    can score.
+    One replay gives the model's per-trial logits (for Hattori2019, from
+    :func:`hattori2019_value_trajectory`, ``beta * Q + [bias_l, 0]``), and both returned
+    arrays come from them: the probability by softmax, as :func:`hattori2019_choice_prob`
+    computes it, and the log probability by log-softmax, which stays exact where the
+    probability underflows. The session-marginal sums the latter; a floor on the probability
+    would cap how badly a confidently wrong draw can score. For the same reason the CTT
+    scorer does not apply ``ctt_choice_prob``'s ``1e-12`` clip.
     """
     trial_index = jnp.arange(n_trials)
+    spec = get_model(model)
 
     def _observed_prob(theta, session_choices, session_rewards):
         """Probability, and exact log probability, of the observed action per trial."""
-        params = hattori2019_session_params(theta, beta_max=beta_max)
-        q_values, _ = hattori2019_value_trajectory(
-            session_choices, session_rewards,
-            learn_rate_rew=params["learn_rate_rew"],
-            learn_rate_unrew=params["learn_rate_unrew"],
-            forget_rate_unchosen=params["forget_rate_unchosen"],
-            softmax_inverse_temperature=params["softmax_inverse_temperature"],
-            bias_l=params["bias_l"],
-        )
-        logits = (params["softmax_inverse_temperature"] * q_values.T
-                  + jnp.array([params["bias_l"], 0.0]))          # (n_trials, actions)
+        params = spec.session_params(theta, beta_max=beta_max)
+        logits = spec.logits(params, session_choices, session_rewards)  # (n_trials, actions)
         observed = (trial_index, session_choices)
         return (jax.nn.softmax(logits, axis=-1)[observed],
                 jax.nn.log_softmax(logits, axis=-1)[observed])
@@ -984,6 +1020,7 @@ def importance_sampled_session_marginal(
     df=4.0,
     scale_inflation=1.5,
     chunk=2000,
+    model="hattori2019",
 ):
     """Session-marginal likelihood of one subject's sessions by importance sampling.
 
@@ -1022,6 +1059,8 @@ def importance_sampled_session_marginal(
         Proposal shape, as above.
     chunk : int, optional
         Proposal draws per vectorised pass, which caps memory at ``chunk * n_posterior_draws``.
+    model : str, optional
+        Which forager the draws belong to, as for :func:`adapt_subjects_batched`.
 
     Returns
     -------
@@ -1045,7 +1084,7 @@ def importance_sampled_session_marginal(
         valid_mask = jnp.ones_like(choices, dtype=bool)
     valid_mask = jnp.asarray(valid_mask, dtype=bool)
     n_draws, n_params = mu_p.shape
-    over_draws = _observed_prob_over_draws(n_trials, beta_max)
+    over_draws = _observed_prob_over_draws(n_trials, beta_max, model)
 
     @jax.jit
     def log_mixture(theta):                                   # (m, p) -> (m,)

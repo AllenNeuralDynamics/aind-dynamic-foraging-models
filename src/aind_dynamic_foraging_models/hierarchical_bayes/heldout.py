@@ -1001,8 +1001,8 @@ def importance_sampled_session_marginal(
     mixed defensively with the mixture itself (at least ``prior_fraction`` of the draws), so
     every weight is at most ``p(y | theta) / prior_fraction``: bounded, whatever the mode
     search finds. The two components get fixed draw counts (a stratified sample), and the
-    standard error is computed within each. Both estimators are unbiased for the same integral; this one has lower variance
-    where the session pins ``theta`` down.
+    standard error is computed within each. Both estimators are unbiased for the same
+    integral; this one has lower variance where the session pins ``theta`` down.
 
     Parameters
     ----------
@@ -1027,8 +1027,9 @@ def importance_sampled_session_marginal(
     -------
     dict of np.ndarray, each shape ``(n_sessions,)``
         ``session_marginal`` (summed log likelihood), ``session_marginal_se`` (delta-method
-        standard error of the stratified estimate, conditional on the posterior draws), ``weight_ess``, ``pareto_k`` (of the
-        importance weights, judged as in :func:`batched_heldout_scores`), ``n_trials``, and
+        standard error of the stratified estimate, conditional on the posterior draws),
+        ``weight_ess``, ``pareto_k`` (of the importance weights, judged as in
+        :func:`batched_heldout_scores`), ``n_trials``, and
         ``mode_found`` (whether the Hessian at the mode was positive definite; if not, the
         proposal falls back to the mixture's own mean and covariance).
     """

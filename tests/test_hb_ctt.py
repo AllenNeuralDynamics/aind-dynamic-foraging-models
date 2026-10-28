@@ -105,6 +105,16 @@ class TestCTTParity(unittest.TestCase):
         actual = ctt_log_likelihood(choices, rewards, **params)
         np.testing.assert_allclose(float(actual), expected, rtol=1e-5)
 
+    def test_runs_under_x64(self):
+        """Float64 parameters do not break the scan carry's dtype."""
+        from jax.experimental import enable_x64
+
+        choices, rewards = _sessions((30,))
+        with enable_x64():
+            params = ctt_session_params(np.array([0.1, 0.2, 0.3, 0.4], dtype=np.float64))
+            value = ctt_log_likelihood(choices, rewards, **params)
+        self.assertTrue(np.isfinite(float(value)))
+
     def test_session_params_bounds(self):
         """The transforms land in the documented ranges, at the documented midpoints."""
         out = ctt_session_params(np.zeros(len(CTT_PARAMS)), beta_max=10.0)

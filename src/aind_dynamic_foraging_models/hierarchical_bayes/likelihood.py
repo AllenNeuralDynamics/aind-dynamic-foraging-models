@@ -259,9 +259,12 @@ def _ctt_stay_logits(
         value_next = jnp.where(switched, reset, delta)
         return (value_next, choice, jnp.bool_(False)), value
 
+    # The carry must keep the dtype the update produces (float64 under JAX x64).
+    value_dtype = jnp.result_type(threshold, learn_rate, reward_history)
+    value_0 = jnp.asarray(threshold, dtype=value_dtype)
     _, values = jax.lax.scan(
         _step,
-        (jnp.asarray(threshold, dtype=jnp.float32), jnp.int32(0), jnp.bool_(True)),
+        (value_0, jnp.int32(0), jnp.bool_(True)),
         (choice_history, reward_history),
     )
 
@@ -321,6 +324,9 @@ def ctt_choice_prob(
 def ctt_log_likelihood(choice_history, reward_history, valid_mask=None, **params):
     """Total log likelihood of an observed choice history under the CTT forager.
 
+    Computed by log-softmax of the logits, without :func:`ctt_choice_prob`'s clip, so it
+    is the same likelihood the held-out scorers use and keeps its gradient in the tails.
+
     Parameters
     ----------
     choice_history, reward_history : array_like, shape (n_trials,)
@@ -336,9 +342,10 @@ def ctt_log_likelihood(choice_history, reward_history, valid_mask=None, **params
         Scalar sum of per-trial log probabilities of the observed actions.
     """
     choice_history = jnp.asarray(choice_history, dtype=jnp.int32)
-    choice_prob = ctt_choice_prob(choice_history, reward_history, **params)
-    prob_observed = choice_prob[choice_history, jnp.arange(choice_history.shape[0])]
-    log_prob = jnp.log(prob_observed)
+    logits = _ctt_stay_logits(choice_history, reward_history, **params)
+    log_prob = jax.nn.log_softmax(logits, axis=-1)[
+        jnp.arange(choice_history.shape[0]), choice_history
+    ]
     if valid_mask is None:
         return jnp.sum(log_prob)
     return jnp.sum(jnp.where(jnp.asarray(valid_mask, dtype=bool), log_prob, 0.0))

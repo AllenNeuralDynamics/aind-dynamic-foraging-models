@@ -220,6 +220,33 @@ class TestSpecialCasesAndRefits(unittest.TestCase):
             again = fit_em(model, result.params, props, self.buckets, max_iters=0)
             self.assertAlmostEqual(result.log_joint[-1], again.log_joint[0], places=6)
 
+    def test_zero_prior_centre_is_the_default(self):
+        """An explicit zero centre gives exactly the fit without one, both emissions."""
+        for emission in ("hurdle", "reference"):
+            model = GLMHMM(2, N_LAGS, emission)
+            start, props = model.initialize(jax.random.PRNGKey(9), noise_scale=0.3)
+            zeros = jax.tree_util.tree_map(jnp.zeros_like, start.emissions)
+            plain = fit_em(model, start, props, self.buckets[:1], SUBJECT_PRIOR, max_iters=5,
+                           tol=0.0)
+            centred = fit_em(model, start, props, self.buckets[:1],
+                             SUBJECT_PRIOR._replace(mean=zeros), max_iters=5, tol=0.0)
+            np.testing.assert_array_equal(plain.log_joint, centred.log_joint)
+
+    def test_tight_prior_holds_the_weights_at_its_centre(self):
+        """With a tiny sigma, a refit stays at the prior's centre: the global weights or zero."""
+        for emission in ("hurdle", "reference"):
+            model = GLMHMM(2, N_LAGS, emission)
+            start, props = model.initialize(jax.random.PRNGKey(10), noise_scale=1.0)
+            tight = Prior(sigma=1e-3, alpha=2.0)
+            at_start = fit_em(model, start, props, self.buckets[:1],
+                              tight._replace(mean=start.emissions), max_iters=3, tol=0.0)
+            at_zero = fit_em(model, start, props, self.buckets[:1], tight, max_iters=3, tol=0.0)
+            for fitted, centre in zip(jax.tree_util.tree_leaves(at_start.params.emissions),
+                                      jax.tree_util.tree_leaves(start.emissions)):
+                np.testing.assert_allclose(fitted, centre, atol=1e-3)
+            for fitted in jax.tree_util.tree_leaves(at_zero.params.emissions):
+                np.testing.assert_allclose(fitted, 0.0, atol=1e-3)
+
     def test_subject_refit_from_global_parameters(self):
         """A refit under the subject prior starts from given parameters and improves them."""
         model = GLMHMM(2, N_LAGS, "hurdle")

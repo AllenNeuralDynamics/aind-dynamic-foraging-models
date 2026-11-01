@@ -85,6 +85,10 @@ class Prior(NamedTuple):
     # Centre of the Gaussian prior: emission parameters shaped like the model's (for a subject
     # refit, the global fit's weights), or None for zero.
     mean: object = None
+    # Dirichlet concentration of A as a full (K, K) array, every entry >= 1, replacing
+    # alpha * 1 + stickiness * I. For a subject refit, 1 + c * A_global puts c pseudo-transitions
+    # in each row, spread like the global fit's row. None keeps alpha and stickiness.
+    transition_concentration: object = None
 
 
 # Ashwood et al. 2022: a near-flat global fit, then per-animal MAP fits.
@@ -246,10 +250,17 @@ class GLMHMM(HMM):
             Scalar.
         """
         K = self.num_states
-        concentration = prior.alpha * jnp.ones((K, K)) + prior.stickiness * jnp.eye(K)
+        concentration = _transition_concentration(prior, K)
         lp = _dirichlet_log_prob(params.initial.probs, prior.alpha * jnp.ones(K))
         lp += jnp.sum(_dirichlet_log_prob(params.transitions.transition_matrix, concentration))
         return lp + self.emission_component.log_prior(params.emissions, prior.sigma, prior.mean)
+
+
+def _transition_concentration(prior, K):
+    """The (K, K) Dirichlet concentration of A: the prior's full array, or alpha and stickiness."""
+    if prior.transition_concentration is not None:
+        return prior.transition_concentration
+    return prior.alpha * jnp.ones((K, K)) + prior.stickiness * jnp.eye(K)
 
 
 def _dirichlet_log_prob(x, concentration):
@@ -380,9 +391,9 @@ def _m_step(model, params, props, initial_counts, transition_counts, emission_st
     if props.initial.probs.trainable:
         initial = initial._replace(probs=dirichlet_map(initial_counts, prior.alpha))
     if props.transitions.transition_matrix.trainable:
-        concentration = prior.alpha + prior.stickiness * jnp.eye(K)
         transitions = transitions._replace(
-            transition_matrix=dirichlet_map(transition_counts, concentration)
+            transition_matrix=dirichlet_map(transition_counts,
+                                            _transition_concentration(prior, K))
         )
     emissions, _ = model.emission_component.m_step(
         params.emissions, props.emissions, emission_stats, None, prior.sigma, prior.mean
@@ -465,8 +476,15 @@ def fit_em(
         raise ValueError("prepared data was made for another emission, lag count or data set")
     with _compute():
         params = _float64(params)
+        concentration = prior.transition_concentration
+        if concentration is not None:
+            concentration = jnp.asarray(concentration, dtype=jnp.float64)
+            K = model.num_states
+            if concentration.shape != (K, K) or bool(jnp.any(concentration < 1.0)):
+                raise ValueError(f"transition_concentration must be ({K}, {K}) with every "
+                                 "entry >= 1")
         prior = Prior(float(prior.sigma), float(prior.alpha), float(prior.stickiness),
-                      None if prior.mean is None else _float64(prior.mean))
+                      None if prior.mean is None else _float64(prior.mean), concentration)
         selectors, n_trials, blocks = prepared.selectors, prepared.n_trials, prepared.blocks
         block_rows = [(jnp.asarray(b.X), jnp.asarray(b.targets)) for b in blocks]
         history, converged = [], False

@@ -247,6 +247,43 @@ class TestSpecialCasesAndRefits(unittest.TestCase):
             for fitted in jax.tree_util.tree_leaves(at_zero.params.emissions):
                 np.testing.assert_allclose(fitted, 0.0, atol=1e-3)
 
+    def test_full_transition_concentration_matches_alpha_and_stickiness(self):
+        """alpha * 1 + stickiness * I passed as a full array gives the scalar prior's fit."""
+        model = GLMHMM(2, N_LAGS, "hurdle")
+        start, props = model.initialize(jax.random.PRNGKey(11), noise_scale=0.3)
+        scalar = Prior(sigma=2.0, alpha=2.0, stickiness=3.0)
+        full = scalar._replace(transition_concentration=2.0 * np.ones((2, 2)) + 3.0 * np.eye(2))
+        a = fit_em(model, start, props, self.buckets[:2], scalar, max_iters=5, tol=0.0)
+        b = fit_em(model, start, props, self.buckets[:2], full, max_iters=5, tol=0.0)
+        np.testing.assert_allclose(a.log_joint, b.log_joint, rtol=1e-12)
+
+    def test_transition_concentration_pulls_toward_its_centre(self):
+        """1 + c * A_ref: the MAP update is (counts + c * A_ref) / (N + c), so a large c holds A."""
+        reference = np.array([[0.6, 0.4], [0.3, 0.7]])
+        model = GLMHMM(2, N_LAGS, "hurdle")
+        start, props = model.initialize(jax.random.PRNGKey(12), noise_scale=0.3)
+        errors = []
+        for c in (0.0, 1e2, 1e7):
+            prior = SUBJECT_PRIOR._replace(transition_concentration=1.0 + c * reference)
+            fit = fit_em(model, start, props, self.buckets[:2], prior, max_iters=10, tol=0.0)
+            errors.append(np.abs(np.asarray(fit.params.transitions.transition_matrix)
+                                 - reference).max())
+            self.assertTrue(np.all(np.diff(fit.log_joint) > -1e-6))   # EM still ascends
+        self.assertGreater(errors[0], errors[1])
+        self.assertGreater(errors[1], errors[2])
+        self.assertLess(errors[2], 1e-3)
+
+    def test_transition_concentration_is_validated(self):
+        """A wrong shape, an entry below 1 (where the Dirichlet mode breaks), or a NaN or
+        infinite entry is refused."""
+        model = GLMHMM(2, N_LAGS, "hurdle")
+        start, props = model.initialize(jax.random.PRNGKey(13))
+        for bad in (np.ones((3, 3)), np.full((2, 2), 0.5), np.array([[2.0, np.nan], [2.0, 2.0]]),
+                    np.array([[2.0, np.inf], [2.0, 2.0]])):
+            with self.assertRaises(ValueError):
+                fit_em(model, start, props, self.buckets[:1],
+                       SUBJECT_PRIOR._replace(transition_concentration=bad), max_iters=1)
+
     def test_subject_refit_from_global_parameters(self):
         """A refit under the subject prior starts from given parameters and improves them."""
         model = GLMHMM(2, N_LAGS, "hurdle")

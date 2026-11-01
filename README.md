@@ -75,7 +75,7 @@ RL agents that can perform any dynamic foraging task in [aind-behavior-gym](http
       ```python
         choice_kernel: Literal["none", "one_step", "full"] = "none",
       ```
-- [`ForagerCompareThreshold`](src/aind_dynamic_foraging_models/generative_model/forager_compare_threshold.py): Compare-to-threshold (CTT) agents. One value is compared with a threshold: above it the agent stays, below it the agent switches.
+- [`ForagerCompareThreshold`](src/aind_dynamic_foraging_models/generative_model/forager_compare_threshold.py): Compare-to-threshold (CTT) agents. One value is compared with a threshold through a sigmoid: above it the agent is more likely to stay, below it more likely to switch.
     - Available `agent_kwargs`:
       ```python
         number_of_learning_rate: Literal[1, 2] = 1,
@@ -115,7 +115,7 @@ filter. Fit it with `fit_findling_weber_map` over the 1,000-candidate grid from
 `findling_weber_parameter_grid`.
 
 
-[Here is the list](https://foraging-behavior-browser.allenneuraldynamics-test.org/RL_model_playground#all-available-foragers) of the preset Q-learning and loss-counting foragers (`ForagerCollection`):
+[Here is the list](https://foraging-behavior-browser.allenneuraldynamics-test.org/RL_model_playground#all-available-foragers) of foragers in the RL model playground. `ForagerCollection().get_all_foragers()` lists every forager and preset in the installed version.
 
 ![image](https://github.com/user-attachments/assets/db2e3b6c-f888-496c-a12b-06e030499165)
 ![image](https://github.com/user-attachments/assets/4f7b669c-2f0e-49cc-8fb4-7fa948926e2e)

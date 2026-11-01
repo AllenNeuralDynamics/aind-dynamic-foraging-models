@@ -46,7 +46,7 @@ Implemented foragers
 
       choice_kernel: Literal["none", "one_step", "full"] = "none",
 
-- :class:`~aind_dynamic_foraging_models.generative_model.forager_compare_threshold.ForagerCompareThreshold`: Compare-to-threshold (CTT) agents. One value is compared with a threshold: above it the agent stays, below it the agent switches.
+- :class:`~aind_dynamic_foraging_models.generative_model.forager_compare_threshold.ForagerCompareThreshold`: Compare-to-threshold (CTT) agents. One value is compared with a threshold through a sigmoid: above it the agent is more likely to stay, below it more likely to switch.
 
   Available ``agent_kwargs``:
 
@@ -103,10 +103,10 @@ belief state with a particle filter. Fit it with
 :func:`~aind_dynamic_foraging_models.generative_model.findling_weber.fit_findling_weber_map` over the 1,000-candidate grid from
 :func:`~aind_dynamic_foraging_models.generative_model.findling_weber.findling_weber_parameter_grid`.
 
-Preset foragers
----------------
+All foragers
+------------
 
-`Here is the list <https://foraging-behavior-browser.allenneuraldynamics-test.org/RL_model_playground#all-available-foragers>`_ of the preset Q-learning and loss-counting foragers (``ForagerCollection``):
+`Here is the list <https://foraging-behavior-browser.allenneuraldynamics-test.org/RL_model_playground#all-available-foragers>`_ of foragers in the RL model playground. ``ForagerCollection().get_all_foragers()`` lists every forager and preset in the installed version.
 
 .. image:: https://github.com/user-attachments/assets/db2e3b6c-f888-496c-a12b-06e030499165
 .. image:: https://github.com/user-attachments/assets/4f7b669c-2f0e-49cc-8fb4-7fa948926e2e

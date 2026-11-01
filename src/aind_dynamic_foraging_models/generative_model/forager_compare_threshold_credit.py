@@ -19,6 +19,7 @@ class ForagerCompareThresholdCredit(DynamicForagingAgentMLEBase):
 
       - after a win:    c <- c + learn_rate * (stay_credit_win - c)
       - after a loss:   c <- c + learn_rate * (stay_credit_loss - c)
+        (a reward r in between targets stay_credit_loss + r * (stay_credit_win - stay_credit_loss))
       - after a switch: c <- 0, then that trial's update (value reset to threshold)
       - P(stay) = sigmoid(c + biasL if the last choice was Left else c)
 
@@ -65,7 +66,9 @@ class ForagerCompareThresholdCredit(DynamicForagingAgentMLEBase):
         # The first choice counts as a switch, as in ForagerCompareThreshold.
         switched = self.trial == 1 or choice != self.choice_history[self.trial - 2]
         previous = 0.0 if switched else float(self.credit[self.trial - 1])
-        target = float(self.params.stay_credit_win if reward else self.params.stay_credit_loss)
+        # Affine in reward, as CTT's value update: binary rewards give c_win or c_loss exactly
+        win, loss = float(self.params.stay_credit_win), float(self.params.stay_credit_loss)
+        target = loss + float(reward) * (win - loss)
         self.credit[self.trial] = previous + float(self.params.learn_rate) * (target - previous)
 
     def get_latent_variables(self):

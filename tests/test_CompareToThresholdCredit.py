@@ -39,6 +39,19 @@ class TestCompareToThresholdCredit(unittest.TestCase):
                             credit.perform_closed_loop_multi_session(choices, rewards)):
                 np.testing.assert_allclose(np.asarray(a), np.asarray(b), rtol=0, atol=1e-12)
 
+    def test_likelihood_equals_compare_to_threshold_for_graded_rewards(self):
+        """Reward magnitudes between 0 and 1 also match (affine target, as CTT's value update)"""
+        choices, _ = _histories(2)
+        rng = np.random.default_rng(3)
+        rewards = [rng.choice([0.0, 0.5, 1.0], size=len(c)) for c in choices]
+        ctt = ForagerCompareThreshold(seed=0)
+        ctt.set_params(learn_rate=0.2, threshold=0.4, softmax_inverse_temperature=10.0, biasL=0.0)
+        credit = ForagerCompareThresholdCredit(seed=0)
+        credit.set_params(learn_rate=0.2, stay_credit_win=6.0, stay_credit_loss=-4.0, biasL=0.0)
+        for a, b in zip(ctt.perform_closed_loop_multi_session(choices, rewards),
+                        credit.perform_closed_loop_multi_session(choices, rewards)):
+            np.testing.assert_allclose(np.asarray(a), np.asarray(b), rtol=0, atol=1e-12)
+
     def test_reaches_beyond_the_threshold_bound(self):
         """A loss credit above half the win credit (threshold < -1) is inside its bounds"""
         credit = ForagerCompareThresholdCredit(seed=0)

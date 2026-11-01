@@ -8,6 +8,8 @@ Subpackages
    :maxdepth: 4
 
    aind_dynamic_foraging_models.generative_model
+   aind_dynamic_foraging_models.glm_hmm
+   aind_dynamic_foraging_models.hierarchical_bayes
    aind_dynamic_foraging_models.logistic_regression
 
 Module contents

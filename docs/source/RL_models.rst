@@ -38,7 +38,75 @@ Implemented foragers
       win_stay_lose_switch: Literal[False, True] = False,
       choice_kernel: Literal["none", "one_step", "full"] = "none",
 
-`Here is the full list <https://foraging-behavior-browser.allenneuraldynamics-test.org/RL_model_playground#all-available-foragers>`_ of available foragers:
+- :class:`~aind_dynamic_foraging_models.generative_model.forager_actor_critic.ForagerActorCritic`: Actor-critic agents. A softmax actor holds a preference per side; a single state-value critic gives the reward baseline.
+
+  Available ``agent_kwargs``:
+
+  .. code-block:: python
+
+      choice_kernel: Literal["none", "one_step", "full"] = "none",
+
+- :class:`~aind_dynamic_foraging_models.generative_model.forager_compare_threshold.ForagerCompareThreshold`: Compare-to-threshold (CTT) agents. One value is compared with a threshold through a sigmoid: above it the agent is more likely to stay, below it more likely to switch.
+
+  Available ``agent_kwargs``:
+
+  .. code-block:: python
+
+      number_of_learning_rate: Literal[1, 2] = 1,
+      choice_kernel: Literal["none", "one_step", "full"] = "none",
+      reset_to_threshold: Literal[True, False] = True,
+
+Published-model reproductions
+-----------------------------
+
+:mod:`~aind_dynamic_foraging_models.generative_model.forager_published_bandits` re-implements published two-armed-bandit models as MLE
+agents with fixed structure (no ``agent_kwargs``).
+`published_bandit_reproductions.md <https://github.com/AllenNeuralDynamics/aind-dynamic-foraging-models/blob/main/docs/published_bandit_reproductions.md>`_
+records each model's equation source, the author code it was checked against, and every
+deliberate departure from it.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Class
+     - Model
+   * - :class:`~aind_dynamic_foraging_models.generative_model.forager_published_bandits.ForagerFeedbackDependentRL`
+     - Costa: feedback-dependent Rescorla-Wagner
+   * - :class:`~aind_dynamic_foraging_models.generative_model.forager_published_bandits.ForagerFeedbackDependentRLBias`
+     - Costa RL plus a fixed choice bias
+   * - :class:`~aind_dynamic_foraging_models.generative_model.forager_published_bandits.ForagerFeedbackDependentRLBiasCK1`
+     - Costa dual-rate RL plus bias and Bari's one-step choice kernel
+   * - :class:`~aind_dynamic_foraging_models.generative_model.forager_published_bandits.ForagerAlsioRL`
+     - Alsiö et al.: dual-rate RL with one-step spatial stickiness
+   * - :class:`~aind_dynamic_foraging_models.generative_model.forager_published_bandits.ForagerLopezDoubleTrace`
+     - López-Yépez et al.: reward value plus fast and slow choice traces
+   * - :class:`~aind_dynamic_foraging_models.generative_model.forager_published_bandits.ForagerRLCK`
+     - Chen and Zid: four-parameter RL plus choice kernel
+   * - :class:`~aind_dynamic_foraging_models.generative_model.forager_published_bandits.ForagerZidHistoryKernel`
+     - Zid et al.: history-kernel-2 compare-to-threshold foraging RL
+   * - :class:`~aind_dynamic_foraging_models.generative_model.forager_published_bandits.ForagerGrossmanMetaLearning`
+     - Grossman et al.: uncertainty-dependent asymmetric meta-learning
+   * - :class:`~aind_dynamic_foraging_models.generative_model.forager_published_bandits.ForagerLebedevaPR`
+     - Lebedeva et al.: perseveration / reward-learning (PR)
+   * - :class:`~aind_dynamic_foraging_models.generative_model.forager_published_bandits.ForagerBeronRFLR`
+     - Beron et al.: recursively formulated logistic regression (RFLR)
+   * - :class:`~aind_dynamic_foraging_models.generative_model.forager_published_bandits.ForagerMillerRHG`
+     - Miller et al.: reward-seeking / habit / gambler's fallacy (RHG)
+   * - :class:`~aind_dynamic_foraging_models.generative_model.forager_published_bandits.ForagerEcksteinRL`
+     - Eckstein et al.: asymmetric, counterfactual RL with perseveration
+   * - :class:`~aind_dynamic_foraging_models.generative_model.forager_published_bandits.ForagerEcksteinBI`
+     - Eckstein et al.: hidden-state Bayesian inference
+
+The Findling et al. Weber-imprecision Bayesian-inference model
+(:mod:`~aind_dynamic_foraging_models.generative_model.findling_weber`) is not an MLE agent: its likelihood averages over a stochastic
+belief state with a particle filter. Fit it with
+:func:`~aind_dynamic_foraging_models.generative_model.findling_weber.fit_findling_weber_map` over the 1,000-candidate grid from
+:func:`~aind_dynamic_foraging_models.generative_model.findling_weber.findling_weber_parameter_grid`.
+
+All foragers
+------------
+
+`Here is the list <https://foraging-behavior-browser.allenneuraldynamics-test.org/RL_model_playground#all-available-foragers>`_ of foragers in the RL model playground. ``ForagerCollection().get_all_foragers()`` lists every forager and preset in the installed version.
 
 .. image:: https://github.com/user-attachments/assets/db2e3b6c-f888-496c-a12b-06e030499165
 .. image:: https://github.com/user-attachments/assets/4f7b669c-2f0e-49cc-8fb4-7fa948926e2e

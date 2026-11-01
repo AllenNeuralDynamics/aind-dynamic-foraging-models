@@ -34,6 +34,17 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
 ]
+# The docs build installs only the dev extra, so mock the imports of the optional
+# hierarchical_bayes ([bayes]) and glm_hmm ([glmhmm]) subpackages.
+autodoc_mock_imports = [
+    "arviz",
+    "arviz_stats",
+    "dynamax",
+    "jax",
+    "numpyro",
+    "tensorflow_probability",
+    "xarray",
+]
 templates_path = ["_templates"]
 exclude_patterns = []
 

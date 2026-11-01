@@ -28,10 +28,42 @@ aind\_dynamic\_foraging\_models.generative\_model.base module
    :undoc-members:
    :show-inheritance:
 
+aind\_dynamic\_foraging\_models.generative\_model.findling\_weber module
+------------------------------------------------------------------------
+
+.. automodule:: aind_dynamic_foraging_models.generative_model.findling_weber
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+aind\_dynamic\_foraging\_models.generative\_model.forager\_actor\_critic module
+-------------------------------------------------------------------------------
+
+.. automodule:: aind_dynamic_foraging_models.generative_model.forager_actor_critic
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+aind\_dynamic\_foraging\_models.generative\_model.forager\_compare\_threshold module
+------------------------------------------------------------------------------------
+
+.. automodule:: aind_dynamic_foraging_models.generative_model.forager_compare_threshold
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 aind\_dynamic\_foraging\_models.generative\_model.forager\_loss\_counting module
 --------------------------------------------------------------------------------
 
 .. automodule:: aind_dynamic_foraging_models.generative_model.forager_loss_counting
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+aind\_dynamic\_foraging\_models.generative\_model.forager\_published\_bandits module
+------------------------------------------------------------------------------------
+
+.. automodule:: aind_dynamic_foraging_models.generative_model.forager_published_bandits
    :members:
    :undoc-members:
    :show-inheritance:

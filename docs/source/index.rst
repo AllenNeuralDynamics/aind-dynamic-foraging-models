@@ -7,10 +7,14 @@
 Welcome to aind-dynamic-foraging-models!
 ========================================
 
-AIND library for generative (RL) and descriptive (logistic regression) models of dynamic foraging tasks.
+AIND library of models for dynamic foraging tasks: generative agents fitted per session by
+maximum likelihood, logistic regression on choice history, hierarchical Bayesian fits across
+sessions and subjects, and GLM-HMMs with discrete latent states.
 
 - :doc:`Reinforcement learning models <RL_models>`
 - :doc:`Logistic regression models <logistic_models>`
+- :doc:`Hierarchical Bayesian fitting <hierarchical_bayes_models>`
+- :doc:`GLM-HMM <glm_hmm_models>`
 
 
 .. toctree::
@@ -20,6 +24,8 @@ AIND library for generative (RL) and descriptive (logistic regression) models of
 
    RL_models
    logistic_models
+   hierarchical_bayes_models
+   glm_hmm_models
 
 .. toctree::
    :caption: API Reference

@@ -274,10 +274,12 @@ class TestSpecialCasesAndRefits(unittest.TestCase):
         self.assertLess(errors[2], 1e-3)
 
     def test_transition_concentration_is_validated(self):
-        """A wrong shape, or an entry below 1 (where the Dirichlet mode breaks), is refused."""
+        """A wrong shape, an entry below 1 (where the Dirichlet mode breaks), or a NaN or
+        infinite entry is refused."""
         model = GLMHMM(2, N_LAGS, "hurdle")
         start, props = model.initialize(jax.random.PRNGKey(13))
-        for bad in (np.ones((3, 3)), np.full((2, 2), 0.5)):
+        for bad in (np.ones((3, 3)), np.full((2, 2), 0.5), np.array([[2.0, np.nan], [2.0, 2.0]]),
+                    np.array([[2.0, np.inf], [2.0, 2.0]])):
             with self.assertRaises(ValueError):
                 fit_em(model, start, props, self.buckets[:1],
                        SUBJECT_PRIOR._replace(transition_concentration=bad), max_iters=1)

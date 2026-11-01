@@ -480,9 +480,10 @@ def fit_em(
         if concentration is not None:
             concentration = jnp.asarray(concentration, dtype=jnp.float64)
             K = model.num_states
-            if concentration.shape != (K, K) or bool(jnp.any(concentration < 1.0)):
+            if (concentration.shape != (K, K)
+                    or not bool(jnp.all(jnp.isfinite(concentration) & (concentration >= 1.0)))):
                 raise ValueError(f"transition_concentration must be ({K}, {K}) with every "
-                                 "entry >= 1")
+                                 "entry finite and >= 1")
         prior = Prior(float(prior.sigma), float(prior.alpha), float(prior.stickiness),
                       None if prior.mean is None else _float64(prior.mean), concentration)
         selectors, n_trials, blocks = prepared.selectors, prepared.n_trials, prepared.blocks

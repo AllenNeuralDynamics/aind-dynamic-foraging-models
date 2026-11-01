@@ -10,7 +10,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [ '3.10', '3.11' ]
+        # 3.9 is the declared floor (requires-python), and the post-merge docs job and
+        # readthedocs both build on it, so a 3.9-only import error must fail here (#76).
+        python-version: [ '3.9', '3.10', '3.11' ]
     steps:
     - uses: actions/checkout@v3
     - name: Set up Python ${{ matrix.python-version }}

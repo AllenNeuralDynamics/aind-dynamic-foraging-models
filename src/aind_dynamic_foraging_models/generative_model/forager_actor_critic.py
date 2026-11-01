@@ -17,7 +17,7 @@ bootstrap term because the task is effectively a single-state bandit). See
 """
 
 # %%
-from typing import Literal
+from typing import Literal, Optional
 
 import numpy as np
 from aind_behavior_gym.dynamic_foraging.task import L, R
@@ -34,7 +34,7 @@ class ForagerActorCritic(DynamicForagingAgentMLEBase):
     def __init__(
         self,
         choice_kernel: Literal["none", "one_step", "full"] = "none",
-        params: dict | None = None,
+        params: Optional[dict] = None,
         **kwargs,
     ):
         params = {} if params is None else params

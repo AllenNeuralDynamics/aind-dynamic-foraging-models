@@ -16,6 +16,7 @@ class ForagerCollection:
         "ForagerQLearning",
         "ForagerLossCounting",
         "ForagerCompareThreshold",
+        "ForagerCompareThresholdCredit",
         "ForagerActorCritic",
         "ForagerRLCK",
         "ForagerZidHistoryKernel",

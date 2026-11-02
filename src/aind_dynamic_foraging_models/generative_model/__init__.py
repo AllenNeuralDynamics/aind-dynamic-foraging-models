@@ -3,6 +3,7 @@
 # Register the forager classes here
 from .forager_actor_critic import ForagerActorCritic  # noqa: F401
 from .forager_compare_threshold import ForagerCompareThreshold  # noqa: F401
+from .forager_compare_threshold_credit import ForagerCompareThresholdCredit  # noqa: F401
 from .forager_loss_counting import ForagerLossCounting  # noqa: F401
 from .forager_published_bandits import (  # noqa: F401
     ForagerAlsioRL,

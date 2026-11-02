@@ -25,6 +25,8 @@ class ParamsSymbols(str, Enum):
     softmax_inverse_temperature = R"$\beta$"
     epsilon = R"$\epsilon$"
     threshold = R"$\rho$"  # Adding the threshold parameter with symbol ρ (rho)
+    stay_credit_win = R"$c_{win}$"
+    stay_credit_loss = R"$c_{loss}$"
     reset_to_threshold = R"$\mathrm{reset}$"
     forgetting_factor = R"$\zeta$"
     expected_uncertainty_step_size = R"$\alpha_v$"

@@ -207,27 +207,23 @@ def act_loss_counting(
 
 
 def softmax(x, rng=None):
-    """
+    """Softmax of the logits ``x``: exp(x) / sum(exp(x)).
 
     Parameters
     ----------
-    x : _type_
-        _description_
-    rng : _type_, optional
-        _description_, by default None
+    x : np.array
+        logits, one per action
+    rng : np.random.Generator, optional
+        unused; kept so that existing calls stay valid, by default None
 
     Returns
     -------
-    _type_
-        _description_
+    np.array
+        choice probabilities, one per action
     """
-    rng = rng or np.random.default_rng()
-
-    if np.max(x) > 700:  # To prevent explosion of EXP
-        argmax_x = np.argmax(rng.permutation(x))  # Randomly choose one of the max values
-        greedy = np.zeros(len(x))
-        greedy[argmax_x] = 1
-        return greedy
+    if np.max(x) > 700:  # exp would overflow: subtract the max first (the same probabilities)
+        e = np.exp(x - np.max(x))
+        return e / np.sum(e)
     else:  # Normal softmax
         return np.exp(x) / np.sum(np.exp(x))
 

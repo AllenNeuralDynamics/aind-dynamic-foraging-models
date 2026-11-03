@@ -129,9 +129,14 @@ def tally_groups(
     groups: Iterable[str],
     p_right: Optional[Sequence] = None,
 ) -> dict[str, dict[str, np.ndarray]]:
-    """Tallies per group label (for example ``"final|Coupled Baiting"``) and over ``"all"``."""
+    """Tallies per group label (for example ``"final|Coupled Baiting"``) and over ``"all"``.
+
+    ``"all"`` is reserved for the total, so a session labelled ``"all"`` is refused.
+    """
     out: dict[str, dict[str, np.ndarray]] = {"all": empty_tally()}
     for i, (c, r, g) in enumerate(zip(choices, rewards, groups)):
+        if g == "all":
+            raise ValueError('"all" is the total over every group; give the session another label')
         one = session_tally(c, r, None if p_right is None else p_right[i])
         out["all"] = add(out["all"], one)
         out[g] = add(out.get(g, empty_tally()), one)

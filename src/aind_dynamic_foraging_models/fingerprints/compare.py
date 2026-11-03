@@ -23,7 +23,8 @@ MIN_TRIALS = 5
 def values(tally: dict[str, np.ndarray], stat: str, column: int = OBS) -> np.ndarray:
     """Per-bin value: a switch rate (``column`` / N) or, for a distribution, the share of units.
 
-    Bins with no trials are NaN.
+    A rate bin with no trials is NaN. A distribution's empty bin is a share of 0, which is a real
+    value; only an entirely empty distribution is NaN.
     """
     table = tally[stat]
     n = table[:, N]
@@ -32,7 +33,7 @@ def values(tally: dict[str, np.ndarray], stat: str, column: int = OBS) -> np.nda
             if column == PRED:
                 raise ValueError(f"{stat} has no replay prediction; replay tests it through hazard")
             total = n.sum()
-            return np.where(n > 0, n / total, np.nan) if total > 0 else np.full(len(n), np.nan)
+            return n / total if total > 0 else np.full(len(n), np.nan)
         return np.where(n > 0, table[:, column] / n, np.nan)
 
 
@@ -74,11 +75,17 @@ def coverage(
     stat: str,
     min_trials: int = MIN_TRIALS,
 ) -> float:
-    """Share of the subject's kept-bin weight that the rollout visits (1 when it visits all)."""
+    """Share of the subject's kept-bin weight that the rollout visits (1 when it visits all).
+
+    A distribution has a value in every bin once the rollout has any units, so its coverage is 1
+    then and 0 otherwise.
+    """
     keep = kept_bins(subject, stat, min_trials)
     weight = subject[stat][:, N]
     if not keep.any():
         return np.nan
+    if stat in DISTRIBUTION_STATISTICS:
+        return float(model[stat][:, N].sum() > 0)
     visited = keep & (model[stat][:, N] > 0)
     return float(weight[visited].sum() / weight[keep].sum())
 

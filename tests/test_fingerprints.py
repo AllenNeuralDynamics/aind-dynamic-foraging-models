@@ -331,6 +331,21 @@ class TestCompare(unittest.TestCase):
         self.assertLess(coverage(never_rewarded, subject, "pattern"), 0.6)
         self.assertTrue(np.isnan(coverage(subject, empty_tally(), "pattern")))
 
+    def test_distribution_zero_bins(self):
+        """An empty distribution bin is a share of 0, so a shifted distribution has a gap."""
+        subject, model = empty_tally(), empty_tally()
+        subject["run_length"][:3, N] = [5, 5, 0]
+        model["run_length"][:3, N] = [0, 5, 5]
+        self.assertAlmostEqual(rollout_gap(model, subject, "run_length"), 0.25)
+        self.assertEqual(coverage(model, subject, "run_length"), 1.0)
+        self.assertEqual(coverage(empty_tally(), subject, "run_length"), 0.0)
+
+    def test_reserved_group(self):
+        """A session cannot be labelled "all", which would count it twice."""
+        c, r, _, _ = _random_sessions(10, n_sessions=1)[0]
+        with self.assertRaises(ValueError):
+            tally_groups([c], [r], ["all"])
+
     def test_values(self):
         """A distribution's shares sum to 1 and have no replay prediction."""
         c, r, _, _ = _random_sessions(6, n_sessions=1)[0]

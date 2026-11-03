@@ -2,9 +2,10 @@
 
 Study 15 ADR 0003. For one subject and statistic, the gap is the mean of |model - subject| over
 the statistic's bins, weighted by the subject's own count in each bin; bins with fewer than
-``min_trials`` of the subject's trials are dropped. The noise floor is the gap a perfect model
-would still have because the subject has finite trials: half the gap between two random halves
-of the subject's sessions, averaged over splits.
+``min_trials`` of the subject's trials are dropped, and bins a rollout never visits are left out
+of its gap and counted by :func:`coverage`. The noise floor is a test-retest reference: the gap
+between two random halves of the subject's own sessions, each bin rescaled from the halves'
+counts to the full data's, averaged over splits.
 """
 
 from __future__ import annotations
@@ -67,6 +68,35 @@ def rollout_gap(
     return _weighted_gap(values(model, stat), values(subject, stat), subject[stat][:, N], keep)
 
 
+def coverage(
+    model: dict[str, np.ndarray],
+    subject: dict[str, np.ndarray],
+    stat: str,
+    min_trials: int = MIN_TRIALS,
+) -> float:
+    """Share of the subject's kept-bin weight that the rollout visits (1 when it visits all)."""
+    keep = kept_bins(subject, stat, min_trials)
+    weight = subject[stat][:, N]
+    if not keep.any():
+        return np.nan
+    visited = keep & (model[stat][:, N] > 0)
+    return float(weight[visited].sum() / weight[keep].sum())
+
+
+def _split_scale(half_a: dict[str, np.ndarray], half_b: dict[str, np.ndarray], stat: str):
+    """Per-bin factor from the gap between two halves to a perfect model's full-data gap.
+
+    Under binomial noise, E|a - b| grows as sqrt(1/n_a + 1/n_b) and the full data's gap as
+    sqrt(1/(n_a + n_b)); their ratio is sqrt(n_a * n_b) / (n_a + n_b), which is 1/2 for equal
+    halves. A distribution's shares use the halves' totals.
+    """
+    n_a, n_b = half_a[stat][:, N], half_b[stat][:, N]
+    if stat in DISTRIBUTION_STATISTICS:
+        n_a, n_b = np.full_like(n_a, n_a.sum()), np.full_like(n_b, n_b.sum())
+    with np.errstate(invalid="ignore", divide="ignore"):
+        return np.sqrt(n_a * n_b) / (n_a + n_b)
+
+
 def noise_floor(
     session_tallies: Sequence[dict[str, np.ndarray]],
     stat: str,
@@ -74,10 +104,12 @@ def noise_floor(
     seed: int = 0,
     min_trials: int = MIN_TRIALS,
 ) -> float:
-    """Half the gap between two random halves of a subject's sessions, averaged over splits.
+    """The gap between two random halves of a subject's sessions, scaled to the full data.
 
-    The bins and weights are the full subject's, so the floor is computed over the same bins as
-    the subject's gap. Needs at least two sessions; otherwise NaN.
+    Each bin's difference between the halves is rescaled by :func:`_split_scale`, so halves with
+    unequal counts in a bin are not over-weighted. The bins and weights are the full subject's, so
+    the floor is computed over the same bins as the subject's gap. It includes differences between
+    sessions, so a replay that tracks them can fall below it. Needs two sessions; otherwise NaN.
     """
     k = len(session_tallies)
     if k < 2:
@@ -97,9 +129,11 @@ def noise_floor(
                 half_a = add(half_a, session_tallies[i])
             else:
                 half_b = add(half_b, session_tallies[i])
-        gaps.append(_weighted_gap(values(half_a, stat), values(half_b, stat), weight, keep))
+        scale = _split_scale(half_a, half_b, stat)
+        diff = scale * (values(half_a, stat) - values(half_b, stat))
+        gaps.append(_weighted_gap(diff, np.zeros_like(diff), weight, keep))
     gaps = np.asarray(gaps, dtype=float)
-    return float(0.5 * np.nanmean(gaps)) if np.isfinite(gaps).any() else np.nan
+    return float(np.nanmean(gaps)) if np.isfinite(gaps).any() else np.nan
 
 
 def floor_ratio(gaps: Sequence[float], floors: Optional[Sequence[float]]) -> float:

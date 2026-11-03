@@ -10,6 +10,8 @@ from aind_dynamic_foraging_models.fingerprints import (
     OBS,
     PRED,
     SPEC_VERSION,
+    N,
+    coverage,
     drop_ignores,
     empty_tally,
     floor_ratio,
@@ -299,6 +301,35 @@ class TestCompare(unittest.TestCase):
         self.assertTrue(np.isnan(noise_floor(per[:1], "hazard")))
         self.assertAlmostEqual(floor_ratio([0.2, 0.4, np.nan], [0.1, 0.1, 0.1]), 3.0)
         self.assertTrue(np.isnan(floor_ratio([np.nan], [0.1])))
+
+    def test_floor_with_unequal_sessions(self):
+        """With unequal sessions the rescaled floor matches a perfect model's expected gap."""
+        rng = np.random.default_rng(8)
+        lengths = (900, 100, 60, 30, 10)
+        floors, expected = [], []
+        for _ in range(40):
+            per = []
+            for n in lengths:  # i.i.d. 50/50 choices: every bin's switch rate is 0.5
+                per.append(session_tally(rng.integers(0, 2, n), rng.integers(0, 2, n)))
+            whole = per[0]
+            for one in per[1:]:
+                whole = {k: whole[k] + one[k] for k in whole}
+            n_bin = whole["hazard"][:, N]
+            keep = n_bin >= 5
+            # E|p_hat - p| for a perfect model, normal approximation, weighted by the bin counts
+            e_gap = np.sqrt(2 / np.pi) * 0.5 / np.sqrt(n_bin[keep])
+            expected.append(np.sum(n_bin[keep] * e_gap) / n_bin[keep].sum())
+            floors.append(noise_floor(per, "hazard", n_splits=10, seed=1))
+        self.assertAlmostEqual(np.mean(floors) / np.mean(expected), 1.0, delta=0.15)
+
+    def test_coverage(self):
+        """A rollout that never visits some of the subject's bins covers less than all of them."""
+        c, r, _, _ = _random_sessions(9, n_sessions=1)[0]
+        subject = session_tally(c, r)
+        self.assertAlmostEqual(coverage(subject, subject, "pattern"), 1.0)
+        never_rewarded = session_tally(c, np.zeros(len(c)))
+        self.assertLess(coverage(never_rewarded, subject, "pattern"), 0.6)
+        self.assertTrue(np.isnan(coverage(subject, empty_tally(), "pattern")))
 
     def test_values(self):
         """A distribution's shares sum to 1 and have no replay prediction."""

@@ -8,6 +8,7 @@ statistics; the design is study 15 of aind-dynamic-foraging-bfm-studies.
 
 from .compare import (  # noqa: F401
     MIN_TRIALS,
+    coverage,
     floor_ratio,
     kept_bins,
     noise_floor,

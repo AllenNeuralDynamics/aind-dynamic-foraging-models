@@ -35,7 +35,8 @@ def default_sets(groups: Iterable[str]) -> dict[str, set[str]]:
 
 
 def _summed(tallies: Mapping[str, dict], groups: Iterable[str]):
-    present = [tallies[g] for g in groups if g in tallies and g != "all"]  # "all" is the sum
+    # each group once ("all" is their sum, and a repeated label would count twice)
+    present = [tallies[g] for g in dict.fromkeys(groups) if g in tallies and g != "all"]
     if not present:
         return None
     total = empty_tally()

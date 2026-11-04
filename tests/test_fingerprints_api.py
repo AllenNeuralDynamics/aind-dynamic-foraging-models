@@ -126,6 +126,8 @@ class TestReplayFingerprints(unittest.TestCase):
         # A set naming every key, "all" included, still counts each session once.
         explicit = compare_replay(tallies, {"every": set(tallies)})["every"]
         np.testing.assert_equal(explicit, compare_replay(tallies)["all"])
+        repeated = compare_replay(tallies, {"twice": ["g0", "g0"]})["twice"]
+        np.testing.assert_equal(repeated, compare_replay(tallies)["g0"])
 
 
 class TestReplayDriver(unittest.TestCase):

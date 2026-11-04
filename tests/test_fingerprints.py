@@ -11,6 +11,7 @@ from aind_dynamic_foraging_models.fingerprints import (
     PRED,
     SPEC_VERSION,
     N,
+    binomial_floor,
     coverage,
     drop_ignores,
     empty_tally,
@@ -332,6 +333,48 @@ class TestCompare(unittest.TestCase):
         sessions[0]["losses"][5, N] = 6  # and it has enough trials there to be kept
         self.assertTrue(np.isnan(noise_floor(sessions, "losses", n_splits=5)))
         self.assertTrue(np.isfinite(noise_floor(common, "hazard", n_splits=5)))
+
+    def test_binomial_floor_one_bin(self):
+        """One bin of 40 trials at rate 0.3: the exact expected miss of a perfect model."""
+        from math import comb
+
+        t = empty_tally()
+        t["hazard"][0, N], t["hazard"][0, OBS] = 40, 12
+        exact = sum(comb(40, k) * 0.3**k * 0.7 ** (40 - k) * abs(k / 40 - 0.3) for k in range(41))
+        self.assertAlmostEqual(binomial_floor(t, "hazard"), exact, places=12)
+        self.assertAlmostEqual(exact, 0.8 * np.sqrt(0.3 * 0.7 / 40), delta=0.01)
+        with self.assertRaises(ValueError):
+            binomial_floor(t, "run_length")
+        self.assertTrue(np.isnan(binomial_floor(empty_tally(), "hazard")))
+        self.assertAlmostEqual(binomial_floor(t, "hazard", min_trials=0), exact, places=12)
+
+    def test_replay_floor_vs_split_half(self):
+        """A perfect model replays at about 1 x the binomial floor, below the split-half floor.
+
+        Each session has its own switch rate; the true model knows it. The split-half floor
+        includes those differences between sessions, which a replay can follow, so it is too
+        large for replay; the binomial floor holds only the coin-flip noise.
+        """
+        rng = np.random.default_rng(13)
+        gaps, binomial, split = [], [], []
+        for _ in range(25):
+            per = []
+            for _ in range(10):
+                stay, n = rng.uniform(0.55, 0.97), 400
+                c = [int(rng.integers(2))]
+                for _ in range(n - 1):
+                    c.append(c[-1] if rng.random() < stay else 1 - c[-1])
+                c = np.array(c)
+                p = np.r_[0.5, np.where(c[:-1] == 1, stay, 1 - stay)]
+                per.append(session_tally(c, (rng.random(n) < 0.4).astype(float), p))
+            whole = per[0]
+            for one in per[1:]:
+                whole = {k: whole[k] + one[k] for k in whole}
+            gaps.append(replay_gap(whole, "hazard"))
+            binomial.append(binomial_floor(whole, "hazard"))
+            split.append(noise_floor(per, "hazard", n_splits=5))
+        self.assertTrue(0.85 <= np.mean(gaps) / np.mean(binomial) <= 1.10)
+        self.assertLess(np.mean(gaps) / np.mean(split), 0.7)
 
     def test_coverage(self):
         """A rollout that never visits some of the subject's bins covers less than all of them."""

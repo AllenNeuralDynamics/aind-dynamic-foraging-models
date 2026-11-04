@@ -1,11 +1,18 @@
-"""Comparisons: the gap between a model and a subject, the noise floor, and the floor ratio.
+"""Comparisons: the gap between a model and a subject, the noise floors, and the floor ratio.
 
-Study 15 ADR 0003. For one subject and statistic, the gap is the mean of |model - subject| over
-the statistic's bins, weighted by the subject's own count in each bin; bins with fewer than
-``min_trials`` of the subject's trials are dropped, and bins a rollout never visits are left out
-of its gap and counted by :func:`coverage`. The noise floor is a test-retest reference: the gap
-between two random halves of the subject's own sessions, each bin rescaled from the halves'
-counts to the full data's, averaged over splits.
+Study 15 ADR 0003 and 0008. For one subject and statistic, the gap is the mean of
+|model - subject| over the statistic's bins, weighted by the subject's own count in each bin;
+bins with fewer than ``min_trials`` of the subject's trials are dropped, and bins a rollout never
+visits are left out of its gap and counted by :func:`coverage`.
+
+A noise floor is the gap a perfect model would still have, and what is left over depends on the
+mode:
+
+- replay compares model and subject on the same trials, so only coin-flip noise is left:
+  :func:`binomial_floor`, which takes each bin's trials to share one switch probability (where
+  they do not, a perfect replay can fall a little below it);
+- a rollout makes new sessions, so coin-flip noise and the differences between sessions are
+  left: :func:`noise_floor`, the split-half (test-retest) floor.
 """
 
 from __future__ import annotations
@@ -13,6 +20,7 @@ from __future__ import annotations
 from typing import Optional, Sequence
 
 import numpy as np
+from scipy.stats import binom
 
 from .spec import DISTRIBUTION_STATISTICS
 from .tally import OBS, PRED, N, add, empty_tally
@@ -104,6 +112,37 @@ def _split_scale(half_a: dict[str, np.ndarray], half_b: dict[str, np.ndarray], s
         return np.sqrt(n_a * n_b) / (n_a + n_b)
 
 
+def _expected_abs_deviation(n: int, r: float) -> float:
+    """E|X/n - r| for X ~ Binomial(n, r): the expected miss in one bin of n trials that share the
+    switch probability r."""
+    k = np.arange(n + 1)
+    return float(np.sum(binom.pmf(k, n, r) * np.abs(k / n - r)))
+
+
+def binomial_floor(tally: dict[str, np.ndarray], stat: str, min_trials: int = MIN_TRIALS) -> float:
+    """The replay floor: a binomial reference for the gap a perfect model would still have.
+
+    In replay the model predicts each of the subject's real trials, so if it were the true process
+    each outcome would be a coin flip with its probability. Taking a bin's ``n`` trials to be
+    independent with one shared probability, the observed rate ``r``, the expected miss is
+    E|X/n - r| for X ~ Binomial(n, r); bins are weighted by ``n``, as the gap is. Where the
+    trials in a bin have different probabilities, a perfect model's gap is smaller (down to 0 for
+    a bin of certain switches and certain stays), so a perfect replay can score a little below 1;
+    the reference errs high. It uses only the subject's data, so every model shares it. A bin with
+    ``r`` of 0 or 1 adds 0, and a bin with no trials is skipped. Rate statistics only: a
+    distribution has no replay prediction. NaN when the subject keeps no bin.
+    """
+    if stat in DISTRIBUTION_STATISTICS:
+        raise ValueError(f"{stat} has no replay prediction, so no replay floor")
+    keep = kept_bins(tally, stat, min_trials) & (tally[stat][:, N] > 0)
+    if not keep.any():
+        return np.nan
+    n = tally[stat][keep, N]
+    r = tally[stat][keep, OBS] / n
+    miss = np.array([_expected_abs_deviation(int(round(nb)), rb) for nb, rb in zip(n, r)])
+    return float(np.sum(n * miss) / n.sum())
+
+
 def noise_floor(
     session_tallies: Sequence[dict[str, np.ndarray]],
     stat: str,
@@ -112,12 +151,14 @@ def noise_floor(
     min_trials: int = MIN_TRIALS,
     max_draws_per_split: int = 10,
 ) -> float:
-    """The gap between two random halves of a subject's sessions, scaled to the full data.
+    """The rollout floor: the gap between two random halves of a subject's sessions, scaled to
+    the full data.
 
     Each bin's difference between the halves is rescaled by :func:`_split_scale`, so halves with
     unequal counts in a bin are not over-weighted. The bins and weights are the full subject's, so
     the floor is computed over the same bins as the subject's gap. It includes differences between
-    sessions, so a replay that tracks them can fall below it. A split counts only if both halves
+    sessions, which a rollout's new sessions also have; a replay can track them, so replay uses
+    :func:`binomial_floor` instead. A split counts only if both halves
     have trials in every kept bin, so the floor compares the same bins as the gap; up to
     ``max_draws_per_split * n_splits`` splits are drawn to find ``n_splits`` such splits. NaN with
     fewer than two sessions or no such split.

@@ -63,7 +63,7 @@ def replay(
     latents = agent.init_latents(len(c), session)
     for t in range(len(c)):
         p = np.asarray(agent.predict(latents), dtype=float)
-        p_right[t] = p[1] / p.sum()  # renormalised over the engaged choices
+        p_right[t] = p[1] / (p[0] + p[1])  # renormalised over the engaged choices (ADR 0004)
         latents = agent.update(latents, int(c[t]), float(r[t]))
     return p_right
 
@@ -74,17 +74,23 @@ def _softmax(x: np.ndarray) -> np.ndarray:
 
 
 class ProgramAgent:
-    """A MEvolve program and its parameters (``{name: value}``).
+    """A MEvolve program and its parameters (``{name: value}``): the bridge from MEvolve's raw
+    ``(p, session)`` functions to :class:`Agent`.
 
     ``predict`` returns the softmax of the program's output, as MEvolve's ``program.replay`` does.
+    Session facts the caller does not give are 0, as in MEvolve's ``program.replay``.
     """
+
+    SESSION_FACTS = ("stage", "coupled", "baited", "index")  # mevolve.program.SESSION_FACTS
 
     def __init__(self, program: Any, params: Mapping[str, float]):
         self.program = program
         self.params = dict(params)
 
     def init_latents(self, n_trials: int, session: Optional[Mapping[str, Any]] = None):
-        return self.program.init_latents(self.params, dict(session or {}))
+        facts = {k: 0 for k in self.SESSION_FACTS}
+        facts.update(session or {})
+        return self.program.init_latents(self.params, facts)
 
     def predict(self, latents) -> np.ndarray:
         return _softmax(np.asarray(self.program.predict(latents, self.params), dtype=float))

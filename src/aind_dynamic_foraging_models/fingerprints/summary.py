@@ -15,7 +15,7 @@ from typing import Iterable, Mapping, Optional, Sequence
 import numpy as np
 
 from .compare import MIN_TRIALS, binomial_floor, floor_ratio, replay_gap
-from .spec import RATE_STATISTICS, SPEC_VERSION
+from .spec import RATE_STATISTICS, SPEC_VERSION, STATISTICS
 from .tally import add, empty_tally, tally_groups
 
 
@@ -99,25 +99,30 @@ def replay_fingerprints(
     }
 
 
+def _cell(subject: Mapping[str, dict], name: str, stat: str, key: str) -> float:
+    cell = subject.get(name, {}).get("statistics", {}).get(stat)
+    return np.nan if cell is None else cell[key]
+
+
 def aggregate_subjects(per_subject: Sequence[Mapping[str, dict]]) -> dict:
     """Subject-balanced aggregate of ``compare_replay`` (or ``replay_fingerprints(...)["sets"]``)
     results, one per subject.
 
-    Per set and statistic: the mean gap and mean floor over the subjects where both are finite,
+    The statistics are the ones the results carry (the rate statistics for a replay), so a
+    comparison with more statistics aggregates through the same function. Per set and statistic:
+    the mean gap and mean floor over the subjects where both are finite,
     their count, and the floor ratio of those means (``floor_ratio``); per set, the score of
     those floor ratios.
     """
     names = sorted({name for subject in per_subject for name in subject})
     out = {}
     for name in names:
+        # The statistics the results carry: the rate statistics in replay; a rollout adds more.
+        present = {st for s in per_subject if name in s for st in s[name]["statistics"]}
         stats = {}
-        for stat in RATE_STATISTICS:
-            g = np.array(
-                [s[name]["statistics"][stat]["gap"] if name in s else np.nan for s in per_subject]
-            )
-            f = np.array(
-                [s[name]["statistics"][stat]["floor"] if name in s else np.nan for s in per_subject]
-            )
+        for stat in [st for st in STATISTICS if st in present]:
+            g = np.array([_cell(s, name, stat, "gap") for s in per_subject])
+            f = np.array([_cell(s, name, stat, "floor") for s in per_subject])
             ok = np.isfinite(g) & np.isfinite(f)
             stats[stat] = {
                 "n_subjects": int(ok.sum()),

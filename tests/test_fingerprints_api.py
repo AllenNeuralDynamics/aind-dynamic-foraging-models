@@ -101,6 +101,24 @@ class TestReplayFingerprints(unittest.TestCase):
             places=15,
         )
 
+    def test_aggregate_carries_any_statistics(self):
+        """A comparison with an extra statistic (as a rollout's run lengths) aggregates as is."""
+        cell = {"gap": 0.02, "floor": 0.01, "floor_ratio": 2.0}
+        subjects = [{"s": {"statistics": {"hazard": dict(cell), "run_length": dict(cell)}}}] * 3
+        agg = aggregate_subjects(subjects)["s"]
+        self.assertEqual(set(agg["statistics"]), {"hazard", "run_length"})
+        self.assertAlmostEqual(agg["score"], 2.0, places=15)
+
+    def test_tallies_are_tally_groups(self):
+        """The one-call entry point tallies as ``tally_groups`` does (the golden tests)."""
+        choices, rewards, groups, p_right = _subject(np.random.default_rng(5))
+        got = replay_fingerprints(choices, rewards, groups, p_right)["tallies"]
+        want = tally_groups(choices, rewards, groups, p_right=p_right)
+        self.assertEqual(set(got), set(want))
+        for g in want:
+            for stat in want[g]:
+                np.testing.assert_array_equal(got[g][stat], want[g][stat])
+
     def test_compare_replay_ignores_all(self):
         choices, rewards, groups, p_right = _subject(np.random.default_rng(2))
         tallies = tally_groups(choices, rewards, groups, p_right=p_right)
@@ -161,6 +179,17 @@ class TestReplayDriver(unittest.TestCase):
             lat = lat + 0.3 * (np.eye(2)[ci] * (ri - lat))
         np.testing.assert_allclose(p, want, atol=1e-15)
         self.assertEqual(p[0], 0.5)
+
+    def test_program_adapter_fills_session_facts(self):
+        """Facts the caller omits are 0, as in MEvolve's program.replay."""
+        seen = {}
+        program = SimpleNamespace(
+            init_latents=lambda p, session: seen.update(session) or np.zeros(2),
+            predict=lambda lat, p: lat,
+            update=lambda lat, c, r, p: lat,
+        )
+        replay(ProgramAgent(program, {}), [0, 1], [1.0, 0.0], session={"stage": 2})
+        self.assertEqual(seen, {"stage": 2, "coupled": 0, "baited": 0, "index": 0})
 
     def test_lengths_must_match(self):
         with self.assertRaises(ValueError):

@@ -60,6 +60,8 @@ def replay(
     if len(c) != len(r):
         raise ValueError(f"{len(c)} choices but {len(r)} rewards")
     p_right = np.empty(len(c))
+    if len(c) == 0:  # an all-ignored session: nothing to predict, and some agents cannot reset
+        return p_right
     latents = agent.init_latents(len(c), session)
     for t in range(len(c)):
         p = np.asarray(agent.predict(latents), dtype=float)

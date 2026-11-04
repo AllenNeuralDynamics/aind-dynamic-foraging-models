@@ -35,7 +35,7 @@ def default_sets(groups: Iterable[str]) -> dict[str, set[str]]:
 
 
 def _summed(tallies: Mapping[str, dict], groups: Iterable[str]):
-    present = [tallies[g] for g in groups if g in tallies]
+    present = [tallies[g] for g in groups if g in tallies and g != "all"]  # "all" is the sum
     if not present:
         return None
     total = empty_tally()
@@ -120,7 +120,8 @@ def aggregate_subjects(per_subject: Sequence[Mapping[str, dict]]) -> dict:
         # The statistics the results carry: the rate statistics in replay; a rollout adds more.
         present = {st for s in per_subject if name in s for st in s[name]["statistics"]}
         stats = {}
-        for stat in [st for st in STATISTICS if st in present]:
+        order = [st for st in STATISTICS if st in present] + sorted(present - set(STATISTICS))
+        for stat in order:
             g = np.array([_cell(s, name, stat, "gap") for s in per_subject])
             f = np.array([_cell(s, name, stat, "floor") for s in per_subject])
             ok = np.isfinite(g) & np.isfinite(f)

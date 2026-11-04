@@ -104,9 +104,9 @@ class TestReplayFingerprints(unittest.TestCase):
     def test_aggregate_carries_any_statistics(self):
         """A comparison with an extra statistic (as a rollout's run lengths) aggregates as is."""
         cell = {"gap": 0.02, "floor": 0.01, "floor_ratio": 2.0}
-        subjects = [{"s": {"statistics": {"hazard": dict(cell), "run_length": dict(cell)}}}] * 3
-        agg = aggregate_subjects(subjects)["s"]
-        self.assertEqual(set(agg["statistics"]), {"hazard", "run_length"})
+        stats = {"hazard": dict(cell), "run_length": dict(cell), "kernel": dict(cell)}
+        agg = aggregate_subjects([{"s": {"statistics": stats}}] * 3)["s"]
+        self.assertEqual(list(agg["statistics"]), ["hazard", "run_length", "kernel"])
         self.assertAlmostEqual(agg["score"], 2.0, places=15)
 
     def test_tallies_are_tally_groups(self):
@@ -123,6 +123,9 @@ class TestReplayFingerprints(unittest.TestCase):
         choices, rewards, groups, p_right = _subject(np.random.default_rng(2))
         tallies = tally_groups(choices, rewards, groups, p_right=p_right)
         self.assertEqual(set(compare_replay(tallies)), {"all", "g0", "g1"})
+        # A set naming every key, "all" included, still counts each session once.
+        explicit = compare_replay(tallies, {"every": set(tallies)})["every"]
+        np.testing.assert_equal(explicit, compare_replay(tallies)["all"])
 
 
 class TestReplayDriver(unittest.TestCase):
@@ -190,6 +193,11 @@ class TestReplayDriver(unittest.TestCase):
         )
         replay(ProgramAgent(program, {}), [0, 1], [1.0, 0.0], session={"stage": 2})
         self.assertEqual(seen, {"stage": 2, "coupled": 0, "baited": 0, "index": 0})
+
+    def test_empty_session(self):
+        """An all-ignored session gives no predictions, even for a forager."""
+        agent = ForagerAgent(ForagerCollection().get_preset_forager("Bari2019", seed=0))
+        self.assertEqual(len(replay(agent, [], [])), 0)
 
     def test_lengths_must_match(self):
         with self.assertRaises(ValueError):

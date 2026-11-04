@@ -9,7 +9,8 @@ A noise floor is the gap a perfect model would still have, and what is left over
 mode:
 
 - replay compares model and subject on the same trials, so only coin-flip noise is left:
-  :func:`binomial_floor`;
+  :func:`binomial_floor`, which takes each bin's trials to share one switch probability (where
+  they do not, a perfect replay can fall a little below it);
 - a rollout makes new sessions, so coin-flip noise and the differences between sessions are
   left: :func:`noise_floor`, the split-half (test-retest) floor.
 """
@@ -112,24 +113,28 @@ def _split_scale(half_a: dict[str, np.ndarray], half_b: dict[str, np.ndarray], s
 
 
 def _expected_abs_deviation(n: int, r: float) -> float:
-    """E|X/n - r| for X ~ Binomial(n, r): a perfect model's expected miss in one bin."""
+    """E|X/n - r| for X ~ Binomial(n, r): the expected miss in one bin of n trials that share the
+    switch probability r."""
     k = np.arange(n + 1)
     return float(np.sum(binom.pmf(k, n, r) * np.abs(k / n - r)))
 
 
 def binomial_floor(tally: dict[str, np.ndarray], stat: str, min_trials: int = MIN_TRIALS) -> float:
-    """The replay floor: the gap a perfect model would still have from coin-flip noise alone.
+    """The replay floor: a binomial reference for the gap a perfect model would still have.
 
     In replay the model predicts each of the subject's real trials, so if it were the true process
-    each outcome would be a coin flip with its probability. For each bin the subject keeps, with
-    ``n`` of its trials and observed rate ``r``, the expected miss is E|X/n - r| for
-    X ~ Binomial(n, r); bins are weighted by ``n``, as the gap is. It uses only the subject's data,
-    so every model shares it. A bin with ``r`` of 0 or 1 adds 0. Rate statistics only: a
+    each outcome would be a coin flip with its probability. Taking a bin's ``n`` trials to be
+    independent with one shared probability, the observed rate ``r``, the expected miss is
+    E|X/n - r| for X ~ Binomial(n, r); bins are weighted by ``n``, as the gap is. Where the
+    trials in a bin have different probabilities, a perfect model's gap is smaller (down to 0 for
+    a bin of certain switches and certain stays), so a perfect replay can score a little below 1;
+    the reference errs high. It uses only the subject's data, so every model shares it. A bin with
+    ``r`` of 0 or 1 adds 0, and a bin with no trials is skipped. Rate statistics only: a
     distribution has no replay prediction. NaN when the subject keeps no bin.
     """
     if stat in DISTRIBUTION_STATISTICS:
         raise ValueError(f"{stat} has no replay prediction, so no replay floor")
-    keep = kept_bins(tally, stat, min_trials)
+    keep = kept_bins(tally, stat, min_trials) & (tally[stat][:, N] > 0)
     if not keep.any():
         return np.nan
     n = tally[stat][keep, N]

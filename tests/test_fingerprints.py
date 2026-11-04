@@ -346,6 +346,7 @@ class TestCompare(unittest.TestCase):
         with self.assertRaises(ValueError):
             binomial_floor(t, "run_length")
         self.assertTrue(np.isnan(binomial_floor(empty_tally(), "hazard")))
+        self.assertAlmostEqual(binomial_floor(t, "hazard", min_trials=0), exact, places=12)
 
     def test_replay_floor_vs_split_half(self):
         """A perfect model replays at about 1 x the binomial floor, below the split-half floor.

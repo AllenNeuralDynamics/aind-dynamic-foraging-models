@@ -205,6 +205,11 @@ class TestReplayDriver(unittest.TestCase):
         with self.assertRaises(ValueError):
             replay(GLMAgent([0.0], [0.0], 0.0), [0, 1], [1.0])
 
+    def test_glm_needs_a_lag(self):
+        for rew, unr in (([], []), ([0.1], [0.1, 0.2])):
+            with self.assertRaises(ValueError):
+                GLMAgent(rew, unr, 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

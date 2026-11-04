@@ -145,8 +145,8 @@ class GLMAgent:
     def __init__(self, coef_rewc: Sequence[float], coef_unrc: Sequence[float], bias: float):
         self.w_rew = np.asarray(coef_rewc, dtype=float)
         self.w_unr = np.asarray(coef_unrc, dtype=float)
-        if self.w_rew.shape != self.w_unr.shape:
-            raise ValueError("coef_rewc and coef_unrc must have one value per lag")
+        if self.w_rew.ndim != 1 or self.w_rew.size == 0 or self.w_rew.shape != self.w_unr.shape:
+            raise ValueError("coef_rewc and coef_unrc need one value per lag, and a lag at least")
         self.bias = float(bias)
 
     @property

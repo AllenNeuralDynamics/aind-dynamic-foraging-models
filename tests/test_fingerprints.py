@@ -351,6 +351,14 @@ class TestCompare(unittest.TestCase):
         self.assertEqual(coverage(model, subject, "run_length"), 1.0)
         self.assertEqual(coverage(empty_tally(), subject, "run_length"), 0.0)
 
+    def test_lengths_must_match(self):
+        """Per-session inputs of different lengths are refused, not truncated."""
+        c, r, p, _ = _random_sessions(12, n_sessions=1)[0]
+        with self.assertRaises(ValueError):
+            tally_groups([c, c], [r, r], ["a"])
+        with self.assertRaises(ValueError):
+            tally_sessions([c, c], [r], [p, p])
+
     def test_reserved_group(self):
         """A session cannot be labelled "all", which would count it twice."""
         c, r, _, _ = _random_sessions(10, n_sessions=1)[0]

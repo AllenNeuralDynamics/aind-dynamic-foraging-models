@@ -113,10 +113,18 @@ def session_tally(choices, rewards, p_right=None) -> dict[str, np.ndarray]:
     return out
 
 
+def _check_lengths(**columns) -> None:
+    """Refuse per-session inputs of different lengths, which ``zip`` would silently truncate."""
+    lengths = {name: len(col) for name, col in columns.items() if col is not None}
+    if len(set(lengths.values())) > 1:
+        raise ValueError(f"per-session inputs differ in length: {lengths}")
+
+
 def tally_sessions(
     choices: Sequence, rewards: Sequence, p_right: Optional[Sequence] = None
 ) -> dict[str, np.ndarray]:
     """The summed tally of several sessions (each already free of ignored trials)."""
+    _check_lengths(choices=choices, rewards=rewards, p_right=p_right)
     total = empty_tally()
     for i, (c, r) in enumerate(zip(choices, rewards)):
         total = add(total, session_tally(c, r, None if p_right is None else p_right[i]))
@@ -133,6 +141,8 @@ def tally_groups(
 
     ``"all"`` is reserved for the total, so a session labelled ``"all"`` is refused.
     """
+    groups = list(groups)
+    _check_lengths(choices=choices, rewards=rewards, groups=groups, p_right=p_right)
     out: dict[str, dict[str, np.ndarray]] = {"all": empty_tally()}
     for i, (c, r, g) in enumerate(zip(choices, rewards, groups)):
         if g == "all":

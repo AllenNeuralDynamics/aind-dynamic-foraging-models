@@ -110,13 +110,17 @@ def noise_floor(
     n_splits: int = 20,
     seed: int = 0,
     min_trials: int = MIN_TRIALS,
+    max_draws_per_split: int = 10,
 ) -> float:
     """The gap between two random halves of a subject's sessions, scaled to the full data.
 
     Each bin's difference between the halves is rescaled by :func:`_split_scale`, so halves with
     unequal counts in a bin are not over-weighted. The bins and weights are the full subject's, so
     the floor is computed over the same bins as the subject's gap. It includes differences between
-    sessions, so a replay that tracks them can fall below it. Needs two sessions; otherwise NaN.
+    sessions, so a replay that tracks them can fall below it. A split counts only if both halves
+    have trials in every kept bin, so the floor compares the same bins as the gap; up to
+    ``max_draws_per_split * n_splits`` splits are drawn to find ``n_splits`` such splits. NaN with
+    fewer than two sessions or no such split.
     """
     k = len(session_tallies)
     if k < 2:
@@ -125,10 +129,14 @@ def noise_floor(
     for one in session_tallies:
         full = add(full, one)
     keep = kept_bins(full, stat, min_trials)
+    if not keep.any():
+        return np.nan
     weight = full[stat][:, N]
     rng = np.random.default_rng(seed)
     gaps = []
-    for _ in range(n_splits):
+    for _ in range(max_draws_per_split * n_splits):
+        if len(gaps) == n_splits:
+            break
         order = rng.permutation(k)
         half_a, half_b = empty_tally(), empty_tally()
         for j, i in enumerate(order):
@@ -138,9 +146,10 @@ def noise_floor(
                 half_b = add(half_b, session_tallies[i])
         scale = _split_scale(half_a, half_b, stat)
         diff = scale * (values(half_a, stat) - values(half_b, stat))
+        if not np.isfinite(diff[keep]).all():
+            continue  # a kept bin is missing from one half: this split cannot compare it
         gaps.append(_weighted_gap(diff, np.zeros_like(diff), weight, keep))
-    gaps = np.asarray(gaps, dtype=float)
-    return float(np.nanmean(gaps)) if np.isfinite(gaps).any() else np.nan
+    return float(np.mean(gaps)) if gaps else np.nan
 
 
 def floor_ratio(gaps: Sequence[float], floors: Optional[Sequence[float]]) -> float:

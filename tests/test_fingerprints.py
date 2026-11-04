@@ -305,7 +305,7 @@ class TestCompare(unittest.TestCase):
     def test_floor_with_unequal_sessions(self):
         """With unequal sessions the rescaled floor matches a perfect model's expected gap."""
         rng = np.random.default_rng(8)
-        lengths = (900, 100, 60, 30, 10)
+        lengths = (2000, 600, 300, 200, 100)  # unequal, but every half reaches every bin
         floors, expected = [], []
         for _ in range(40):
             per = []
@@ -321,6 +321,17 @@ class TestCompare(unittest.TestCase):
             expected.append(np.sum(n_bin[keep] * e_gap) / n_bin[keep].sum())
             floors.append(noise_floor(per, "hazard", n_splits=10, seed=1))
         self.assertAlmostEqual(np.mean(floors) / np.mean(expected), 1.0, delta=0.15)
+
+    def test_floor_needs_complete_splits(self):
+        """A kept bin found in one session only is never in both halves: no floor."""
+        rare = session_tally([0, 0, 0, 0, 0, 0, 0, 1], [0, 0, 0, 0, 0, 0, 0, 0])  # 6+ losses
+        common = [session_tally(*_random_sessions(11 + i, n_sessions=1)[0][:2]) for i in range(3)]
+        sessions = [rare] + [{k: v.copy() for k, v in t.items()} for t in common]
+        for t in sessions[1:]:
+            t["losses"][5] = 0  # only `rare` reaches 6+ losses
+        sessions[0]["losses"][5, N] = 6  # and it has enough trials there to be kept
+        self.assertTrue(np.isnan(noise_floor(sessions, "losses", n_splits=5)))
+        self.assertTrue(np.isfinite(noise_floor(common, "hazard", n_splits=5)))
 
     def test_coverage(self):
         """A rollout that never visits some of the subject's bins covers less than all of them."""

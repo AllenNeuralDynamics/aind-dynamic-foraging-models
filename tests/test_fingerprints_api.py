@@ -6,19 +6,31 @@ from types import SimpleNamespace
 
 import numpy as np
 
+from aind_behavior_gym.dynamic_foraging.task import CoupledBlockTask
+
 from aind_dynamic_foraging_models.fingerprints import (
     RATE_STATISTICS,
+    STATISTICS,
     ForagerAgent,
     GLMAgent,
     ProgramAgent,
+    add,
     aggregate_subjects,
     binomial_floor,
     compare_replay,
+    compare_rollout,
+    coverage,
+    empty_tally,
     fingerprint_score,
     floor_ratio,
+    noise_floor,
     replay,
     replay_fingerprints,
     replay_gap,
+    rollout,
+    rollout_fingerprints,
+    rollout_gap,
+    session_tally,
     tally_groups,
 )
 from aind_dynamic_foraging_models.generative_model import ForagerCollection
@@ -209,6 +221,114 @@ class TestReplayDriver(unittest.TestCase):
         for rew, unr in (([], []), ([0.1], [0.1, 0.2])):
             with self.assertRaises(ValueError):
                 GLMAgent(rew, unr, 0.0)
+
+
+def _glm(rng):
+    return GLMAgent(rng.normal(0, 1, 5), rng.normal(0, 0.5, 5), rng.normal(0, 0.3))
+
+
+class TestRolloutDriver(unittest.TestCase):
+    def test_rollout_replays_itself(self):
+        """Replay on a rollout's own choices and rewards gives its p(right), for each adapter."""
+        collection = ForagerCollection()
+        agents = [lambda: ForagerAgent(collection.get_preset_forager(name, seed=0))
+                  for name in ("Bari2019", "Hattori2019", "CompareToThreshold")]
+        glm = _glm(np.random.default_rng(1))
+        agents.append(lambda: glm)
+        for i, make in enumerate(agents):
+            task = CoupledBlockTask(reward_baiting=True, num_trials=400, seed=i)
+            c, r, p = rollout(make(), task, np.random.default_rng(i))
+            np.testing.assert_allclose(replay(make(), c, r), p, atol=1e-12, err_msg=str(i))
+            np.testing.assert_array_equal(r, task.reward)  # the task gave every reward
+            self.assertTrue(set(np.unique(c)) <= {0, 1})
+
+    def test_choices_follow_p_right(self):
+        sure = GLMAgent([0.0], [0.0], 50.0)  # p(right) = 1
+        c, _, p = rollout(sure, CoupledBlockTask(num_trials=50, seed=0), np.random.default_rng(0))
+        np.testing.assert_array_equal(c, 1)
+        coin = GLMAgent([0.0], [0.0], 0.0)
+        c, _, _ = rollout(coin, CoupledBlockTask(num_trials=4000, seed=0), np.random.default_rng(0))
+        self.assertAlmostEqual(c.mean(), 0.5, delta=0.03)
+
+    def test_same_rng_same_rollout(self):
+        glm = _glm(np.random.default_rng(2))
+        a = rollout(glm, CoupledBlockTask(num_trials=200, seed=3), np.random.default_rng(7))
+        b = rollout(glm, CoupledBlockTask(num_trials=200, seed=3), np.random.default_rng(7))
+        for x, y in zip(a, b):
+            np.testing.assert_array_equal(x, y)
+
+
+class TestRolloutFingerprints(unittest.TestCase):
+    def setUp(self):
+        rng = np.random.default_rng(11)
+        self.choices, self.rewards, self.groups, _ = _subject(rng, n_sessions=8)
+        sim = [_session(rng, len(c)) for c in self.choices for _ in range(2)]
+        self.sim_choices = [c for c, _ in sim]
+        self.sim_rewards = [r for _, r in sim]
+        self.sim_groups = [g for g in self.groups for _ in range(2)]
+
+    def test_matches_the_pieces(self):
+        out = rollout_fingerprints(self.sim_choices, self.sim_rewards, self.sim_groups,
+                                   self.choices, self.rewards, self.groups)
+        self.assertEqual(set(out["sets"]), {"all", "g0", "g1"})
+        sessions = [session_tally(c, r) for c, r in zip(self.choices, self.rewards)]
+        for name, members in (("all", {"g0", "g1"}), ("g1", {"g1"})):
+            own = [t for t, g in zip(sessions, self.groups) if g in members]
+            subject = empty_tally()
+            for t in own:
+                subject = add(subject, t)
+            model = tally_groups(self.sim_choices, self.sim_rewards, self.sim_groups)
+            model = model["all"] if name == "all" else model[name]
+            ratios = []
+            for stat in STATISTICS:
+                cell = out["sets"][name]["statistics"][stat]
+                self.assertEqual(cell["gap"], rollout_gap(model, subject, stat))
+                self.assertEqual(cell["floor"], noise_floor(own, stat))
+                self.assertEqual(cell["coverage"], coverage(model, subject, stat))
+                self.assertAlmostEqual(cell["floor_ratio"], cell["gap"] / cell["floor"], places=14)
+                ratios.append(cell["floor_ratio"])
+            self.assertEqual(out["sets"][name]["score"], fingerprint_score(ratios))
+            self.assertEqual(len(ratios), len(RATE_STATISTICS) + 1)  # the run lengths count
+
+    def test_subject_against_itself(self):
+        """A rollout identical to the subject's sessions has no gap and full coverage."""
+        out = rollout_fingerprints(self.choices, self.rewards, self.groups,
+                                   self.choices, self.rewards, self.groups)["sets"]["all"]
+        for stat in STATISTICS:
+            self.assertEqual(out["statistics"][stat]["gap"], 0.0)
+            self.assertEqual(out["statistics"][stat]["coverage"], 1.0)
+
+    def test_never_switching_rollout_misses_bins(self):
+        stay = [np.ones_like(c) for c in self.sim_choices]
+        out = rollout_fingerprints(stay, self.sim_rewards, self.sim_groups,
+                                   self.choices, self.rewards, self.groups)["sets"]["all"]
+        self.assertLess(out["statistics"]["pattern"]["coverage"], 1.0)
+
+    def test_missing_set_and_lengths(self):
+        sessions = [session_tally(c, r) for c, r in zip(self.choices, self.rewards)]
+        model = tally_groups(self.sim_choices, self.sim_rewards, self.sim_groups)
+        out = compare_rollout(model, sessions, self.groups, {"none": {"g9"}})["none"]
+        self.assertTrue(np.isnan(out["score"]))
+        self.assertTrue(np.isnan(out["statistics"]["hazard"]["coverage"]))
+        with self.assertRaises(ValueError):
+            compare_rollout(model, sessions, self.groups[:-1])
+
+    def test_aggregate_carries_coverage(self):
+        rng = np.random.default_rng(12)
+        per_subject = []
+        for _ in range(4):
+            c, r, g, _ = _subject(rng)
+            sim = [_session(rng, len(x)) for x in c]
+            per_subject.append(rollout_fingerprints([x for x, _ in sim], [y for _, y in sim], g,
+                                                    c, r, g)["sets"])
+        agg = aggregate_subjects(per_subject)["all"]
+        self.assertEqual(list(agg["statistics"]), list(STATISTICS))
+        for stat in STATISTICS:
+            cov = [s["all"]["statistics"][stat]["coverage"] for s in per_subject]
+            self.assertAlmostEqual(agg["statistics"][stat]["coverage"], np.mean(cov), places=14)
+        # a replay carries no coverage, so its aggregate has none
+        replays = [replay_fingerprints(*_subject(rng))["sets"] for _ in range(2)]
+        self.assertNotIn("coverage", aggregate_subjects(replays)["all"]["statistics"]["hazard"])
 
 
 if __name__ == "__main__":

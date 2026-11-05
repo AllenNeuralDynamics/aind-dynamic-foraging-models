@@ -3,9 +3,12 @@ and the fingerprint score; and their subject-balanced aggregate.
 
 Study 15 of aind-dynamic-foraging-bfm-studies (ADR 0003, 0008, 0009). A *set* is a named group of
 session labels whose tallies are summed (for example every group except warm-ups). The
-fingerprint score of a set is the geometric mean of its floor ratios over the mode's statistics.
-These functions only assemble ``tally_groups``, ``replay_gap``, ``binomial_floor`` and
-``floor_ratio``; no statistic, bin or floor is defined here.
+fingerprint score of a set is the geometric mean of its floor ratios over the mode's statistics:
+the rate statistics in replay, which a rollout joins with the run-length distribution. Replay's
+floor is binomial, a rollout's the split-half floor, and a rollout also reports its coverage.
+These functions only assemble ``tally_groups``, ``replay_gap``, ``binomial_floor``,
+``rollout_gap``, ``noise_floor``, ``coverage`` and ``floor_ratio``; no statistic, bin or floor is
+defined here.
 """
 
 from __future__ import annotations
@@ -14,9 +17,17 @@ from typing import Iterable, Mapping, Optional, Sequence
 
 import numpy as np
 
-from .compare import MIN_TRIALS, binomial_floor, floor_ratio, replay_gap
+from .compare import (
+    MIN_TRIALS,
+    binomial_floor,
+    coverage,
+    floor_ratio,
+    noise_floor,
+    replay_gap,
+    rollout_gap,
+)
 from .spec import RATE_STATISTICS, SPEC_VERSION, STATISTICS
-from .tally import add, empty_tally, tally_groups
+from .tally import add, empty_tally, session_tally, tally_groups
 
 
 def fingerprint_score(ratios: Iterable[float]) -> float:
@@ -100,20 +111,108 @@ def replay_fingerprints(
     }
 
 
+def _ratio(gap: float, floor: float) -> float:
+    ok = np.isfinite(gap) and np.isfinite(floor) and floor > 0
+    return float(gap / floor) if ok else float("nan")
+
+
+def compare_rollout(
+    model_tallies: Mapping[str, dict],
+    subject_sessions: Sequence[dict],
+    subject_groups: Sequence[str],
+    sets: Optional[Mapping[str, Iterable[str]]] = None,
+    min_trials: int = MIN_TRIALS,
+    n_splits: int = 20,
+    seed: int = 0,
+) -> dict:
+    """One subject's rollout comparison: the model's rollout tallies per group (``tally_groups``
+    without ``p_right``; an ``all`` entry is ignored) against the subject's own sessions.
+
+    ``subject_sessions`` holds one ``session_tally`` per real session and ``subject_groups`` its
+    label. Per set and statistic (``STATISTICS``, the run-length distribution included): the gap
+    (``rollout_gap``), the split-half floor of the set's real sessions (``noise_floor``, with
+    ``n_splits`` and ``seed``), their ratio and the coverage. Returns ``{set: {"statistics": {stat:
+    {"gap", "floor", "floor_ratio", "coverage"}}, "score"}}``; a set the model or the subject has
+    no sessions in has NaN everywhere.
+    """
+    subject_groups = list(subject_groups)
+    if len(subject_groups) != len(subject_sessions):
+        raise ValueError(f"{len(subject_sessions)} sessions but {len(subject_groups)} labels")
+    if sets is None:
+        sets = default_sets(set(subject_groups) | set(model_tallies))
+    out = {}
+    for name, members in sets.items():
+        members = set(members) - {"all"}
+        model = _summed(model_tallies, members)
+        own = [t for t, g in zip(subject_sessions, subject_groups) if g in members]
+        subject = None
+        for t in own:
+            subject = add(empty_tally() if subject is None else subject, t)
+        stats = {}
+        for stat in STATISTICS:
+            if model is None or subject is None:
+                gap = floor = cov = np.nan
+            else:
+                gap = rollout_gap(model, subject, stat, min_trials)
+                floor = noise_floor(own, stat, n_splits, seed, min_trials)
+                cov = coverage(model, subject, stat, min_trials)
+            stats[stat] = {
+                "gap": float(gap),
+                "floor": float(floor),
+                "floor_ratio": _ratio(gap, floor),
+                "coverage": float(cov),
+            }
+        out[name] = {
+            "statistics": stats,
+            "score": fingerprint_score(s["floor_ratio"] for s in stats.values()),
+        }
+    return out
+
+
+def rollout_fingerprints(
+    rollout_choices: Sequence,
+    rollout_rewards: Sequence,
+    rollout_groups: Sequence[str],
+    choices: Sequence,
+    rewards: Sequence,
+    groups: Sequence[str],
+    sets: Optional[Mapping[str, Iterable[str]]] = None,
+    min_trials: int = MIN_TRIALS,
+    n_splits: int = 20,
+    seed: int = 0,
+) -> dict:
+    """One subject's rollout fingerprints in one call.
+
+    ``rollout_*`` hold one array per rollout session (``rollout``'s choices and rewards; several
+    rollouts of one real session each count as a session) and its group label; ``choices``,
+    ``rewards`` and ``groups`` the subject's real sessions (engaged trials only). Returns
+    ``{"spec", "tallies": {"rollout": {group: tally}, "subject": {group: tally}}, "sets":
+    compare_rollout(...)}``; both tallies include ``all``.
+    """
+    model = tally_groups(rollout_choices, rollout_rewards, rollout_groups)
+    subject = tally_groups(choices, rewards, groups)
+    sessions = [session_tally(c, r) for c, r in zip(choices, rewards)]
+    return {
+        "spec": SPEC_VERSION,
+        "tallies": {"rollout": model, "subject": subject},
+        "sets": compare_rollout(model, sessions, groups, sets, min_trials, n_splits, seed),
+    }
+
+
 def _cell(subject: Mapping[str, dict], name: str, stat: str, key: str) -> float:
     cell = subject.get(name, {}).get("statistics", {}).get(stat)
-    return np.nan if cell is None else cell[key]
+    return np.nan if cell is None else cell.get(key, np.nan)
 
 
 def aggregate_subjects(per_subject: Sequence[Mapping[str, dict]]) -> dict:
-    """Subject-balanced aggregate of ``compare_replay`` (or ``replay_fingerprints(...)["sets"]``)
-    results, one per subject.
+    """Subject-balanced aggregate of ``compare_replay`` or ``compare_rollout`` results (or the
+    ``"sets"`` of ``replay_fingerprints`` / ``rollout_fingerprints``), one per subject.
 
-    The statistics are the ones the results carry (the rate statistics for a replay), so a
-    comparison with more statistics aggregates through the same function. Per set and statistic:
-    the mean gap and mean floor over the subjects where both are finite,
-    their count, and the floor ratio of those means (``floor_ratio``); per set, the score of
-    those floor ratios.
+    The statistics are the ones the results carry (the rate statistics for a replay, the
+    run-length distribution too for a rollout). Per set and statistic: the mean gap and mean floor
+    over the subjects where both are finite, their count, and the floor ratio of those means
+    (``floor_ratio``); for a rollout, also the mean coverage over those subjects. Per set, the
+    score of those floor ratios.
     """
     names = sorted({name for subject in per_subject for name in subject})
     out = {}
@@ -132,6 +231,10 @@ def aggregate_subjects(per_subject: Sequence[Mapping[str, dict]]) -> dict:
                 "floor": float(f[ok].mean()) if ok.any() else float("nan"),
                 "floor_ratio": floor_ratio(g, f),
             }
+            if any("coverage" in s.get(name, {}).get("statistics", {}).get(stat, {})
+                   for s in per_subject):
+                c = np.array([_cell(s, name, stat, "coverage") for s in per_subject])
+                stats[stat]["coverage"] = float(c[ok].mean()) if ok.any() else float("nan")
         out[name] = {
             "statistics": stats,
             "score": fingerprint_score(s["floor_ratio"] for s in stats.values()),

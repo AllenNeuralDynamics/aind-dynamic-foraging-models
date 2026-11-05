@@ -7,7 +7,7 @@ An agent follows MEvolve's program protocol, bound to its parameters:
     latents = agent.update(latents, choice, reward)    # after the trial
 
 Trial t is predicted from the latent variables after trials 0 .. t-1. ``replay`` feeds an agent a
-session's real choices and rewards (teacher forcing). A rollout uses the same three calls, drawing
+session's real choices and rewards (teacher forcing). ``rollout`` uses the same three calls, drawing
 the choice from ``predict`` and the reward from a task, so the interface serves both modes.
 ``n_trials`` is the session's length, which agents that preallocate per-trial arrays (the
 foraging-models foragers) need; ``session`` holds optional session facts (MEvolve's ``stage``,
@@ -68,6 +68,49 @@ def replay(
         p_right[t] = p[1] / (p[0] + p[1])  # renormalised over the engaged choices (ADR 0004)
         latents = agent.update(latents, int(c[t]), float(r[t]))
     return p_right
+
+
+class Task(Protocol):
+    """A two-armed task in the shape of ``aind_behavior_gym``'s dynamic-foraging tasks."""
+
+    num_trials: int
+
+    def reset(self) -> Any:
+        """Start the session."""
+
+    def step(self, action: int) -> tuple:
+        """Play ``action`` (0 left, 1 right): observation, reward, terminated, truncated, info."""
+
+
+def rollout(
+    agent: Agent,
+    task: Task,
+    rng: np.random.Generator,
+    session: Optional[Mapping[str, Any]] = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """One session of ``agent`` playing ``task``: per-trial choices, rewards and p(right).
+
+    Each trial's choice is drawn from the agent's p(right) (renormalised as in :func:`replay`)
+    with ``rng``; the task, which has its own seed, gives the reward. Every trial is engaged: the
+    agents predict left or right only. ``replay`` on the returned choices and rewards gives the
+    returned p(right) again.
+    """
+    n = int(task.num_trials)
+    choices = np.empty(n, dtype=np.int64)
+    rewards = np.empty(n)
+    p_right = np.empty(n)
+    if n == 0:
+        return choices, rewards, p_right
+    task.reset()
+    latents = agent.init_latents(n, session)
+    for t in range(n):
+        p = np.asarray(agent.predict(latents), dtype=float)
+        p_right[t] = p[1] / (p[0] + p[1])
+        choices[t] = int(rng.random() < p_right[t])
+        _, reward, _, _, _ = task.step(int(choices[t]))
+        rewards[t] = float(reward)
+        latents = agent.update(latents, int(choices[t]), rewards[t])
+    return choices, rewards, p_right
 
 
 def _softmax(x: np.ndarray) -> np.ndarray:

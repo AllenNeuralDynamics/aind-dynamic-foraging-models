@@ -92,8 +92,9 @@ def rollout(
 
     Each trial's choice is drawn from the agent's p(right) (renormalised as in :func:`replay`)
     with ``rng``; the task, which has its own seed, gives the reward. Every trial is engaged: the
-    agents predict left or right only. ``replay`` on the returned choices and rewards gives the
-    returned p(right) again.
+    agents predict left or right only. The session ends after ``num_trials`` trials or when the
+    task says it has terminated or been truncated, whichever comes first. ``replay`` on the
+    returned choices and rewards gives the returned p(right) again.
     """
     n = int(task.num_trials)
     choices = np.empty(n, dtype=np.int64)
@@ -107,9 +108,11 @@ def rollout(
         p = np.asarray(agent.predict(latents), dtype=float)
         p_right[t] = p[1] / (p[0] + p[1])
         choices[t] = int(rng.random() < p_right[t])
-        _, reward, _, _, _ = task.step(int(choices[t]))
+        _, reward, terminated, truncated, _ = task.step(int(choices[t]))
         rewards[t] = float(reward)
         latents = agent.update(latents, int(choices[t]), rewards[t])
+        if terminated or truncated:
+            return choices[: t + 1], rewards[: t + 1], p_right[: t + 1]
     return choices, rewards, p_right
 
 

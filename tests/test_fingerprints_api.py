@@ -231,7 +231,7 @@ class TestRolloutDriver(unittest.TestCase):
     def test_rollout_replays_itself(self):
         """Replay on a rollout's own choices and rewards gives its p(right), for each adapter."""
         collection = ForagerCollection()
-        agents = [lambda: ForagerAgent(collection.get_preset_forager(name, seed=0))
+        agents = [lambda name=name: ForagerAgent(collection.get_preset_forager(name, seed=0))
                   for name in ("Bari2019", "Hattori2019", "CompareToThreshold")]
         glm = _glm(np.random.default_rng(1))
         agents.append(lambda: glm)
@@ -249,6 +249,21 @@ class TestRolloutDriver(unittest.TestCase):
         coin = GLMAgent([0.0], [0.0], 0.0)
         c, _, _ = rollout(coin, CoupledBlockTask(num_trials=4000, seed=0), np.random.default_rng(0))
         self.assertAlmostEqual(c.mean(), 0.5, delta=0.03)
+
+    def test_stops_when_the_task_ends(self):
+        """A task that terminates early gets no step after it; the arrays end there."""
+        task = CoupledBlockTask(num_trials=100, seed=0)
+        step, calls = task.step, []
+
+        def ending_step(action):
+            calls.append(action)
+            obs, reward, _, truncated, info = step(action)
+            return obs, reward, len(calls) == 30, truncated, info
+
+        task.step = ending_step
+        c, r, p = rollout(GLMAgent([0.2], [0.1], 0.0), task, np.random.default_rng(0))
+        self.assertEqual(len(calls), 30)
+        self.assertEqual((len(c), len(r), len(p)), (30, 30, 30))
 
     def test_same_rng_same_rollout(self):
         glm = _glm(np.random.default_rng(2))

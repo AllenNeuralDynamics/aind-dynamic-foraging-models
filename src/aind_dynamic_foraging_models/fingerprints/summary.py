@@ -211,7 +211,8 @@ def aggregate_subjects(per_subject: Sequence[Mapping[str, dict]]) -> dict:
     The statistics are the ones the results carry (the rate statistics for a replay, the
     run-length distribution too for a rollout). Per set and statistic: the mean gap and mean floor
     over the subjects where both are finite, their count, and the floor ratio of those means
-    (``floor_ratio``); for a rollout, also the mean coverage over those subjects. Per set, the
+    (``floor_ratio``); for a rollout, also the mean coverage over every subject that has one,
+    including those whose rollout visits none of their bins (coverage 0, gap NaN). Per set, the
     score of those floor ratios.
     """
     names = sorted({name for subject in per_subject for name in subject})
@@ -234,7 +235,8 @@ def aggregate_subjects(per_subject: Sequence[Mapping[str, dict]]) -> dict:
             if any("coverage" in s.get(name, {}).get("statistics", {}).get(stat, {})
                    for s in per_subject):
                 c = np.array([_cell(s, name, stat, "coverage") for s in per_subject])
-                stats[stat]["coverage"] = float(c[ok].mean()) if ok.any() else float("nan")
+                has = np.isfinite(c)
+                stats[stat]["coverage"] = float(c[has].mean()) if has.any() else float("nan")
         out[name] = {
             "statistics": stats,
             "score": fingerprint_score(s["floor_ratio"] for s in stats.values()),

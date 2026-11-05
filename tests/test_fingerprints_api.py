@@ -341,6 +341,11 @@ class TestRolloutFingerprints(unittest.TestCase):
         for stat in STATISTICS:
             cov = [s["all"]["statistics"][stat]["coverage"] for s in per_subject]
             self.assertAlmostEqual(agg["statistics"][stat]["coverage"], np.mean(cov), places=14)
+        # a subject whose rollout visits none of its bins (gap NaN) still counts in coverage
+        none = {"all": {"statistics": {"hazard": {"gap": np.nan, "floor": 0.01, "coverage": 0.0}}}}
+        full = {"all": {"statistics": {"hazard": {"gap": 0.02, "floor": 0.01, "coverage": 1.0}}}}
+        cell = aggregate_subjects([none, full])["all"]["statistics"]["hazard"]
+        self.assertEqual((cell["coverage"], cell["n_subjects"]), (0.5, 1))
         # a replay carries no coverage, so its aggregate has none
         replays = [replay_fingerprints(*_subject(rng))["sets"] for _ in range(2)]
         self.assertNotIn("coverage", aggregate_subjects(replays)["all"]["statistics"]["hazard"])

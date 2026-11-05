@@ -6,11 +6,12 @@ choices and rewards) fills it with the model's probability of that outcome. See 
 statistics; the design is study 15 of aind-dynamic-foraging-bfm-studies.
 
 One call per subject: ``replay_fingerprints`` (tallies, gap, binomial floor, floor ratio and the
-fingerprint score per session set), ``aggregate_subjects`` over subjects, and ``replay`` to get a
-model's per-trial p(right) through the agent interface (``agents``).
+fingerprint score per session set) and ``rollout_fingerprints`` (the same with the split-half floor
+and coverage), ``aggregate_subjects`` over subjects, and ``replay`` / ``rollout`` to run a model
+through the agent interface (``agents``).
 """
 
-from .agents import Agent, ForagerAgent, GLMAgent, ProgramAgent, replay  # noqa: F401
+from .agents import Agent, ForagerAgent, GLMAgent, ProgramAgent, Task, replay, rollout  # noqa: F401
 from .compare import (  # noqa: F401
     MIN_TRIALS,
     binomial_floor,
@@ -33,9 +34,11 @@ from .spec import (  # noqa: F401
 from .summary import (  # noqa: F401
     aggregate_subjects,
     compare_replay,
+    compare_rollout,
     default_sets,
     fingerprint_score,
     replay_fingerprints,
+    rollout_fingerprints,
 )
 from .tally import (  # noqa: F401
     OBS,
